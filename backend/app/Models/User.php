@@ -154,6 +154,8 @@ class User extends Authenticatable
 
     protected static $formPermissionsCache = [];
 
+    protected static $hierarchyPermissionsCache = [];
+
     public static function clearPermissionsCache()
     {
         self::$userGroupsCache = [];
@@ -163,6 +165,7 @@ class User extends Authenticatable
         self::$recordPermissionsCache = [];
         self::$statisticsPermissionsCache = [];
         self::$formPermissionsCache = [];
+        self::$hierarchyPermissionsCache = [];
     }
 
     protected static function shouldCache(): bool
@@ -478,6 +481,92 @@ class User extends Authenticatable
         $canViewGlobal = $user && self::hasFactionPermission($user, $faction, 'view_faction_roster');
 
         return $canViewGlobal || self::hasRosterPermission($user, $roster, 'view_roster');
+    }
+
+    public static function hasHierarchyPermission(?User $user, Hierarchy $hierarchy, string $permissionKey): bool
+    {
+        $faction = $hierarchy->faction;
+
+        // 1. Superadmin/Faction Leader/Global Hierarchy Moderator/Creator always have access
+        if ($user) {
+            if ($user->is_superadmin ||
+                $faction->faction_leader === $user->id ||
+                self::hasFactionPermission($user, $faction, 'global_hierarchy_moderation') ||
+                $hierarchy->created_by === $user->id
+            ) {
+                return true;
+            }
+        }
+
+        $userId = $user ? $user->id : 'guest';
+        $cacheKey = "{$userId}_{$hierarchy->id}";
+
+        if (! isset(self::$hierarchyPermissionsCache[$cacheKey])) {
+            $permissionSets = collect();
+
+            // Public permissions (group_id and role_id are null)
+            $publicPerms = $hierarchy->hierarchyPermissions->whereNull('group_id')->whereNull('role_id')->first();
+            if ($publicPerms) {
+                $permissionSets->push($publicPerms->permissions);
+            }
+
+            if ($user) {
+                // Group permissions
+                $userGroupIds = self::getUserGroupIds($user, $faction->id);
+                $groupPerms = $hierarchy->hierarchyPermissions->whereIn('group_id', $userGroupIds);
+                foreach ($groupPerms as $gp) {
+                    $permissionSets->push($gp->permissions);
+                }
+
+                // Role permissions
+                $userRoleIds = self::getUserRoleIds($user, $faction->id);
+                $rolePerms = $hierarchy->hierarchyPermissions->whereIn('role_id', $userRoleIds);
+                foreach ($rolePerms as $rp) {
+                    $permissionSets->push($rp->permissions);
+                }
+            }
+
+            $resolved = [];
+            foreach ($permissionSets as $set) {
+                if (is_array($set)) {
+                    foreach ($set as $perm) {
+                        $resolved[] = $perm;
+                    }
+                }
+            }
+            self::$hierarchyPermissionsCache[$cacheKey] = array_unique($resolved);
+        }
+
+        return in_array($permissionKey, self::$hierarchyPermissionsCache[$cacheKey]);
+    }
+
+    public static function canViewHierarchy(?User $user, Hierarchy $hierarchy): bool
+    {
+        if ($user && $user->is_superadmin) {
+            return true;
+        }
+
+        $faction = $hierarchy->faction;
+        if ($user && $faction->faction_leader === $user->id) {
+            return true;
+        }
+
+        if ($user && self::hasFactionPermission($user, $faction, 'global_hierarchy_moderation')) {
+            return true;
+        }
+
+        if ($user && $hierarchy->created_by === $user->id) {
+            return true;
+        }
+
+        $hasExplicitPerms = $hierarchy->hierarchyPermissions->isNotEmpty();
+        if ($hasExplicitPerms) {
+            return self::hasHierarchyPermission($user, $hierarchy, 'view_hierarchy');
+        }
+
+        $canViewGlobal = $user && self::hasFactionPermission($user, $faction, 'view_faction_hierarchy');
+
+        return $canViewGlobal || self::hasHierarchyPermission($user, $hierarchy, 'view_hierarchy');
     }
 
     public static function hasRecordPermission(?User $user, FactionRecordDatabase $database, string $permissionKey): bool

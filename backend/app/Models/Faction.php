@@ -181,6 +181,11 @@ class Faction extends Model
         return $this->hasMany(Roster::class);
     }
 
+    public function hierarchies()
+    {
+        return $this->hasMany(Hierarchy::class);
+    }
+
     public function forms()
     {
         return $this->hasMany(Form::class);

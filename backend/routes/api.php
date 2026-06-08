@@ -12,6 +12,9 @@ use App\Http\Controllers\FactionRecordPermissionController;
 use App\Http\Controllers\FactionSnapshotController;
 use App\Http\Controllers\FormAutomationController;
 use App\Http\Controllers\FormController;
+use App\Http\Controllers\HierarchyController;
+use App\Http\Controllers\HierarchyNodeController;
+use App\Http\Controllers\HierarchyPermissionController;
 use App\Http\Controllers\FormFieldController;
 use App\Http\Controllers\FormPermissionController;
 use App\Http\Controllers\FormSectionController;
@@ -66,6 +69,7 @@ Route::get('/permissions/config', [RoleController::class, 'getGlobalConfig']);
 Route::get('/factions/{shortname}', [FactionController::class, 'show']);
 Route::get('/factions/{shortname}/permissions', [FactionController::class, 'getPermissions']);
 Route::get('/factions/{shortname}/rosters', [RosterController::class, 'index']);
+Route::get('/factions/{shortname}/hierarchies', [HierarchyController::class, 'index']);
 Route::post('/rosters/resolve-links', [RosterController::class, 'resolveLinks']);
 Route::get('/factions/{shortname}/datasets', [DatasetController::class, 'index']);
 Route::get('/factions/{shortname}/flags', [RosterFlagController::class, 'index']);
@@ -342,4 +346,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/factions/{shortname}/notification-schemes', [NotificationSchemeController::class, 'store']);
     Route::put('/notification-schemes/{scheme}', [NotificationSchemeController::class, 'update']);
     Route::delete('/notification-schemes/{scheme}', [NotificationSchemeController::class, 'destroy']);
+
+    // Hierarchy Management
+    Route::post('/factions/{shortname}/hierarchies', [HierarchyController::class, 'store']);
+    Route::put('/hierarchies/{hierarchy}', [HierarchyController::class, 'update']);
+    Route::delete('/hierarchies/{hierarchy}', [HierarchyController::class, 'destroy']);
+    Route::put('/factions/{shortname}/hierarchies/reorder', [HierarchyController::class, 'reorder']);
+
+    // Hierarchy Node Management
+    Route::post('/hierarchies/{hierarchy}/nodes', [HierarchyNodeController::class, 'store']);
+    Route::put('/hierarchy-nodes/{node}', [HierarchyNodeController::class, 'update']);
+    Route::delete('/hierarchy-nodes/{node}', [HierarchyNodeController::class, 'destroy']);
+    Route::put('/hierarchies/{hierarchy}/nodes/reorder', [HierarchyNodeController::class, 'reorder']);
+
+    // Hierarchy Permission Management
+    Route::get('/hierarchies/{hierarchy}/permissions', [HierarchyPermissionController::class, 'index']);
+    Route::put('/hierarchies/{hierarchy}/permissions', [HierarchyPermissionController::class, 'update']);
+    Route::delete('/hierarchies/{hierarchy}/permissions/{permissionId}', [HierarchyPermissionController::class, 'destroy']);
 });

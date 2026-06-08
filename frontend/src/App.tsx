@@ -23,6 +23,7 @@ import FactionSnapshots from './components/FactionSnapshots';
 import RosterRevisions from './components/RosterRevisions';
 import GroupManagement from './components/GroupManagement';
 import Administration from './components/Administration';
+import FactionHierarchy from './components/FactionHierarchy';
 import GtawSync from './components/GtawSync';
 import AuditLogs from './components/AuditLogs';
 import Statistics from './components/Statistics';
@@ -211,6 +212,7 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
   const canViewSnapshots = user?.is_superadmin || permissions.includes('view_snapshots') || permissions.includes('administrator');
   const canViewGtawSync = (user?.is_superadmin || permissions.includes('sync_gtaw')) && factionData?.gtaw_faction_id;
   const canViewSandboxRoster = user?.is_superadmin || permissions.includes('utilize_sandbox_rosters');
+  const canViewFactionHierarchy = user?.is_superadmin || permissions.includes('view_faction_hierarchy') || permissions.includes('global_hierarchy_moderation');
   const canViewNotifications = user?.is_superadmin || permissions.includes('view_notifications') || permissions.includes('configure_notifications') || permissions.includes('administrator');
 
   if (location.pathname === `/${shortname}`) {
@@ -236,6 +238,7 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
       canViewGtawSync={canViewGtawSync}
       canViewForms={canViewForms}
       canViewSandboxRoster={canViewSandboxRoster}
+      canViewFactionHierarchy={canViewFactionHierarchy}
       canViewNotifications={canViewNotifications}
       siteVersion={siteVersion}
     >
@@ -279,6 +282,17 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
               onlineUsers={onlineUsers}
               isSandbox={true}
               mainRosters={rosters}
+            />
+          ) : <Navigate to={`/${shortname}/roster`} />
+        } />
+        <Route path="hierarchy" element={
+          canViewFactionHierarchy ? (
+            <FactionHierarchy 
+              user={user}
+              shortname={shortname!}
+              permissions={permissions}
+              isDark={isDark}
+              rosters={rosters}
             />
           ) : <Navigate to={`/${shortname}/roster`} />
         } />

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { Users, Settings, Layers, Database, History, RefreshCw, Camera, BarChart3, FileText, Sparkles, Bell } from 'lucide-react';
+import { Users, Settings, Layers, Database, History, RefreshCw, Camera, BarChart3, FileText, Sparkles, Bell, GitFork } from 'lucide-react';
 
 interface SidebarProps {
   shortname: string;
@@ -13,6 +13,7 @@ interface SidebarProps {
   canViewStatistics?: boolean;
   canViewForms?: boolean;
   canViewSandboxRoster?: boolean;
+  canViewFactionHierarchy?: boolean;
   canViewNotifications?: boolean;
   user: any | null;
   siteVersion?: string;
@@ -30,6 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   canViewStatistics = false,
   canViewForms = false,
   canViewSandboxRoster = false,
+  canViewFactionHierarchy = false,
   canViewNotifications = false,
   user, 
   siteVersion = '1.0.0', 
@@ -53,6 +55,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <Sparkles size={14} />
             Sandbox Roster
+          </NavLink>
+        )}
+
+        {canViewFactionHierarchy && (
+          <NavLink 
+            to={`/${shortname}/hierarchy`}
+            className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
+          >
+            <GitFork size={14} />
+            Faction Hierarchy
           </NavLink>
         )}
 

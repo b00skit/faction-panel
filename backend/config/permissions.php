@@ -247,6 +247,26 @@ return [
                 ],
             ],
         ],
+        'hierarchies' => [
+            'name' => 'Faction Hierarchies',
+            'permissions' => [
+                'view_faction_hierarchy' => [
+                    'name' => 'View Faction Hirarchy',
+                    'description' => 'Allows the user to see the faction hierarchies.',
+                    'type' => 'VIEW',
+                ],
+                'global_hierarchy_moderation' => [
+                    'name' => 'Global Faction Hirarchy Moderator',
+                    'description' => 'Grants full control over all hierarchies (modify, delete, reorder).',
+                    'type' => 'MODIFY',
+                ],
+                'create_hierarchy' => [
+                    'name' => 'Create new Faction Hirarchies',
+                    'description' => 'Allows creating new hierarchies for the faction.',
+                    'type' => 'CREATE',
+                ],
+            ],
+        ],
         'system' => [
             'name' => 'System',
             'permissions' => [
