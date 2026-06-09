@@ -11,8 +11,8 @@ interface HierarchyPermissionsModalProps {
 }
 
 const AVAILABLE_PERMISSIONS = [
-    { key: 'view_hierarchy', name: 'View Hierarchy', description: 'Basic visibility of this hierarchy' },
-    { key: 'modify_hierarchy', name: 'Modify Hierarchy', description: 'Edit name, color, and basic settings' },
+    { key: 'view_hierarchy', name: 'View Diagram', description: 'Basic visibility of this diagram' },
+    { key: 'modify_hierarchy', name: 'Modify Diagram', description: 'Edit name, color, and basic settings' },
     { key: 'edit_nodes', name: 'Edit Node Values', description: 'Modify the text and roster links of slots' },
     { key: 'manage_nodes', name: 'Manage Nodes', description: 'Add, delete, reorder, and change node structures' },
 ];
@@ -117,7 +117,7 @@ export const HierarchyPermissionsModal: React.FC<HierarchyPermissionsModalProps>
                 created_by: ownerId
             });
             setCurrentOwnerId(ownerId);
-            toast.success(ownerId === null ? 'Hierarchy is now faction-owned' : 'Owner updated successfully', { id: loadToast });
+            toast.success(ownerId === null ? 'Diagram is now faction-owned' : 'Owner updated successfully', { id: loadToast });
         } catch (err) {
             toast.error('Failed to update owner', { id: loadToast });
         }
@@ -171,9 +171,9 @@ export const HierarchyPermissionsModal: React.FC<HierarchyPermissionsModalProps>
                     <div>
                         <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-3">
                             <Shield className="text-accent" size={24} />
-                            Hierarchy Permissions: <span style={{ color: hierarchy.color }}>{hierarchy.name}</span>
+                            Diagram Permissions: <span style={{ color: hierarchy.color }}>{hierarchy.name}</span>
                         </h2>
-                        <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1 opacity-60">Manage who can view and modify this hierarchy</p>
+                        <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1 opacity-60">Manage who can view and modify this diagram</p>
                     </div>
                     <button onClick={onClose} className="text-muted hover:text-text transition-colors">
                         <X size={20} />
@@ -186,7 +186,7 @@ export const HierarchyPermissionsModal: React.FC<HierarchyPermissionsModalProps>
                             <Info className="text-accent shrink-0" size={20} />
                             <div className="text-[10px] font-bold uppercase tracking-widest leading-relaxed">
                                 <p className="text-accent mb-1">Automatic Access:</p>
-                                <p className="opacity-80">Global Hierarchy Moderators and the Hierarchy Creator always have full administrative access regardless of these settings.</p>
+                                <p className="opacity-80">Global Diagram Moderators and the Diagram Creator always have full administrative access regardless of these settings.</p>
                             </div>
                         </div>
 

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\HierarchyUpdated;
+use App\Models\Faction;
 use App\Models\Hierarchy;
 use App\Models\HierarchyNode;
 use App\Models\RosterContent;
@@ -12,6 +14,7 @@ use Illuminate\Support\Facades\Auth;
 
 class HierarchyNodeController extends Controller
 {
+
     public function store(Request $request, Hierarchy $hierarchy)
     {
         $user = Auth::user();
@@ -23,6 +26,9 @@ class HierarchyNodeController extends Controller
             'parent_id' => 'nullable|exists:hierarchy_nodes,id',
             'title' => 'nullable|string|max:255',
             'color' => ['nullable', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
+            'card_style' => 'sometimes|string|in:standard,spotlight,highlighted',
+            'image_url' => 'nullable|string|max:2048',
+            'icon' => 'nullable|string|max:50',
             'slots' => 'nullable|array',
             'slots.*.id' => 'required|string',
             'slots.*.roster_content_id' => 'nullable|integer|exists:roster_contents,id',
@@ -52,6 +58,9 @@ class HierarchyNodeController extends Controller
             'parent_id' => $validated['parent_id'] ?? null,
             'title' => $validated['title'] ?? 'New Division',
             'color' => $validated['color'] ?? $hierarchy->color,
+            'card_style' => $validated['card_style'] ?? 'standard',
+            'image_url' => $validated['image_url'] ?? null,
+            'icon' => $validated['icon'] ?? null,
             'slots' => $validated['slots'] ?? [],
             'roster_sync_config' => $validated['roster_sync_config'] ?? null,
             'order' => $maxOrder + 1,
@@ -79,6 +88,9 @@ class HierarchyNodeController extends Controller
             'parent_id' => 'sometimes|nullable|exists:hierarchy_nodes,id',
             'title' => 'sometimes|nullable|string|max:255',
             'color' => ['sometimes', 'nullable', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
+            'card_style' => 'sometimes|string|in:standard,spotlight,highlighted',
+            'image_url' => 'sometimes|nullable|string|max:2048',
+            'icon' => 'sometimes|nullable|string|max:50',
             'slots' => 'sometimes|nullable|array',
             'slots.*.id' => 'required|string',
             'slots.*.roster_content_id' => 'nullable|integer|exists:roster_contents,id',
@@ -94,8 +106,8 @@ class HierarchyNodeController extends Controller
             'roster_sync_config.section_id' => 'nullable|integer|exists:roster_sections,id',
             'roster_sync_config.row_start' => 'nullable|integer|min:1',
             'roster_sync_config.row_end' => 'nullable|integer|min:1',
-            'roster_sync_config.key_col' => 'nullable|string|max:255',
-            'roster_sync_config.value_col' => 'nullable|string|max:255',
+            'roster_sync_config.key_col' => 'sometimes|nullable|string|max:255',
+            'roster_sync_config.value_col' => 'sometimes|nullable|string|max:255',
             'roster_sync_config.label_color' => ['nullable', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'roster_sync_config.label_bold' => 'nullable|boolean',
             'roster_sync_config.value_color' => ['nullable', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
@@ -266,6 +278,9 @@ class HierarchyNodeController extends Controller
                     'order' => $index
                 ]);
         }
+
+        Faction::invalidateDiagramsCache($hierarchy->faction_id);
+        HierarchyUpdated::dispatch($hierarchy->faction_id, $hierarchy->id);
 
         $this->audit('hierarchy_node.reorder', "Reordered nodes in hierarchy '{$hierarchy->name}'", $hierarchy->faction_id);
 

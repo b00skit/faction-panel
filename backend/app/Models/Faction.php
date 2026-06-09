@@ -155,7 +155,17 @@ class Faction extends Model
         $key = "roster_version_{$factionId}";
         $version = Cache::get($key, 0);
         Cache::put($key, $version + 1, now()->addDays(30));
+
+        static::invalidateDiagramsCache($factionId);
     }
+
+    public static function invalidateDiagramsCache(int $factionId)
+    {
+        $key = "diagrams_version_{$factionId}";
+        $version = Cache::get($key, 0);
+        Cache::put($key, $version + 1, now()->addDays(30));
+    }
+
 
     public function invites()
     {

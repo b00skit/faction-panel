@@ -118,7 +118,7 @@ const Home: React.FC<HomeProps> = ({ onLogin, isDark, toggleTheme, siteVersion =
                                 </div>
                                 <div>
                                     <h4 className="font-bold text-text uppercase text-xs tracking-widest mb-1">Roster Control</h4>
-                                    <p className="text-muted text-sm">Track your people in real-time with dynamic hierarchy views.</p>
+                                    <p className="text-muted text-sm">Track your people in real-time with dynamic diagrams.</p>
                                 </div>
                             </div>
                             <div className="flex gap-4">

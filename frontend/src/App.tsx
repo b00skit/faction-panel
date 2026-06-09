@@ -285,7 +285,8 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
             />
           ) : <Navigate to={`/${shortname}/roster`} />
         } />
-        <Route path="hierarchy" element={
+        <Route path="hierarchy" element={<Navigate to={`/${shortname}/diagrams`} replace />} />
+        <Route path="diagrams" element={
           canViewFactionHierarchy ? (
             <FactionHierarchy 
               user={user}
@@ -293,6 +294,7 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
               permissions={permissions}
               isDark={isDark}
               rosters={rosters}
+              factionId={factionData?.id}
             />
           ) : <Navigate to={`/${shortname}/roster`} />
         } />
@@ -411,7 +413,9 @@ const TitleUpdater = ({ user }: { user: any }) => {
     let page = segments[1] || 'Roster';
     const pageMap: Record<string, string> = {
       'admin': 'Administration',
-      'roster': 'Roster'
+      'roster': 'Roster',
+      'diagrams': 'Faction Diagrams',
+      'hierarchy': 'Faction Diagrams'
     };
     const displayPage = pageMap[page] || (page.charAt(0).toUpperCase() + page.slice(1));
     document.title = `${shortname} · ${displayPage}`;

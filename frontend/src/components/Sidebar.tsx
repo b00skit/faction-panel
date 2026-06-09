@@ -60,11 +60,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {canViewFactionHierarchy && (
           <NavLink 
-            to={`/${shortname}/hierarchy`}
+            to={`/${shortname}/diagrams`}
             className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
           >
             <GitFork size={14} />
-            Faction Hierarchy
+            Faction Diagrams
           </NavLink>
         )}
 

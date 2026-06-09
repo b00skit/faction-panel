@@ -36,3 +36,13 @@ Broadcast::channel('faction.{factionId}.roster.{rosterId}', function ($user, $fa
 
     return false;
 });
+
+Broadcast::channel('faction.{factionId}.diagrams', function ($user, $factionId) {
+    $faction = Faction::find($factionId);
+    if (! $faction) {
+        return false;
+    }
+
+    return User::hasFactionPermission($user, $faction, 'view_faction_hierarchy');
+});
+

@@ -7,6 +7,8 @@ use App\Models\Roster;
 use App\Models\RosterContent;
 use App\Models\RosterSection;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
     $this->user = User::factory()->create(['is_superadmin' => true]);
@@ -322,3 +324,67 @@ test('can validate and store sync config overrides and default bolding to true i
     expect($data['slots'][0]['label_color'])->toBe('#aabbcc');
     expect($data['slots'][0]['value_color'])->toBeNull();
 });
+
+test('hierarchy and node modifications invalidate cache and broadcast HierarchyUpdated event', function () {
+    Event::fake([App\Events\HierarchyUpdated::class]);
+
+    // 1. Create hierarchy (should trigger event & invalidate cache)
+    $hierarchy = Hierarchy::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Cache Test Hierarchy',
+        'color' => '#123456',
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    Event::assertDispatched(App\Events\HierarchyUpdated::class, function ($event) use ($hierarchy) {
+        return $event->factionId === $this->faction->id && $event->hierarchyId === $hierarchy->id;
+    });
+
+    // 2. Create node (should trigger event & invalidate cache)
+    Event::fake([App\Events\HierarchyUpdated::class]);
+    $node = HierarchyNode::create([
+        'hierarchy_id' => $hierarchy->id,
+        'title' => 'Cache Test Node',
+        'color' => '#123456',
+        'slots' => [],
+        'order' => 0,
+    ]);
+
+    Event::assertDispatched(App\Events\HierarchyUpdated::class, function ($event) use ($hierarchy) {
+        return $event->factionId === $this->faction->id && $event->hierarchyId === $hierarchy->id;
+    });
+
+    // 3. Test caching in index
+    Cache::flush();
+    $versionKey = "diagrams_version_{$this->faction->id}";
+    Cache::put($versionKey, 1);
+
+    // Call index once to cache it
+    $response1 = $this->actingAs($this->user)
+        ->getJson("/api/factions/{$this->faction->shortname}/hierarchies");
+    $response1->assertStatus(200);
+
+    // Modify hierarchy directly in DB (bypass model events) to see if cache returns old values
+    Hierarchy::where('id', $hierarchy->id)->update(['name' => 'Bypassed Name']);
+
+    $response2 = $this->actingAs($this->user)
+        ->getJson("/api/factions/{$this->faction->shortname}/hierarchies");
+    $response2->assertStatus(200);
+    // Should still have old name because of cache!
+    expect($response2->json()[0]['name'])->toBe('Cache Test Hierarchy');
+
+    // Trigger update on hierarchy (should invalidate cache)
+    $this->actingAs($this->user)
+        ->putJson("/api/hierarchies/{$hierarchy->id}", [
+            'name' => 'Invalidated Name',
+        ]);
+
+    // Check index again
+    $response3 = $this->actingAs($this->user)
+        ->getJson("/api/factions/{$this->faction->shortname}/hierarchies");
+    $response3->assertStatus(200);
+    // Should now have the new name!
+    expect($response3->json()[0]['name'])->toBe('Invalidated Name');
+});
+

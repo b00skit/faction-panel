@@ -115,7 +115,7 @@ const Invite: React.FC<{ user: any }> = ({ user }) => {
                         <div className="bg-surface/50 border border-border rounded-2xl p-8 mb-10">
                             <h3 className="text-[10px] font-bold text-muted uppercase tracking-widest mb-3">About this organization</h3>
                             <p className="text-text leading-relaxed italic">
-                                {faction.description || "No description provided for this organization. By joining, you will be granted access to the internal roster and hierarchy management tools."}
+                                {faction.description || "No description provided for this organization. By joining, you will be granted access to the internal roster and diagram tools."}
                             </p>
                         </div>
 

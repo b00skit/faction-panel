@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Events\HierarchyUpdated;
 use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -9,6 +10,25 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Hierarchy extends Model
 {
     use Auditable, SoftDeletes;
+
+    protected static function booted()
+    {
+        static::created(function ($hierarchy) {
+            Faction::invalidateDiagramsCache($hierarchy->faction_id);
+            HierarchyUpdated::dispatch($hierarchy->faction_id, $hierarchy->id);
+        });
+
+        static::updated(function ($hierarchy) {
+            Faction::invalidateDiagramsCache($hierarchy->faction_id);
+            HierarchyUpdated::dispatch($hierarchy->faction_id, $hierarchy->id);
+        });
+
+        static::deleted(function ($hierarchy) {
+            Faction::invalidateDiagramsCache($hierarchy->faction_id);
+            HierarchyUpdated::dispatch($hierarchy->faction_id, $hierarchy->id);
+        });
+    }
+
 
     protected $fillable = [
         'faction_id',

@@ -1,14 +1,28 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { 
     Plus, Trash2, Edit3, Settings, Users, Shield, Award, Crown, Check, X, 
     GitFork, Save, Eye, Edit, ListOrdered, Grid, Maximize2, Trash, Link2, Link2Off,
-    MoreVertical, ChevronLeft, ChevronRight, GripVertical
+    MoreVertical, ChevronLeft, ChevronRight, GripVertical,
+    Star, Briefcase, Heart, Target, Key
 } from 'lucide-react';
+
+const ICON_MAP: Record<string, React.ComponentType<any>> = {
+    users: Users,
+    crown: Crown,
+    shield: Shield,
+    award: Award,
+    star: Star,
+    briefcase: Briefcase,
+    heart: Heart,
+    target: Target,
+    key: Key
+};
 import api from '../api';
 import toast from 'react-hot-toast';
 import { HierarchyPermissionsModal } from './HierarchyPermissionsModal';
 import { useConfirm } from './ConfirmationProvider';
+import { useDiagramRealtime } from '../hooks/useDiagramRealtime';
 
 interface FactionHierarchyProps {
     user: any;
@@ -16,9 +30,10 @@ interface FactionHierarchyProps {
     permissions: string[];
     isDark: boolean;
     rosters: any[];
+    factionId?: number;
 }
 
-export default function FactionHierarchy({ user, shortname, permissions, isDark, rosters }: FactionHierarchyProps) {
+export default function FactionHierarchy({ user, shortname, permissions, isDark, rosters, factionId }: FactionHierarchyProps) {
     const [hierarchies, setHierarchies] = useState<any[]>([]);
     const [activeTabId, setActiveTabId] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
@@ -54,6 +69,9 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
     const [nodeTitle, setNodeTitle] = useState('');
     const [nodeColor, setNodeColor] = useState('');
     const [nodeSlots, setNodeSlots] = useState<any[]>([]);
+    const [nodeCardStyle, setNodeCardStyle] = useState<'standard' | 'spotlight' | 'highlighted'>('standard');
+    const [nodeImageUrl, setNodeImageUrl] = useState('');
+    const [nodeIcon, setNodeIcon] = useState('users');
     
     // Auto-link roster configuration states
     const [nodeRosterSyncEnabled, setNodeRosterSyncEnabled] = useState(false);
@@ -72,27 +90,48 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
     const [editMode, setEditMode] = useState(false);
     const confirm = useConfirm();
 
+    // Inline editing states for slots
+    const [editingSlotKey, setEditingSlotKey] = useState<{
+        nodeId: number;
+        slotId: string;
+        field: 'label' | 'value';
+    } | null>(null);
+    const [inlineEditValue, setInlineEditValue] = useState<string>('');
+
     // Fetch all hierarchies
-    const fetchHierarchies = async () => {
-        setLoading(true);
+    const fetchHierarchies = useCallback(async (showLoading = true) => {
+        if (showLoading) setLoading(true);
         try {
             const res = await api.get(`/factions/${shortname}/hierarchies`);
             setHierarchies(res.data);
-            if (res.data.length > 0 && activeTabId === null) {
-                setActiveTabId(res.data[0].id);
-            }
+            setActiveTabId(prev => {
+                if (res.data.length > 0 && prev === null) {
+                    return res.data[0].id;
+                }
+                return prev;
+            });
         } catch (err: any) {
             toast.error(err.response?.data?.message || 'Failed to load hierarchies');
         } finally {
-            setLoading(false);
+            if (showLoading) setLoading(false);
         }
-    };
-
-    useEffect(() => {
-        fetchHierarchies();
     }, [shortname]);
 
+    useEffect(() => {
+        fetchHierarchies(true);
+    }, [shortname, fetchHierarchies]);
+
     const activeHierarchy = hierarchies.find(h => h.id === activeTabId) || null;
+    const rosterId = activeHierarchy?.roster_id || null;
+
+    useDiagramRealtime({
+        factionId,
+        rosterId,
+        onDiagramUpdated: useCallback(() => {
+            fetchHierarchies(false);
+        }, [fetchHierarchies]),
+    });
+
     const canCreateHierarchy = user?.is_superadmin || permissions.includes('create_hierarchy');
     const canManageTabs = user?.is_superadmin || permissions.includes('global_hierarchy_moderation');
 
@@ -146,14 +185,14 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
     // Create a new tab
     const handleCreateTab = async (e: React.FormEvent) => {
         e.preventDefault();
-        const loadToast = toast.loading('Creating hierarchy...');
+        const loadToast = toast.loading('Creating diagram...');
         try {
             const res = await api.post(`/factions/${shortname}/hierarchies`, {
                 name: tabName,
                 color: tabColor,
                 roster_id: tabRosterId,
             });
-            toast.success('Hierarchy created', { id: loadToast });
+            toast.success('Diagram created', { id: loadToast });
             await fetchHierarchies();
             setActiveTabId(res.data.id);
             setShowCreateTabModal(false);
@@ -161,7 +200,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
             setTabColor('#2563eb');
             setTabRosterId(null);
         } catch (err: any) {
-            toast.error(err.response?.data?.message || 'Failed to create hierarchy', { id: loadToast });
+            toast.error(err.response?.data?.message || 'Failed to create diagram', { id: loadToast });
         }
     };
 
@@ -177,11 +216,11 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                 color: tabColor,
                 roster_id: tabRosterId,
             });
-            toast.success('Hierarchy updated', { id: loadToast });
+            toast.success('Diagram updated', { id: loadToast });
             await fetchHierarchies();
             setShowTabSettingsModal(false);
         } catch (err: any) {
-            toast.error(err.response?.data?.message || 'Failed to update hierarchy', { id: loadToast });
+            toast.error(err.response?.data?.message || 'Failed to update diagram', { id: loadToast });
         }
     };
 
@@ -199,21 +238,21 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
         if (!activeHierarchy) return;
 
         const isConfirmed = await confirm({
-            title: 'Delete Hierarchy',
-            message: `Are you sure you want to delete the hierarchy "${activeHierarchy.name}"? This action cannot be undone.`,
+            title: 'Delete Diagram',
+            message: `Are you sure you want to delete the diagram "${activeHierarchy.name}"? This action cannot be undone.`,
         });
 
         if (isConfirmed) {
-            const loadToast = toast.loading('Deleting hierarchy...');
+            const loadToast = toast.loading('Deleting diagram...');
             try {
                 await api.delete(`/hierarchies/${activeHierarchy.id}`);
-                toast.success('Hierarchy deleted', { id: loadToast });
+                toast.success('Diagram deleted', { id: loadToast });
                 const remaining = hierarchies.filter(h => h.id !== activeHierarchy.id);
                 setHierarchies(remaining);
                 setActiveTabId(remaining.length > 0 ? remaining[0].id : null);
                 setShowTabSettingsModal(false);
             } catch (err: any) {
-                toast.error(err.response?.data?.message || 'Failed to delete hierarchy', { id: loadToast });
+                toast.error(err.response?.data?.message || 'Failed to delete diagram', { id: loadToast });
             }
         }
     };
@@ -236,11 +275,11 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
     const handleAddNode = async (parentId: number | null) => {
         if (!activeHierarchy) return;
 
-        const loadToast = toast.loading('Adding division...');
+        const loadToast = toast.loading('Adding card...');
         try {
             const res = await api.post(`/hierarchies/${activeTabId}/nodes`, {
                 parent_id: parentId,
-                title: 'New Division',
+                title: 'New Card',
                 color: activeHierarchy.color,
                 slots: [
                     {
@@ -251,7 +290,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                     }
                 ]
             });
-            toast.success('Division added', { id: loadToast });
+            toast.success('Card added', { id: loadToast });
             fetchHierarchies(); // Reload tree
         } catch (err: any) {
             toast.error(err.response?.data?.message || 'Failed to add node', { id: loadToast });
@@ -260,15 +299,15 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
 
     const handleDeleteNode = async (nodeId: number) => {
         const isConfirmed = await confirm({
-            title: 'Delete Division',
-            message: 'Are you sure you want to delete this division and all its child divisions? This cannot be undone.',
+            title: 'Delete Card',
+            message: 'Are you sure you want to delete this card and all its child cards? This cannot be undone.',
         });
 
         if (isConfirmed) {
-            const loadToast = toast.loading('Deleting division...');
+            const loadToast = toast.loading('Deleting card...');
             try {
                 await api.delete(`/hierarchy-nodes/${nodeId}`);
-                toast.success('Division removed', { id: loadToast });
+                toast.success('Card removed', { id: loadToast });
                 fetchHierarchies(); // Reload tree
             } catch (err: any) {
                 toast.error(err.response?.data?.message || 'Failed to delete node', { id: loadToast });
@@ -304,6 +343,9 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
             await api.put(`/hierarchy-nodes/${selectedNode.id}`, {
                 title: nodeTitle,
                 color: nodeColor,
+                card_style: nodeCardStyle,
+                image_url: nodeCardStyle === 'spotlight' ? (nodeImageUrl || null) : null,
+                icon: nodeCardStyle === 'spotlight' ? (nodeIcon || 'users') : null,
                 slots: nodeRosterSyncEnabled ? [] : cleanedSlots,
                 roster_sync_config: syncConfig,
             });
@@ -320,6 +362,9 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
         setNodeTitle(node.title || '');
         setNodeColor(node.color || activeHierarchy?.color || '#2563eb');
         setNodeSlots(node.slots ? JSON.parse(JSON.stringify(node.slots)) : []); // Deep clone
+        setNodeCardStyle(node.card_style || 'standard');
+        setNodeImageUrl(node.image_url || '');
+        setNodeIcon(node.icon || 'users');
 
         const syncConfig = node.roster_sync_config || {};
         setNodeRosterSyncEnabled(!!syncConfig.enabled);
@@ -369,13 +414,65 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
         }));
     };
 
+    const handleCancelInlineEdit = () => {
+        setEditingSlotKey(null);
+        setInlineEditValue('');
+    };
+
+    const saveNodeSlots = async (node: any, updatedSlots: any[]) => {
+        const loadToast = toast.loading('Saving inline edit...');
+        
+        const cleanedSlots = updatedSlots.map(slot => {
+            const cleaned = { ...slot };
+            delete cleaned.roster_content; // Remove temporary object before sending
+            return cleaned;
+        });
+
+        const syncConfig = node.roster_sync_config || {};
+
+        try {
+            await api.put(`/hierarchy-nodes/${node.id}`, {
+                title: node.title,
+                color: node.color,
+                slots: cleanedSlots,
+                roster_sync_config: syncConfig,
+            });
+            toast.success('Saved', { id: loadToast });
+            fetchHierarchies(); // Reload tree to fetch updated slot info
+        } catch (err: any) {
+            toast.error(err.response?.data?.message || 'Failed to save edit', { id: loadToast });
+        }
+    };
+
+    const handleSaveInlineText = async (node: any, slot: any, field: 'label' | 'value') => {
+        const trimmed = inlineEditValue.trim();
+        // If the value hasn't changed, just close it
+        if (trimmed === slot[field]) {
+            handleCancelInlineEdit();
+            return;
+        }
+
+        const updatedSlots = (node.slots || []).map((s: any) => {
+            if (s.id === slot.id) {
+                return {
+                    ...s,
+                    [field]: trimmed,
+                };
+            }
+            return s;
+        });
+
+        await saveNodeSlots(node, updatedSlots);
+        handleCancelInlineEdit();
+    };
+
     const uniqid = (prefix: string) => prefix + Math.random().toString(36).substring(2, 9);
 
     if (loading && hierarchies.length === 0) {
         return (
             <div className="flex-1 flex flex-col items-center justify-center p-12 bg-bg text-text">
                 <div className="w-10 h-10 border-2 border-accent border-t-transparent rounded-full animate-spin mb-4" />
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Loading Hierarchies...</p>
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Loading Diagrams...</p>
             </div>
         );
     }
@@ -399,7 +496,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                     {/* Header bar / Title */}
                     <div className="px-4 py-3 bg-surface/40 flex justify-between items-center border-b border-border">
                         <div className="text-[10px] font-black uppercase tracking-wider text-text truncate max-w-[170px]">
-                            {node.title || 'Untitled Division'}
+                            {node.title || 'Untitled Card'}
                         </div>
                         {isEditable && (
                             <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -415,14 +512,14 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                         <button 
                                             onClick={() => handleAddNode(node.id)}
                                             className="p-1 hover:bg-surface text-muted hover:text-accent rounded transition-colors"
-                                            title="Add Branch Division"
+                                            title="Add Child Card"
                                         >
                                             <Plus size={12} />
                                         </button>
                                         <button 
                                             onClick={() => handleDeleteNode(node.id)}
                                             className="p-1 hover:bg-danger/10 text-muted hover:text-danger rounded transition-colors"
-                                            title="Delete Division"
+                                            title="Delete Card"
                                         >
                                             <Trash2 size={12} />
                                         </button>
@@ -433,43 +530,433 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                     </div>
 
                     {/* Member Slots */}
-                    <div className="p-3 divide-y divide-border/40">
-                        {slots.map((slot: any) => {
-                            const isVacant = !slot.roster_content_id && slot.value?.toLowerCase() === 'vacant';
-                            const isConnected = !!slot.roster_content_id;
-                            
-                            const labelBold = slot.label_bold !== false; // defaults to true/bold
-                            const valueBold = slot.value_bold !== false; // defaults to true/bold
+                    <div className="p-3">
+                        {node.card_style === 'spotlight' ? (
+                            <div className="flex flex-col space-y-2 pt-1 pb-1">
+                                {slots.length > 0 ? (
+                                    <>
+                                        {/* Spotlight Executive (First Slot) */}
+                                        <div className="text-center pb-1">
+                                            {node.image_url ? (
+                                                <img 
+                                                    src={node.image_url} 
+                                                    className="w-14 h-14 rounded-full border border-border object-cover mb-2.5 mx-auto shadow-sm" 
+                                                    alt="Spotlight Profile" 
+                                                />
+                                            ) : (
+                                                <div className="w-14 h-14 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center mb-2.5 mx-auto">
+                                                    {React.createElement(ICON_MAP[node.icon || 'users'] || Users, { size: 20, className: 'text-accent' })}
+                                                </div>
+                                            )}
+                                            {/* Render spotlight label */}
+                                            <div className="flex justify-center mb-1.5">
+                                                {editingSlotKey?.nodeId === node.id && editingSlotKey?.slotId === slots[0].id && editingSlotKey?.field === 'label' ? (
+                                                    <input
+                                                        type="text"
+                                                        value={inlineEditValue}
+                                                        onChange={e => setInlineEditValue(e.target.value)}
+                                                        onBlur={() => handleSaveInlineText(node, slots[0], 'label')}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter') handleSaveInlineText(node, slots[0], 'label');
+                                                            if (e.key === 'Escape') handleCancelInlineEdit();
+                                                        }}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="bg-surface border border-accent rounded px-1.5 py-0.5 text-[9px] w-[100px] outline-none font-bold uppercase text-text text-center"
+                                                        autoFocus
+                                                    />
+                                                ) : (
+                                                    <div 
+                                                        onClick={(e) => {
+                                                            if (isEditable) {
+                                                                e.stopPropagation();
+                                                                setEditingSlotKey({ nodeId: node.id, slotId: slots[0].id, field: 'label' });
+                                                                setInlineEditValue(slots[0].label || '');
+                                                            }
+                                                        }}
+                                                        className={`uppercase tracking-widest text-[9px] px-2.5 py-0.5 rounded-full ${
+                                                            slots[0].label_bold !== false ? 'font-black' : 'font-medium'
+                                                        } ${!slots[0].label_color ? 'text-accent bg-accent/10 border border-accent/20' : ''} ${isEditable ? 'cursor-pointer hover:opacity-80 transition-all' : ''}`}
+                                                        style={slots[0].label_color ? { color: slots[0].label_color, backgroundColor: `${slots[0].label_color}15`, borderColor: `${slots[0].label_color}30`, borderWidth: '1px' } : {}}
+                                                        title={isEditable ? 'Click to edit' : undefined}
+                                                    >
+                                                        {slots[0].label || 'Position'}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {/* Render spotlight value */}
+                                            <div className="flex justify-center">
+                                                {editingSlotKey?.nodeId === node.id && editingSlotKey?.slotId === slots[0].id && editingSlotKey?.field === 'value' ? (
+                                                    <input
+                                                        type="text"
+                                                        value={inlineEditValue}
+                                                        onChange={e => setInlineEditValue(e.target.value)}
+                                                        onBlur={() => handleSaveInlineText(node, slots[0], 'value')}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter') handleSaveInlineText(node, slots[0], 'value');
+                                                            if (e.key === 'Escape') handleCancelInlineEdit();
+                                                        }}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="bg-surface border border-accent rounded px-1.5 py-0.5 text-[9px] w-[150px] outline-none font-bold uppercase text-text text-center"
+                                                        autoFocus
+                                                    />
+                                                ) : (
+                                                    <div 
+                                                        onClick={(e) => {
+                                                            if (isEditable) {
+                                                                e.stopPropagation();
+                                                                setEditingSlotKey({ nodeId: node.id, slotId: slots[0].id, field: 'value' });
+                                                                setInlineEditValue(slots[0].value || '');
+                                                            }
+                                                        }}
+                                                        className={`text-xs uppercase tracking-widest flex items-center justify-center gap-1 ${
+                                                            slots[0].value_bold !== false ? 'font-black' : 'font-semibold'
+                                                        } ${!slots[0].value_color ? (slots[0].value?.toLowerCase() === 'vacant' ? 'text-muted/60 italic' : 'text-text') : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-2 py-0.5 transition-colors' : ''}`}
+                                                        style={slots[0].value_color ? { color: slots[0].value_color } : {}}
+                                                        title={isEditable ? 'Click to edit' : undefined}
+                                                    >
+                                                        {!!slots[0].roster_content_id && <Link2 size={10} className="text-accent shrink-0" />}
+                                                        <span>{slots[0].value || 'VACANT'}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
 
-                            return (
-                                <div key={slot.id} className="py-2 flex items-center justify-between text-[10px] first:pt-0 last:pb-0">
-                                    {/* Position label */}
-                                    <div 
-                                        className={`uppercase tracking-wider max-w-[100px] truncate ${
-                                            labelBold ? 'font-black' : 'font-medium'
-                                        } ${!slot.label_color ? 'text-muted' : ''}`}
-                                        style={slot.label_color ? { color: slot.label_color } : {}}
-                                    >
-                                        {slot.label || 'Position'}
+                                        {/* Subsequent slots listed below */}
+                                        {slots.length > 1 && (
+                                            <div className="mt-2.5 pt-2.5 border-t border-border/40 divide-y divide-border/30">
+                                                {slots.slice(1).map((slot: any) => {
+                                                    const isVacant = !slot.roster_content_id && slot.value?.toLowerCase() === 'vacant';
+                                                    const isConnected = !!slot.roster_content_id;
+                                                    const labelBold = slot.label_bold !== false;
+                                                    const valueBold = slot.value_bold !== false;
+                                                    const isEditingLabel = editingSlotKey?.nodeId === node.id && editingSlotKey?.slotId === slot.id && editingSlotKey?.field === 'label';
+                                                    const isEditingValue = editingSlotKey?.nodeId === node.id && editingSlotKey?.slotId === slot.id && editingSlotKey?.field === 'value';
+                                                    return (
+                                                        <div key={slot.id} className="py-2 flex items-center justify-between text-[10px] first:pt-0 last:pb-0 gap-2">
+                                                            {isEditingLabel ? (
+                                                                <input
+                                                                    type="text"
+                                                                    value={inlineEditValue}
+                                                                    onChange={e => setInlineEditValue(e.target.value)}
+                                                                    onBlur={() => handleSaveInlineText(node, slot, 'label')}
+                                                                    onKeyDown={e => {
+                                                                        if (e.key === 'Enter') handleSaveInlineText(node, slot, 'label');
+                                                                        if (e.key === 'Escape') handleCancelInlineEdit();
+                                                                    }}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="bg-surface border border-accent rounded px-1.5 py-0.5 text-[9px] w-[90px] outline-none font-bold uppercase text-text"
+                                                                    autoFocus
+                                                                />
+                                                            ) : (
+                                                                <div 
+                                                                    onClick={(e) => {
+                                                                        if (isEditable) {
+                                                                            e.stopPropagation();
+                                                                            setEditingSlotKey({ nodeId: node.id, slotId: slot.id, field: 'label' });
+                                                                            setInlineEditValue(slot.label || '');
+                                                                        }
+                                                                    }}
+                                                                    className={`uppercase tracking-wider max-w-[100px] truncate ${
+                                                                        labelBold ? 'font-black' : 'font-medium'
+                                                                    } ${!slot.label_color ? 'text-muted' : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                                    style={slot.label_color ? { color: slot.label_color } : {}}
+                                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                                >
+                                                                    {slot.label || 'Position'}
+                                                                </div>
+                                                            )}
+                                                            {isEditingValue ? (
+                                                                <input
+                                                                    type="text"
+                                                                    value={inlineEditValue}
+                                                                    onChange={e => setInlineEditValue(e.target.value)}
+                                                                    onBlur={() => handleSaveInlineText(node, slot, 'value')}
+                                                                    onKeyDown={e => {
+                                                                        if (e.key === 'Enter') handleSaveInlineText(node, slot, 'value');
+                                                                        if (e.key === 'Escape') handleCancelInlineEdit();
+                                                                    }}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="bg-surface border border-accent rounded px-1.5 py-0.5 text-[9px] w-[140px] outline-none font-bold uppercase text-text text-right"
+                                                                    autoFocus
+                                                                />
+                                                            ) : (
+                                                                <div 
+                                                                    onClick={(e) => {
+                                                                        if (isEditable) {
+                                                                            e.stopPropagation();
+                                                                            setEditingSlotKey({ nodeId: node.id, slotId: slot.id, field: 'value' });
+                                                                            setInlineEditValue(slot.value || '');
+                                                                        }
+                                                                    }}
+                                                                    className={`flex items-center gap-1.5 uppercase tracking-widest ${
+                                                                        valueBold ? 'font-bold' : 'font-medium'
+                                                                    } ${!slot.value_color ? (isVacant ? 'text-muted/60 italic' : 'text-text') : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                                    style={slot.value_color ? { color: slot.value_color } : {}}
+                                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                                >
+                                                                    {isConnected && <Link2 size={10} className="text-accent shrink-0" />}
+                                                                    <span>{slot.value || 'VACANT'}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="py-3 text-center text-[9px] text-muted uppercase tracking-widest font-black opacity-30">
+                                        Empty Spotlight Card
                                     </div>
-                                    {/* Member name */}
-                                    <div 
-                                        className={`flex items-center gap-1.5 uppercase tracking-widest ${
-                                            valueBold ? 'font-bold' : 'font-medium'
-                                        } ${!slot.value_color ? (isVacant ? 'text-muted/60 italic' : 'text-text') : ''}`}
-                                        style={slot.value_color ? { color: slot.value_color } : {}}
-                                    >
-                                        {isConnected && <Link2 size={10} className="text-accent shrink-0" />}
-                                        <span>
-                                            {slot.value || 'VACANT'}
-                                        </span>
+                                )}
+                            </div>
+                        ) : node.card_style === 'highlighted' ? (
+                            <div className="flex flex-col pt-1 pb-1">
+                                {slots.length > 0 ? (
+                                    <>
+                                        {/* Highlighted Supervisor Slot */}
+                                        <div className="bg-accent/5 border border-accent/10 rounded-lg p-2 flex items-center justify-between gap-2 mb-2">
+                                            {editingSlotKey?.nodeId === node.id && editingSlotKey?.slotId === slots[0].id && editingSlotKey?.field === 'label' ? (
+                                                <input
+                                                    type="text"
+                                                    value={inlineEditValue}
+                                                    onChange={e => setInlineEditValue(e.target.value)}
+                                                    onBlur={() => handleSaveInlineText(node, slots[0], 'label')}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') handleSaveInlineText(node, slots[0], 'label');
+                                                        if (e.key === 'Escape') handleCancelInlineEdit();
+                                                    }}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="bg-surface border border-accent rounded px-1.5 py-0.5 text-[9px] w-[90px] outline-none font-bold uppercase text-text"
+                                                    autoFocus
+                                                />
+                                            ) : (
+                                                <div 
+                                                    onClick={(e) => {
+                                                        if (isEditable) {
+                                                            e.stopPropagation();
+                                                            setEditingSlotKey({ nodeId: node.id, slotId: slots[0].id, field: 'label' });
+                                                            setInlineEditValue(slots[0].label || '');
+                                                        }
+                                                    }}
+                                                    className={`uppercase tracking-wider max-w-[100px] truncate ${
+                                                        slots[0].label_bold !== false ? 'font-black' : 'font-bold'
+                                                    } ${!slots[0].label_color ? 'text-accent' : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                    style={slots[0].label_color ? { color: slots[0].label_color } : {}}
+                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                >
+                                                    {slots[0].label || 'Supervisor'}
+                                                </div>
+                                            )}
+                                            {editingSlotKey?.nodeId === node.id && editingSlotKey?.slotId === slots[0].id && editingSlotKey?.field === 'value' ? (
+                                                <input
+                                                    type="text"
+                                                    value={inlineEditValue}
+                                                    onChange={e => setInlineEditValue(e.target.value)}
+                                                    onBlur={() => handleSaveInlineText(node, slots[0], 'value')}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') handleSaveInlineText(node, slots[0], 'value');
+                                                        if (e.key === 'Escape') handleCancelInlineEdit();
+                                                    }}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="bg-surface border border-accent rounded px-1.5 py-0.5 text-[9px] w-[140px] outline-none font-bold uppercase text-text text-right"
+                                                    autoFocus
+                                                />
+                                            ) : (
+                                                <div 
+                                                    onClick={(e) => {
+                                                        if (isEditable) {
+                                                            e.stopPropagation();
+                                                            setEditingSlotKey({ nodeId: node.id, slotId: slots[0].id, field: 'value' });
+                                                            setInlineEditValue(slots[0].value || '');
+                                                        }
+                                                    }}
+                                                    className={`flex items-center gap-1.5 uppercase tracking-widest text-[11px] ${
+                                                        slots[0].value_bold !== false ? 'font-black' : 'font-bold'
+                                                    } ${!slots[0].value_color ? (slots[0].value?.toLowerCase() === 'vacant' ? 'text-muted/60 italic' : 'text-text') : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                    style={slots[0].value_color ? { color: slots[0].value_color } : {}}
+                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                >
+                                                    {!!slots[0].roster_content_id && <Link2 size={10} className="text-accent shrink-0" />}
+                                                    <span>{slots[0].value || 'VACANT'}</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Smaller Assistants / Team Slots */}
+                                        {slots.length > 1 && (
+                                            <div className="space-y-1 divide-y divide-border/20">
+                                                {slots.slice(1).map((slot: any) => {
+                                                    const isVacant = !slot.roster_content_id && slot.value?.toLowerCase() === 'vacant';
+                                                    const isConnected = !!slot.roster_content_id;
+                                                    const labelBold = slot.label_bold !== false;
+                                                    const valueBold = slot.value_bold !== false;
+                                                    const isEditingLabel = editingSlotKey?.nodeId === node.id && editingSlotKey?.slotId === slot.id && editingSlotKey?.field === 'label';
+                                                    const isEditingValue = editingSlotKey?.nodeId === node.id && editingSlotKey?.slotId === slot.id && editingSlotKey?.field === 'value';
+                                                    return (
+                                                        <div key={slot.id} className="py-1.5 flex items-center justify-between text-[9px] first:pt-0 last:pb-0 gap-2">
+                                                            {isEditingLabel ? (
+                                                                <input
+                                                                    type="text"
+                                                                    value={inlineEditValue}
+                                                                    onChange={e => setInlineEditValue(e.target.value)}
+                                                                    onBlur={() => handleSaveInlineText(node, slot, 'label')}
+                                                                    onKeyDown={e => {
+                                                                        if (e.key === 'Enter') handleSaveInlineText(node, slot, 'label');
+                                                                        if (e.key === 'Escape') handleCancelInlineEdit();
+                                                                    }}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="bg-surface border border-accent rounded px-1.5 py-0.5 text-[8.5px] w-[80px] outline-none font-bold uppercase text-text"
+                                                                    autoFocus
+                                                                />
+                                                            ) : (
+                                                                <div 
+                                                                    onClick={(e) => {
+                                                                        if (isEditable) {
+                                                                            e.stopPropagation();
+                                                                            setEditingSlotKey({ nodeId: node.id, slotId: slot.id, field: 'label' });
+                                                                            setInlineEditValue(slot.label || '');
+                                                                        }
+                                                                    }}
+                                                                    className={`uppercase tracking-wider max-w-[100px] truncate text-[9px] ${
+                                                                        labelBold ? 'font-bold' : 'font-normal'
+                                                                    } ${!slot.label_color ? 'text-muted/80' : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                                    style={slot.label_color ? { color: slot.label_color } : {}}
+                                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                                >
+                                                                    {slot.label || 'Position'}
+                                                                </div>
+                                                            )}
+                                                            {isEditingValue ? (
+                                                                <input
+                                                                    type="text"
+                                                                    value={inlineEditValue}
+                                                                    onChange={e => setInlineEditValue(e.target.value)}
+                                                                    onBlur={() => handleSaveInlineText(node, slot, 'value')}
+                                                                    onKeyDown={e => {
+                                                                        if (e.key === 'Enter') handleSaveInlineText(node, slot, 'value');
+                                                                        if (e.key === 'Escape') handleCancelInlineEdit();
+                                                                    }}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="bg-surface border border-accent rounded px-1.5 py-0.5 text-[8.5px] w-[130px] outline-none font-bold uppercase text-text text-right"
+                                                                    autoFocus
+                                                                />
+                                                            ) : (
+                                                                <div 
+                                                                    onClick={(e) => {
+                                                                        if (isEditable) {
+                                                                            e.stopPropagation();
+                                                                            setEditingSlotKey({ nodeId: node.id, slotId: slot.id, field: 'value' });
+                                                                            setInlineEditValue(slot.value || '');
+                                                                        }
+                                                                    }}
+                                                                    className={`flex items-center gap-1 uppercase tracking-widest text-[9.5px] ${
+                                                                        valueBold ? 'font-bold' : 'font-medium'
+                                                                    } ${!slot.value_color ? (isVacant ? 'text-muted/50 italic' : 'text-text/90') : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                                    style={slot.value_color ? { color: slot.value_color } : {}}
+                                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                                >
+                                                                    {isConnected && <Link2 size={10} className="text-accent shrink-0" />}
+                                                                    <span>{slot.value || 'VACANT'}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="py-3 text-center text-[9px] text-muted uppercase tracking-widest font-black opacity-30">
+                                        Empty Card
                                     </div>
-                                </div>
-                            );
-                        })}
-                        {slots.length === 0 && (
-                            <div className="py-3 text-center text-[9px] text-muted uppercase tracking-widest font-black opacity-30">
-                                Empty Card
+                                )}
+                            </div>
+                        ) : (
+                            /* Standard layout */
+                            <div className="divide-y divide-border/40">
+                                {slots.map((slot: any) => {
+                                    const isVacant = !slot.roster_content_id && slot.value?.toLowerCase() === 'vacant';
+                                    const isConnected = !!slot.roster_content_id;
+                                    const labelBold = slot.label_bold !== false;
+                                    const valueBold = slot.value_bold !== false;
+                                    const isEditingLabel = editingSlotKey?.nodeId === node.id && editingSlotKey?.slotId === slot.id && editingSlotKey?.field === 'label';
+                                    const isEditingValue = editingSlotKey?.nodeId === node.id && editingSlotKey?.slotId === slot.id && editingSlotKey?.field === 'value';
+                                    return (
+                                        <div key={slot.id} className="py-2 flex items-center justify-between text-[10px] first:pt-0 last:pb-0 gap-2">
+                                            {isEditingLabel ? (
+                                                <input
+                                                    type="text"
+                                                    value={inlineEditValue}
+                                                    onChange={e => setInlineEditValue(e.target.value)}
+                                                    onBlur={() => handleSaveInlineText(node, slot, 'label')}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') handleSaveInlineText(node, slot, 'label');
+                                                        if (e.key === 'Escape') handleCancelInlineEdit();
+                                                    }}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="bg-surface border border-accent rounded px-1.5 py-0.5 text-[9px] w-[90px] outline-none font-bold uppercase text-text"
+                                                    autoFocus
+                                                />
+                                            ) : (
+                                                <div 
+                                                    onClick={(e) => {
+                                                        if (isEditable) {
+                                                            e.stopPropagation();
+                                                            setEditingSlotKey({ nodeId: node.id, slotId: slot.id, field: 'label' });
+                                                            setInlineEditValue(slot.label || '');
+                                                        }
+                                                    }}
+                                                    className={`uppercase tracking-wider max-w-[100px] truncate ${
+                                                        labelBold ? 'font-black' : 'font-medium'
+                                                    } ${!slot.label_color ? 'text-muted' : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                    style={slot.label_color ? { color: slot.label_color } : {}}
+                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                >
+                                                    {slot.label || 'Position'}
+                                                </div>
+                                            )}
+                                            {isEditingValue ? (
+                                                <input
+                                                    type="text"
+                                                    value={inlineEditValue}
+                                                    onChange={e => setInlineEditValue(e.target.value)}
+                                                    onBlur={() => handleSaveInlineText(node, slot, 'value')}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') handleSaveInlineText(node, slot, 'value');
+                                                        if (e.key === 'Escape') handleCancelInlineEdit();
+                                                    }}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="bg-surface border border-accent rounded px-1.5 py-0.5 text-[9px] w-[140px] outline-none font-bold uppercase text-text text-right"
+                                                    autoFocus
+                                                />
+                                            ) : (
+                                                <div 
+                                                    onClick={(e) => {
+                                                        if (isEditable) {
+                                                            e.stopPropagation();
+                                                            setEditingSlotKey({ nodeId: node.id, slotId: slot.id, field: 'value' });
+                                                            setInlineEditValue(slot.value || '');
+                                                        }
+                                                    }}
+                                                    className={`flex items-center gap-1.5 uppercase tracking-widest ${
+                                                        valueBold ? 'font-bold' : 'font-medium'
+                                                    } ${!slot.value_color ? (isVacant ? 'text-muted/60 italic' : 'text-text') : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                    style={slot.value_color ? { color: slot.value_color } : {}}
+                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                >
+                                                    {isConnected && <Link2 size={10} className="text-accent shrink-0" />}
+                                                    <span>{slot.value || 'VACANT'}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                                {slots.length === 0 && (
+                                    <div className="py-3 text-center text-[9px] text-muted uppercase tracking-widest font-black opacity-30">
+                                        Empty Card
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -501,19 +988,22 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
     return (
         <div 
             className="flex flex-col h-full relative" 
-            onClick={() => setActiveMenuId(null)}
+            onClick={() => {
+                setActiveMenuId(null);
+                handleCancelInlineEdit();
+            }}
         >
             <main className="flex-1 overflow-auto p-6 pb-16 space-y-6 flex flex-col min-h-0 bg-bg text-text">
                 {/* Top Header bar */}
                 <div className="flex justify-between items-center shrink-0">
                     <div>
                         <h1 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-3">
-                            <GitFork className="text-accent" size={28} />
-                            Faction Hierarchy
-                        </h1>
-                        <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1 opacity-60">
-                            Design and visualize organization structures and chart divisions
-                        </p>
+                                <GitFork className="text-accent" size={28} />
+                                Faction Diagrams
+                            </h1>
+                            <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1 opacity-60">
+                                Design and visualize organization structures and chart diagrams
+                            </p>
                     </div>
 
                     {/* Edit / View Toggles */}
@@ -544,14 +1034,14 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                 <div className="text-center p-20 space-y-4">
                                     <GitFork className="text-muted/30 mx-auto" size={48} />
                                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted opacity-50">
-                                        No divisions defined.
+                                        No diagram cards defined.
                                     </p>
                                     {editMode && activeHierarchy.user_permissions?.manage_nodes && (
                                         <button
                                             onClick={() => handleAddNode(null)}
                                             className="px-6 py-2.5 bg-accent text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition"
                                         >
-                                            Create Main Division
+                                            Create Main Card
                                         </button>
                                     )}
                                 </div>
@@ -561,7 +1051,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                         <div className="text-center p-20 space-y-4">
                             <GitFork className="text-muted/20 mx-auto" size={56} />
                             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted opacity-40">
-                                Create a hierarchy tab to begin charting structures.
+                                Create a diagram to begin charting structures.
                             </p>
                         </div>
                     )}
@@ -591,6 +1081,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                     onClick={() => {
                                         setActiveTabId(h.id);
                                         setEditMode(false);
+                                        handleCancelInlineEdit();
                                     }}
                                     className={`tab pl-4 py-2 cursor-pointer transition-all text-[10px] font-bold uppercase h-full flex items-center gap-1.5 relative border-t-2 ${
                                         canModerateH ? 'pr-1' : 'pr-4'
@@ -666,7 +1157,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                             }}
                                                             className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-danger/70 hover:text-danger hover:bg-danger/5 rounded transition-colors"
                                                         >
-                                                            <Trash2 size={12} /> Remove Hierarchy
+                                                            <Trash2 size={12} /> Remove Diagram
                                                         </button>
                                                     )}
                                                     <div className="border-t border-border mt-1 pt-1">
@@ -694,7 +1185,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                 setShowCreateTabModal(true);
                             }}
                             className="p-2 text-muted hover:text-accent transition-colors"
-                            title="Create New Hierarchy"
+                            title="Create New Diagram"
                         >
                             <Plus size={16} />
                         </button>
@@ -728,7 +1219,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                         <div className="p-6 border-b border-border flex justify-between items-center">
                             <h2 className="text-lg font-black uppercase tracking-tighter flex items-center gap-2">
                                 <Plus className="text-accent" size={20} />
-                                Create Hierarchy
+                                Create Diagram
                             </h2>
                             <button type="button" onClick={() => setShowCreateTabModal(false)} className="text-muted hover:text-text">
                                 <X size={20} />
@@ -736,7 +1227,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                         </div>
                         <div className="p-6 space-y-4">
                             <div>
-                                <label className="text-[9px] font-black text-muted uppercase tracking-[0.2em] block mb-2 px-1">Hierarchy Name</label>
+                                <label className="text-[9px] font-black text-muted uppercase tracking-[0.2em] block mb-2 px-1">Diagram Name</label>
                                 <input
                                     type="text"
                                     required
@@ -803,7 +1294,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                         <div className="p-6 border-b border-border flex justify-between items-center">
                             <h2 className="text-lg font-black uppercase tracking-tighter flex items-center gap-2">
                                 <Settings className="text-accent" size={20} />
-                                Hierarchy Settings: {activeHierarchy.name}
+                                Diagram Settings: {activeHierarchy.name}
                             </h2>
                             <button type="button" onClick={() => setShowTabSettingsModal(false)} className="text-muted hover:text-text">
                                 <X size={20} />
@@ -811,7 +1302,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                         </div>
                         <div className="p-6 space-y-4">
                             <div>
-                                <label className="text-[9px] font-black text-muted uppercase tracking-[0.2em] block mb-2 px-1">Hierarchy Name</label>
+                                <label className="text-[9px] font-black text-muted uppercase tracking-[0.2em] block mb-2 px-1">Diagram Name</label>
                                 <input
                                     type="text"
                                     required
@@ -886,7 +1377,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                         <div className="p-6 border-b border-border flex justify-between items-center">
                             <h2 className="text-lg font-black uppercase tracking-tighter flex items-center gap-2">
                                 <Edit className="text-accent" size={20} />
-                                Edit Division Card
+                                Edit Diagram Card
                             </h2>
                             <button type="button" onClick={() => setShowNodeEditModal(false)} className="text-muted hover:text-text">
                                 <X size={20} />
@@ -923,6 +1414,128 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Card Layout Style Section */}
+                            <div className="space-y-3 pt-4 border-t border-border/40">
+                                <label className="text-[9px] font-black text-muted uppercase tracking-[0.2em] block px-1">Card Layout Style</label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <select
+                                            value={nodeCardStyle}
+                                            onChange={e => setNodeCardStyle(e.target.value as any)}
+                                            className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-[10px] font-bold uppercase tracking-widest outline-none focus:border-accent transition-colors"
+                                        >
+                                            <option value="standard">Standard</option>
+                                            <option value="spotlight">Spotlight</option>
+                                            <option value="highlighted">Highlighted + Others</option>
+                                        </select>
+                                        <p className="text-[9.5px] text-muted leading-relaxed px-1">
+                                            {nodeCardStyle === 'standard' && "STANDARD: A clean, uniform list view where all slots are rendered equally. Best for regular staff lists."}
+                                            {nodeCardStyle === 'spotlight' && "SPOTLIGHT: Focuses on a single leader or director (first slot) with a centered profile layout and large font size."}
+                                            {nodeCardStyle === 'highlighted' && "HIGHLIGHTED + OTHERS: Emphasizes the primary/senior role (first slot) with a larger highlighted layout, and lists assistants or other staff below in a smaller font."}
+                                        </p>
+                                    </div>
+                                    
+                                    {/* HTML Live Preview Box */}
+                                    <div className="bg-surface/50 border border-border rounded-xl p-3 flex flex-col justify-center items-center min-h-[120px] relative overflow-hidden">
+                                        <span className="absolute top-2 right-2 text-[8px] font-black text-muted uppercase tracking-widest opacity-60">Live Preview</span>
+                                        <div className="w-full max-w-[240px] mt-4">
+                                            {nodeCardStyle === 'standard' && (
+                                                <div className="w-full bg-card rounded-xl border border-border shadow-md overflow-hidden" style={{ borderTop: `4px solid ${nodeColor || '#2563eb'}` }}>
+                                                    <div className="px-4 py-2 bg-surface/40 border-b border-border text-[9px] font-black uppercase text-text">Standard Team</div>
+                                                    <div className="p-3 space-y-1.5">
+                                                        <div className="flex justify-between items-center text-[9px]">
+                                                            <span className="font-black text-muted uppercase tracking-wider">OFFICER</span>
+                                                            <span className="font-bold text-text uppercase tracking-widest">JOHN DOE</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-[9px] border-t border-border/20 pt-1.5">
+                                                            <span className="font-black text-muted uppercase tracking-wider">OFFICER</span>
+                                                            <span className="font-bold text-text uppercase tracking-widest">JANE SMITH</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {nodeCardStyle === 'spotlight' && (
+                                                <div className="w-full bg-card rounded-xl border border-border shadow-md overflow-hidden text-center p-4" style={{ borderTop: `4px solid ${nodeColor || '#2563eb'}` }}>
+                                                    {nodeImageUrl ? (
+                                                        <img src={nodeImageUrl} className="w-10 h-10 rounded-full border border-border object-cover mb-2 mx-auto shadow-sm" alt="Preview Spotlight" />
+                                                    ) : (
+                                                        <div className="w-10 h-10 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center mb-2 mx-auto">
+                                                            {React.createElement(ICON_MAP[nodeIcon] || Users, { size: 16, className: 'text-accent' })}
+                                                        </div>
+                                                    )}
+                                                    <div className="text-[9px] font-black text-accent uppercase tracking-widest bg-accent/10 px-2.5 py-0.5 rounded-full inline-block mb-1">DIRECTOR</div>
+                                                    <div className="text-xs font-black text-text uppercase tracking-widest">CHASE DELGADO</div>
+                                                </div>
+                                            )}
+                                            {nodeCardStyle === 'highlighted' && (
+                                                <div className="w-full bg-card rounded-xl border border-border shadow-md overflow-hidden" style={{ borderTop: `4px solid ${nodeColor || '#2563eb'}` }}>
+                                                    <div className="px-4 py-2 bg-surface/40 border-b border-border text-[9px] font-black uppercase text-text">Highlighted + Others</div>
+                                                    <div className="p-3">
+                                                        <div className="bg-accent/5 p-2 rounded-lg border border-accent/10 mb-2 flex justify-between items-center">
+                                                            <span className="text-[10px] font-black text-accent uppercase tracking-wider">PRIMARY ROLE</span>
+                                                            <span className="text-xs font-black text-text uppercase tracking-widest">JANE DOE</span>
+                                                        </div>
+                                                        <div className="space-y-1 pl-1">
+                                                            <div className="flex justify-between items-center text-[8px]">
+                                                                <span className="font-bold text-muted uppercase tracking-wider">OTHER STAFF</span>
+                                                                <span className="font-bold text-text uppercase tracking-widest">JOHN SMITH</span>
+                                                            </div>
+                                                            <div className="flex justify-between items-center text-[8px] border-t border-border/20 pt-1">
+                                                                <span className="font-bold text-muted uppercase tracking-wider">OTHER STAFF</span>
+                                                                <span className="font-bold text-text uppercase tracking-widest">BOB JOHNSON</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Spotlight Customization Section */}
+                            {nodeCardStyle === 'spotlight' && (
+                                <div className="space-y-3 pt-4 border-t border-border/40 animate-in fade-in duration-200">
+                                    <h4 className="text-[9px] font-black uppercase tracking-[0.2em] text-accent block px-1">Spotlight Customization</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[8px] font-black text-muted uppercase tracking-[0.2em] block mb-1.5 px-0.5">Spotlight Image URL</label>
+                                            <input
+                                                type="text"
+                                                value={nodeImageUrl}
+                                                onChange={e => setNodeImageUrl(e.target.value)}
+                                                placeholder="e.g. https://example.com/avatar.jpg"
+                                                className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-[10px] font-bold outline-none focus:border-accent transition-colors"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[8px] font-black text-muted uppercase tracking-[0.2em] block mb-1.5 px-0.5">Custom Spotlight Icon</label>
+                                            <div className="grid grid-cols-5 gap-1.5 p-1.5 bg-surface border border-border rounded-xl">
+                                                {Object.keys(ICON_MAP).map(iconKey => {
+                                                    const Icon = ICON_MAP[iconKey];
+                                                    const isSelected = nodeIcon === iconKey;
+                                                    return (
+                                                        <button
+                                                            key={iconKey}
+                                                            type="button"
+                                                            onClick={() => setNodeIcon(iconKey)}
+                                                            className={`p-2 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                                                                isSelected 
+                                                                    ? 'bg-accent/10 text-accent border border-accent/20' 
+                                                                    : 'text-muted hover:text-text hover:bg-card/50 border border-transparent'
+                                                            }`}
+                                                            title={iconKey.toUpperCase()}
+                                                        >
+                                                            <Icon size={14} />
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Card Slots / Auto-Link toggle */}
                             {activeHierarchy?.roster_id && (

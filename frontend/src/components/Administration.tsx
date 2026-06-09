@@ -906,13 +906,16 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
                                 <div className="flex-1 overflow-auto p-4 space-y-8">
                                     {config && Object.entries(config).map(([catKey, category]: [string, any]) => (
                                         <div key={catKey}>
-                                            <h4 className="text-[10px] font-bold text-accent uppercase tracking-[0.3em] mb-4 border-b border-accent/20 pb-1">{category.name}</h4>
+                                            <h4 className="text-[10px] font-bold text-accent uppercase tracking-[0.3em] mb-4 border-b border-accent/20 pb-1">{category.name?.replace(/Hierarchy/g, 'Diagram').replace(/hierarchy/g, 'diagram').replace(/Hierarchies/g, 'Diagrams').replace(/hierarchies/g, 'diagrams')}</h4>
                                             <div className="space-y-2">
                                                 {Object.entries(category.permissions).map(([permKey, perm]: [string, any]) => {
                                                     const currentVal = selectedRole.name === 'Administrator' ? 'YES' : (selectedRole.permissions?.find((p: any) => p.permission_key === permKey)?.value || 'NO');
                                                     return (
                                                         <div key={permKey} className="flex items-center justify-between p-3 bg-surface rounded border border-border/50">
-                                                            <div className="max-w-[60%]"><div className="text-sm font-bold text-text">{perm.name}</div><div className="text-[10.5px] text-muted">{perm.description}</div></div>
+                                                            <div className="max-w-[60%]">
+                                                                <div className="text-sm font-bold text-text">{perm.name?.replace(/Hierarchy/g, 'Diagram').replace(/hierarchy/g, 'diagram').replace(/Hierarchies/g, 'Diagrams').replace(/hierarchies/g, 'diagrams')}</div>
+                                                                <div className="text-[10.5px] text-muted">{perm.description?.replace(/Hierarchy/g, 'Diagram').replace(/hierarchy/g, 'diagram').replace(/Hierarchies/g, 'Diagrams').replace(/hierarchies/g, 'diagrams')}</div>
+                                                            </div>
                                                             <div className="flex gap-1 bg-bg p-1 rounded border border-border">
                                                                 {['YES', 'NO', 'NEVER'].map(val => (
                                                                     <button key={val} disabled={!hasPerm('modify_permissions') || selectedRole.name === 'Administrator'} onClick={() => handlePermissionChange(permKey, val)} className={`px-3 py-1 text-[9px] font-black uppercase rounded transition-all ${currentVal === val ? 'bg-accent text-white' : 'text-muted hover:text-text'} disabled:opacity-50 disabled:cursor-not-allowed`}>{val}</button>
@@ -1376,7 +1379,7 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
                             </div>
 
                             <div>
-                                <label className="block text-[10px] text-muted font-bold uppercase tracking-widest mb-1.5">Rank Weight (Hierarchy)</label>
+                                <label className="block text-[10px] text-muted font-bold uppercase tracking-widest mb-1.5">Rank Weight (Diagrams)</label>
                                 <input 
                                     type="number" 
                                     value={roleForm.weight} 
