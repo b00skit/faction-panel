@@ -135,7 +135,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // User Management within Factions
     Route::get('/factions/{shortname}/users', [FactionController::class, 'getMembers']);
+    Route::get('/factions/{shortname}/members', [FactionController::class, 'getMembers']);
+    Route::post('/factions/{shortname}/sync-roster-data', [FactionController::class, 'syncRosterData']);
     Route::get('/factions/{shortname}/users/{member}', [FactionController::class, 'getMemberProfile']);
+    Route::get('/factions/{shortname}/members/{member}', [FactionController::class, 'getMemberProfile']);
+
     Route::delete('/factions/{faction}/users/{user}', [FactionController::class, 'removeMember']);
     Route::put('/factions/{faction}/users/{user}/roles', [FactionController::class, 'updateMemberRoles']);
 
@@ -195,6 +199,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/factions/{shortname}/flags', [RosterFlagController::class, 'store']);
     Route::put('/flags/{flag}', [RosterFlagController::class, 'update']);
     Route::delete('/flags/{flag}', [RosterFlagController::class, 'destroy']);
+    Route::post('/flags/{flag}/recalculate', [RosterFlagController::class, 'recalculate']);
 
     // Faction Record Management
     Route::get('/factions/{shortname}/records', [FactionRecordController::class, 'index']);

@@ -7,6 +7,7 @@ use Database\Factories\FactionFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 
 class Faction extends Model
@@ -147,6 +148,13 @@ class Faction extends Model
                 $faction->save();
             }
         });
+    }
+
+    public static function invalidateRosterCache(int $factionId)
+    {
+        $key = "roster_version_{$factionId}";
+        $version = Cache::get($key, 0);
+        Cache::put($key, $version + 1, now()->addDays(30));
     }
 
     public function invites()

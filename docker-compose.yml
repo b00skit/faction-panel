@@ -7,6 +7,10 @@ services:
       args:
         - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8000}
         - VITE_API_AUTH_KEY=${VITE_API_AUTH_KEY}
+        - VITE_REVERB_APP_KEY=${VITE_REVERB_APP_KEY}
+        - VITE_REVERB_HOST=${VITE_REVERB_APP_KEY}
+        - VITE_REVERB_PORT=${VITE_REVERB_APP_KEY}
+        - VITE_REVERB_SCHEME=${VITE_REVERB_APP_KEY}
     ports:
       - "${PORT:-3007}:80"
     restart: always

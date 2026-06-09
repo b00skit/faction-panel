@@ -67,3 +67,45 @@ test('unauthorized user cannot view a faction they are not in', function () {
 
     $response->assertStatus(403);
 });
+
+test('authorized user can fetch faction users list and search case-insensitively', function () {
+    $leader = User::factory()->create(['username' => 'TheLeader']);
+    $faction = Faction::factory()->create([
+        'shortname' => 'lssd',
+        'faction_leader' => $leader->id,
+        'created_by' => $leader->id,
+        'access' => 'private',
+    ]);
+    $faction->users()->attach($leader->id);
+
+    $user1 = User::factory()->create(['username' => 'John_Doe', 'gtaw_username' => 'JohnDoeGTAW']);
+    $user2 = User::factory()->create(['username' => 'Jane_Smith', 'gtaw_username' => 'JaneSmithGTAW']);
+
+    $faction->users()->attach($user1->id);
+    $faction->users()->attach($user2->id);
+
+    // 1. Test fetching list
+    $response = $this->actingAs($leader)->getJson('/api/factions/lssd/users');
+    $response->assertStatus(200);
+    $data = $response->json();
+
+    // Should contain the users
+    $usernames = collect($data)->pluck('username')->toArray();
+    expect($usernames)->toContain('TheLeader')
+        ->toContain('John_Doe')
+        ->toContain('Jane_Smith');
+
+    // 2. Test searching case-insensitively by username
+    $responseSearch = $this->actingAs($leader)->getJson('/api/factions/lssd/users?search=john');
+    $responseSearch->assertStatus(200);
+    $searchData = $responseSearch->json();
+    expect(count($searchData))->toBe(1);
+    expect($searchData[0]['username'])->toBe('John_Doe');
+
+    // 3. Test searching case-insensitively by gtaw_username
+    $responseSearchGtaw = $this->actingAs($leader)->getJson('/api/factions/lssd/users?search=smithgtaw');
+    $responseSearchGtaw->assertStatus(200);
+    $searchDataGtaw = $responseSearchGtaw->json();
+    expect(count($searchDataGtaw))->toBe(1);
+    expect($searchDataGtaw[0]['username'])->toBe('Jane_Smith');
+});

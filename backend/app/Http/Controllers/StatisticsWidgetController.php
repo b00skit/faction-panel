@@ -38,13 +38,8 @@ class StatisticsWidgetController extends Controller
 
         $widget = $model->widgets()->create($validated);
 
-        // Initial calculation
-        $result = $this->statisticsService->calculate($widget);
-        $widget->update([
-            'cache_result' => $result['data'],
-            'is_intensive' => $result['is_intensive'],
-            'last_calculated_at' => now(),
-        ]);
+        // Initial calculation (integrated caching)
+        $this->statisticsService->calculate($widget, true);
 
         $this->audit('statistics_widget.create', "Created statistics widget '{$widget->name}' on model '{$model->name}'", $faction->id, $widget, null, $widget->getAttributes());
 
@@ -73,17 +68,12 @@ class StatisticsWidgetController extends Controller
         $oldValues = $widget->getOriginal();
         $widget->update($validated);
 
-        // Recalculate
-        $result = $this->statisticsService->calculate($widget);
-        $widget->update([
-            'cache_result' => $result['data'],
-            'is_intensive' => $result['is_intensive'],
-            'last_calculated_at' => now(),
-        ]);
+        // Recalculate (integrated caching)
+        $this->statisticsService->calculate($widget, true);
 
         $this->audit('statistics_widget.update', "Updated statistics widget '{$widget->name}'", $faction->id, $widget, $oldValues, $widget->getDirty());
 
-        return response()->json($widget);
+        return response()->json($widget->fresh());
     }
 
     public function destroy(StatisticsWidget $widget)
@@ -119,14 +109,9 @@ class StatisticsWidgetController extends Controller
 
         $this->audit('statistics_widget.recalculate', "Recalculated statistics widget '{$widget->name}'", $faction->id, $widget);
 
-        $result = $this->statisticsService->calculate($widget);
-        $widget->update([
-            'cache_result' => $result['data'],
-            'is_intensive' => $result['is_intensive'],
-            'last_calculated_at' => now(),
-        ]);
+        $this->statisticsService->calculate($widget, true);
 
-        return response()->json($widget);
+        return response()->json($widget->fresh());
     }
 
     public function reorder(Request $request, StatisticsModel $model)

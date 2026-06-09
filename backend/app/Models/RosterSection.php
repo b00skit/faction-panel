@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Events\RosterUpdated;
 use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -9,6 +10,19 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class RosterSection extends Model
 {
     use Auditable, SoftDeletes;
+
+    protected static function booted()
+    {
+        $clear = function ($section) {
+            $roster = $section->roster;
+            if ($roster) {
+                Faction::invalidateRosterCache($roster->faction_id);
+                RosterUpdated::dispatch($roster);
+            }
+        };
+        static::saved($clear);
+        static::deleted($clear);
+    }
 
     protected $fillable = [
         'roster_id',

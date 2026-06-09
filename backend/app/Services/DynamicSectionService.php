@@ -12,6 +12,10 @@ use Illuminate\Support\Facades\Auth;
 
 class DynamicSectionService
 {
+    private static $databaseCache = [];
+
+    private static $rosterValueCache = [];
+
     /**
      * Resolve dynamic content for a section.
      */
@@ -36,7 +40,11 @@ class DynamicSectionService
         $data = [];
 
         if ($sourceType === 'database' && $sourceId) {
-            $database = FactionRecordDatabase::with('entries')->find($sourceId);
+            if (! isset(self::$databaseCache[$sourceId])) {
+                self::$databaseCache[$sourceId] = FactionRecordDatabase::with('entries')->find($sourceId);
+            }
+            $database = self::$databaseCache[$sourceId];
+
             if ($database && $database->faction_id === $faction->id) {
                 foreach ($database->entries as $entry) {
                     $data[] = [
@@ -328,13 +336,11 @@ class DynamicSectionService
         });
     }
 
-    private $rosterValueCache = [];
-
     protected function getCachedRosterValues(Faction $faction, $rosterId, $field)
     {
         $cacheKey = "{$rosterId}_{$field}";
-        if (isset($this->rosterValueCache[$cacheKey])) {
-            return $this->rosterValueCache[$cacheKey];
+        if (isset(self::$rosterValueCache[$cacheKey])) {
+            return self::$rosterValueCache[$cacheKey];
         }
 
         $values = [];
@@ -367,9 +373,9 @@ class DynamicSectionService
             }
         }
 
-        $this->rosterValueCache[$cacheKey] = array_unique($values);
+        self::$rosterValueCache[$cacheKey] = array_unique($values);
 
-        return $this->rosterValueCache[$cacheKey];
+        return self::$rosterValueCache[$cacheKey];
     }
 
     protected function applyCustomization(RosterContent $content, array $customization, array $sourceItem)

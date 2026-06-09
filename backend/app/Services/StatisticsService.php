@@ -65,11 +65,21 @@ class StatisticsService
         return $this->rosterPoolsCache[$rosterId];
     }
 
-    public function calculate(StatisticsWidget $widget): array
+    public function calculate(StatisticsWidget $widget, bool $forceRefresh = false): array
     {
         $config = $widget->configuration;
         $intensive = false;
         $totalRowsProcessed = 0;
+
+        // Snapshot System: Return cached data if it's fresh enough and it's marked as intensive
+        if (! $forceRefresh && $widget->is_intensive && $widget->last_calculated_at && $widget->last_calculated_at->gt(now()->subMinutes(10))) {
+            return [
+                'data' => $widget->cache_result,
+                'is_intensive' => true,
+                'from_cache' => true,
+                'last_calculated_at' => $widget->last_calculated_at,
+            ];
+        }
 
         $data = [];
 
@@ -85,9 +95,20 @@ class StatisticsService
             $intensive = true;
         }
 
+        // Update widget with new snapshot if it's intensive or if it was already marked intensive
+        if ($intensive || $widget->is_intensive) {
+            $widget->updateQuietly([
+                'cache_result' => $data,
+                'last_calculated_at' => now(),
+                'is_intensive' => $intensive,
+            ]);
+        }
+
         return [
             'data' => $data,
             'is_intensive' => $intensive,
+            'from_cache' => false,
+            'last_calculated_at' => now(),
         ];
     }
 
@@ -106,6 +127,18 @@ class StatisticsService
                 $result[] = [
                     'name' => $s['name'],
                     'value' => $val,
+                    'color' => $s['color'] ?? null,
+                ];
+
+                continue;
+            }
+
+            // Try to use SQL aggregation first
+            $sqlValue = $this->calculateSeriesWithSql($s);
+            if ($sqlValue !== null) {
+                $result[] = [
+                    'name' => $s['name'],
+                    'value' => $sqlValue,
                     'color' => $s['color'] ?? null,
                 ];
 
@@ -158,6 +191,157 @@ class StatisticsService
         }
 
         return $result;
+    }
+
+    protected function calculateSeriesWithSql(array $s): ?float
+    {
+        // Don't use SQL if complex logic groups are present for now (can be optimized later)
+        if (isset($s['logic_groups']) && ! empty($s['logic_groups'])) {
+            return null;
+        }
+
+        // Don't use SQL if "in_roster" matching is used (requires cross-table logic)
+        $conditions = $s['conditions'] ?? [];
+        foreach ($conditions as $cond) {
+            if (($cond['match_type'] ?? '') === 'in_roster') {
+                return null;
+            }
+        }
+
+        $query = $this->getSourceQuery($s['source_type'], $s['source_id'], $s);
+        if (! $query) {
+            return null;
+        }
+
+        $this->applyConditionsToQuery($query, $conditions, $s['source_type']);
+
+        $operation = $s['operation'] ?? 'count';
+        $targetCol = $s['target_col'] ?? null;
+
+        return $this->aggregateQuery($query, $operation, $targetCol, $s['source_type']);
+    }
+
+    protected function getSourceQuery(string $type, $id, array $config = [])
+    {
+        if ($type === 'roster') {
+            $roster = Roster::find($id);
+            if (! $roster) {
+                return null;
+            }
+
+            $query = RosterContent::query();
+
+            if (! empty($config['section_ids'])) {
+                $allSections = RosterSection::where('roster_id', $id)->get();
+                $sectionIds = $this->getDescendantSectionIds($allSections, $config['section_ids']);
+                $query->whereIn('section_id', $sectionIds);
+            } else {
+                $query->whereHas('section', function ($q) use ($id) {
+                    $q->where('roster_id', $id);
+                });
+            }
+
+            return $query;
+        } elseif ($type === 'section') {
+            $section = RosterSection::find($id);
+            if (! $section) {
+                return null;
+            }
+
+            $allSections = RosterSection::where('roster_id', $section->roster_id)->get();
+            $sectionIds = $this->getDescendantSectionIds($allSections, [$section->id]);
+
+            return RosterContent::whereIn('section_id', $sectionIds);
+        } elseif ($type === 'database') {
+            $db = FactionRecordDatabase::find($id);
+            if (! $db) {
+                return null;
+            }
+
+            return $db->entries()->where('is_active', true);
+        }
+
+        return null;
+    }
+
+    protected function applyConditionsToQuery($query, array $conditions, string $sourceType)
+    {
+        $dataKey = $sourceType === 'database' ? 'data' : 'content';
+
+        foreach ($conditions as $cond) {
+            $targetCol = $cond['target_col'] ?? null;
+            if (! $targetCol) {
+                continue;
+            }
+
+            $matchVal = $cond['match_value'] ?? null;
+            $matchType = $cond['match_type'] ?? 'equals';
+
+            // Special handling for RosterContent because column IDs vary by section
+            if ($sourceType === 'roster' || $sourceType === 'section') {
+                // If it's a roster-wide query, we might need a complex OR for different column IDs
+                // But often targetCol is already a resolved ID if it came from the frontend.
+                // If it's a name, we need to map it.
+                // For simplicity now, we assume targetCol is the ID if it starts with 'col_'
+                if (! str_starts_with($targetCol, 'col_')) {
+                    // It's a name, we need to find all possible IDs for this name across relevant sections
+                    // This is complex, so we fallback to collection for now if targetCol is not an ID
+                    // (Actually, the frontend usually sends IDs)
+                    if (str_contains($targetCol, ' ')) { // Likely a name
+                        return null; // Force fallback
+                    }
+                }
+            }
+
+            $jsonPath = "{$dataKey}->{$targetCol}";
+
+            switch ($matchType) {
+                case 'exists':
+                    $query->whereNotNull($jsonPath);
+                    break;
+                case 'equals':
+                    $query->where($jsonPath, $matchVal);
+                    break;
+                case 'not_equals':
+                    $query->where($jsonPath, '!=', $matchVal);
+                    break;
+                case 'contains':
+                    $query->where($jsonPath, 'like', "%{$matchVal}%");
+                    break;
+                case 'is_null':
+                    $query->whereNull($jsonPath);
+                    break;
+            }
+        }
+    }
+
+    protected function aggregateQuery($query, string $operation, $targetCol, string $sourceType): float
+    {
+        if ($operation === 'count_unique' && $targetCol) {
+            $dataKey = $sourceType === 'database' ? 'data' : 'content';
+
+            return (float) $query->distinct("{$dataKey}->{$targetCol}")->count();
+        }
+
+        if ($operation === 'count' || ! $targetCol) {
+            return (float) $query->count();
+        }
+
+        $dataKey = $sourceType === 'database' ? 'data' : 'content';
+        $jsonPath = "{$dataKey}->{$targetCol}";
+
+        switch ($operation) {
+            case 'sum':
+                return (float) $query->sum($jsonPath);
+            case 'avg':
+                return (float) round($query->avg($jsonPath), 2);
+            case 'min':
+                return (float) $query->min($jsonPath);
+            case 'max':
+                return (float) $query->max($jsonPath);
+            default:
+                return (float) $query->count();
+        }
     }
 
     protected function aggregatePool(Collection $pool, string $operation, $targetCol, string $sourceType)
@@ -216,15 +400,24 @@ class StatisticsService
     protected function calculateGrouped(StatisticsWidget $widget, array $config, &$totalRowsProcessed): array
     {
         $groupBy = $config['group_by'];
-        $pool = $this->getSourcePool($groupBy['source_type'], $groupBy['source_id'], $totalRowsProcessed, $config);
+        $sourceType = $groupBy['source_type'];
+        $sourceId = $groupBy['source_id'];
+        $colKey = $groupBy['column'];
+
+        // Try SQL aggregation for grouping
+        $sqlData = $this->calculateGroupedWithSql($groupBy, $config);
+        if ($sqlData !== null) {
+            return $sqlData;
+        }
+
+        $pool = $this->getSourcePool($sourceType, $sourceId, $totalRowsProcessed, $config);
 
         // Apply global filters if any
         if (isset($config['filters'])) {
-            $pool = $this->applyConditions($pool, $config['filters'], $groupBy['source_type']);
+            $pool = $this->applyConditions($pool, $config['filters'], $sourceType);
         }
 
-        $colKey = $groupBy['column'];
-        $dataKey = $groupBy['source_type'] === 'database' ? 'data' : 'content';
+        $dataKey = $sourceType === 'database' ? 'data' : 'content';
 
         $grouped = $pool->groupBy(function ($item) use ($dataKey, $colKey) {
             $data = $item->$dataKey ?? [];
@@ -242,6 +435,39 @@ class StatisticsService
         }
 
         return $result;
+    }
+
+    protected function calculateGroupedWithSql(array $groupBy, array $config): ?array
+    {
+        $sourceType = $groupBy['source_type'];
+        $sourceId = $groupBy['source_id'];
+        $colKey = $groupBy['column'];
+
+        // Fallback if colKey is not an ID for rosters
+        if (($sourceType === 'roster' || $sourceType === 'section') && ! str_starts_with($colKey, 'col_')) {
+            return null;
+        }
+
+        $query = $this->getSourceQuery($sourceType, $sourceId, $config);
+        if (! $query) {
+            return null;
+        }
+
+        if (isset($config['filters'])) {
+            $this->applyConditionsToQuery($query, $config['filters'], $sourceType);
+        }
+
+        $dataKey = $sourceType === 'database' ? 'data' : 'content';
+        $jsonPath = "{$dataKey}->{$colKey}";
+
+        $results = $query->selectRaw("{$jsonPath} as group_key, count(*) as aggregate")
+            ->groupBy('group_key')
+            ->get();
+
+        return $results->map(fn ($r) => [
+            'name' => $r->group_key ?? 'Unknown',
+            'value' => (int) $r->aggregate,
+        ])->toArray();
     }
 
     protected function calculateTable(StatisticsWidget $widget, array $config, &$totalRowsProcessed): array
@@ -347,6 +573,21 @@ class StatisticsService
     {
         if (empty($count['conditions']) || ! is_array($count['conditions'])) {
             return 0;
+        }
+
+        // Try SQL path first if there are no brackets and we are not in tests or DB is ready
+        $hasBrackets = collect($count['conditions'])->contains(fn ($c) => ($c['brackets_open'] ?? 0) > 0 || ($c['brackets_close'] ?? 0) > 0);
+        $hasInRoster = collect($count['conditions'])->contains(fn ($c) => ($c['match_type'] ?? '') === 'in_roster');
+
+        if (! $hasBrackets && ! $hasInRoster) {
+            try {
+                $sqlValue = $this->evaluateCountWithSql($count, $parentType, $parentId);
+                if ($sqlValue !== null) {
+                    return $sqlValue;
+                }
+            } catch (\Throwable $e) {
+                // Fallback to PHP if SQL fails (e.g. mock DB in tests)
+            }
         }
 
         $result = 0;
@@ -485,6 +726,81 @@ class StatisticsService
                     $result = $applyOp($popped['result'], $result, $popped['operator']);
                     $isFirst = false;
                 }
+            }
+        }
+
+        return (float) max(0, $result);
+    }
+
+    protected function evaluateCountWithSql(array $count, string $parentType, $parentId): ?float
+    {
+        $result = 0;
+        $isFirst = true;
+
+        foreach ($count['conditions'] as $cond) {
+            $condMatchedValue = 0;
+
+            if (($cond['type'] ?? '') === 'value') {
+                $condMatchedValue = (float) ($cond['settings']['value'] ?? 0);
+            } elseif (($cond['type'] ?? '') === 'count') {
+                // Recursive call for nested counts - if it falls back to PHP, this will also return null
+                return null;
+            } else {
+                $scope = $cond['scope'] ?? 'default';
+                $query = null;
+
+                if ($scope === 'roster' && ! empty($cond['roster_id'])) {
+                    $query = $this->getSourceQuery('roster', $cond['roster_id']);
+                } elseif ($scope === 'specific_sections' && ! empty($cond['section_ids'])) {
+                    $sections = RosterSection::whereIn('id', $cond['section_ids'])->get();
+                    if ($sections->isNotEmpty()) {
+                        $firstSection = $sections->first();
+                        $allSections = RosterSection::where('roster_id', $firstSection->roster_id)->get();
+                        $sectionIds = $this->getDescendantSectionIds($allSections, $cond['section_ids']);
+                        $query = RosterContent::whereIn('section_id', $sectionIds);
+                    }
+                } elseif ($scope === 'section' && $parentType === 'section') {
+                    $query = $this->getSourceQuery('section', $parentId);
+                } else {
+                    if ($parentType === 'roster') {
+                        $query = $this->getSourceQuery('roster', $parentId);
+                    } else {
+                        $query = $this->getSourceQuery('section', $parentId);
+                    }
+                }
+
+                if (! $query) {
+                    return null;
+                }
+
+                $this->applyConditionsToQuery($query, $cond['filters'] ?? [$cond], 'roster');
+
+                if (! empty($cond['settings']['count_unique']) && ! empty($cond['settings']['target_col'])) {
+                    $targetColName = $cond['settings']['target_col'];
+                    $dataKey = ($scope === 'database' || $parentType === 'database') ? 'data' : 'content';
+                    $condMatchedValue = (float) $query->distinct("{$dataKey}->{$targetColName}")->count();
+                } else {
+                    $condMatchedValue = (float) $query->count();
+                }
+            }
+
+            if ($isFirst) {
+                $result = $condMatchedValue;
+                $isFirst = false;
+            } else {
+                $op = $cond['operator'] ?? ($cond['arithmetic_operator'] ?? '+');
+
+                if ($op === '+') {
+                    $result += $condMatchedValue;
+                } elseif ($op === '-') {
+                    $result -= $condMatchedValue;
+                } elseif ($op === '*') {
+                    $result *= $condMatchedValue;
+                } elseif ($op === '/' && $condMatchedValue != 0) {
+                    $result /= $condMatchedValue;
+                } else {
+                    return null;
+                } // Logic ops (AND/OR) not implemented in this simple SQL builder
             }
         }
 

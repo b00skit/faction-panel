@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Faction;
 use App\Models\RosterFlag;
 use App\Models\User;
+use App\Services\RosterFlagService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -79,5 +80,21 @@ class RosterFlagController extends Controller
         $flag->delete();
 
         return response()->json(['message' => 'Flag deleted']);
+    }
+
+    public function recalculate(RosterFlag $flag, RosterFlagService $service)
+    {
+        if (! User::hasFactionPermission(Auth::user(), $flag->faction, 'modify_roster_flags')) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $modified = $service->recalculate($flag);
+
+        $this->audit('roster_flag.recalculate', "Recalculated roster flag '{$flag->name}' — {$modified} row(s) updated", null, $flag);
+
+        return response()->json([
+            'message' => 'Flag recalculated',
+            'modified' => $modified,
+        ]);
     }
 }

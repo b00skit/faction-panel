@@ -90,6 +90,29 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
         toast.success('Invite link copied!');
     };
     const [savingDetails, setSavingDetails] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    const handleSyncRosterData = async () => {
+        const confirmed = await confirm({
+            title: 'Synchronize Roster Data',
+            message: 'This will re-evaluate all auto-applied checkboxes and tags across all rosters based on the latest data in your record databases. This process may take a few moments.',
+            confirmText: 'Sync All Data',
+            variant: 'accent'
+        });
+
+        if (!confirmed) return;
+
+        setIsSyncing(true);
+        const loadToast = toast.loading('Synchronizing roster data...');
+        try {
+            const res = await api.post(`/factions/${faction.shortname}/sync-roster-data`);
+            toast.success(`${res.data.message} — ${res.data.modified} row(s) updated`, { id: loadToast });
+        } catch (err: any) {
+            toast.error(err.response?.data?.message || 'Failed to synchronize roster data', { id: loadToast });
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     // Role Edit State
     const [showRoleModal, setShowRoleModal] = useState(false);
@@ -749,6 +772,33 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
                                                     />
                                                     <p className="text-[8px] text-muted uppercase font-bold tracking-widest px-1 italic">Replaces the default version footer in the sidebar.</p>
                                                 </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-6">
+                                        <div className="text-[10px] font-bold text-muted uppercase tracking-[0.2em] mb-4 border-b border-border pb-1">Roster Maintenance</div>
+                                        <div className="p-6 bg-surface border border-border rounded-xl space-y-4">
+                                            <div className="flex items-start gap-4">
+                                                <div className="w-10 h-10 bg-accent/10 rounded-lg flex items-center justify-center text-accent shrink-0">
+                                                    <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <h4 className="text-xs font-black uppercase tracking-tight">Synchronize Roster Data</h4>
+                                                    <p className="text-[10px] text-muted font-bold uppercase tracking-widest leading-relaxed">
+                                                        Forces a full re-evaluation of all roster entries against linked record databases. 
+                                                        Use this if you have modified database values and want to update auto-applied checkboxes or tags immediately.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end pt-2">
+                                                <button 
+                                                    type="button"
+                                                    onClick={handleSyncRosterData}
+                                                    disabled={isSyncing}
+                                                    className="px-6 py-2.5 bg-surface hover:bg-accent hover:text-white border border-border hover:border-accent rounded text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                                                >
+                                                    {isSyncing ? 'Synchronizing...' : 'Start Full Data Sync'}
+                                                </button>
                                             </div>
                                         </div>
                                     </div>

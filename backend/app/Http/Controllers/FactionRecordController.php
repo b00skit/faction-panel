@@ -91,11 +91,8 @@ class FactionRecordController extends Controller
             'created_by' => 'nullable|integer|exists:users,id',
         ]);
 
-        if ($database->is_api_database) {
-            // Restrictions for API-managed databases
-            unset($validated['name']);
-            unset($validated['description']);
-            unset($validated['database_structure']);
+        if ($database->is_api_database && ! Auth::user()->is_superadmin) {
+            return response()->json(['message' => 'Only superadmins can edit API-managed databases.'], 403);
         }
 
         $oldValues = $database->getOriginal();
@@ -108,6 +105,10 @@ class FactionRecordController extends Controller
 
     public function destroy(string $shortname, FactionRecordDatabase $database)
     {
+        if ($database->is_api_database && ! Auth::user()->is_superadmin) {
+            return response()->json(['message' => 'Only superadmins can delete API-managed databases.'], 403);
+        }
+
         if (! User::hasFactionPermission(Auth::user(), $database->faction, 'global_faction_record_moderation') && $database->created_by !== Auth::id()) {
             return response()->json(['message' => 'Forbidden'], 403);
         }

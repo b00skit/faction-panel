@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Save, Flag, GripVertical, Info, Search, Check, AlertCircle, ShieldAlert } from 'lucide-react';
+import { X, Plus, Trash2, Save, Flag, GripVertical, Info, Search, Check, AlertCircle, ShieldAlert, RefreshCw } from 'lucide-react';
 import * as LucideIcons from '../icons';
 import { ALL_ICONS } from '../icons';
 import api from '../api';
@@ -39,6 +39,8 @@ const FlagManagerModal: React.FC<FlagManagerModalProps> = ({ shortname, onClose 
     const [isSaving, setIsSaving] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [newFlagName, setNewFlagName] = useState('');
+    const [isRecalculating, setIsRecalculating] = useState(false);
+    const [isRecalculatingAll, setIsRecalculatingAll] = useState(false);
 
     const fetchData = async () => {
         try {
@@ -98,6 +100,43 @@ const FlagManagerModal: React.FC<FlagManagerModalProps> = ({ shortname, onClose 
             toast.error('Failed to save flag', { id: loadToast });
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleRecalculate = async () => {
+        if (!selectedFlag || !selectedFlag.id) return;
+        setIsRecalculating(true);
+        const loadToast = toast.loading('Recalculating flag...');
+        try {
+            const res = await api.post(`/flags/${selectedFlag.id}/recalculate`);
+            toast.success(`Recalculated — ${res.data.modified ?? 0} row(s) updated`, { id: loadToast });
+        } catch (err) {
+            toast.error('Failed to recalculate flag', { id: loadToast });
+        } finally {
+            setIsRecalculating(false);
+        }
+    };
+
+    const handleRecalculateAll = async () => {
+        if (flags.length === 0) return;
+        setIsRecalculatingAll(true);
+        const loadToast = toast.loading('Recalculating all flags...');
+        let totalModified = 0;
+        try {
+            for (const flag of flags) {
+                if (!flag.id) continue;
+                try {
+                    const res = await api.post(`/flags/${flag.id}/recalculate`);
+                    totalModified += (res.data.modified ?? 0);
+                } catch (e) {
+                    console.error(`Failed to recalculate flag ${flag.name}`, e);
+                }
+            }
+            toast.success(`All flags recalculated — ${totalModified} row(s) updated`, { id: loadToast });
+        } catch (err) {
+            toast.error('Failed to complete recalculation', { id: loadToast });
+        } finally {
+            setIsRecalculatingAll(false);
         }
     };
 
@@ -181,9 +220,19 @@ const FlagManagerModal: React.FC<FlagManagerModalProps> = ({ shortname, onClose 
                     <div className="w-1/4 border-r border-border flex flex-col bg-surface/10">
                         <div className="p-4 flex justify-between items-center border-b border-border bg-surface/30">
                             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">Active Flags</span>
-                            <button onClick={() => setIsCreating(true)} className="p-1.5 hover:bg-accent hover:text-white rounded transition-all text-muted">
-                                <Plus size={14} />
-                            </button>
+                            <div className="flex items-center gap-1">
+                                <button 
+                                    onClick={handleRecalculateAll} 
+                                    disabled={isRecalculatingAll}
+                                    title="Recalculate all flags for this faction"
+                                    className="p-1.5 hover:bg-accent hover:text-white rounded transition-all text-muted disabled:opacity-50"
+                                >
+                                    <RefreshCw size={14} className={isRecalculatingAll ? 'animate-spin' : ''} />
+                                </button>
+                                <button onClick={() => setIsCreating(true)} className="p-1.5 hover:bg-accent hover:text-white rounded transition-all text-muted">
+                                    <Plus size={14} />
+                                </button>
+                            </div>
                         </div>
                         <div className="flex-1 overflow-y-auto p-2 space-y-1">
                             {isCreating && (
@@ -273,6 +322,15 @@ const FlagManagerModal: React.FC<FlagManagerModalProps> = ({ shortname, onClose 
                                             className="px-3 py-1.5 bg-surface hover:bg-bg border border-border text-[10px] font-black uppercase tracking-widest rounded-lg transition"
                                         >
                                             Add Rule
+                                        </button>
+                                        <button 
+                                            onClick={handleRecalculate}
+                                            disabled={isRecalculating}
+                                            title="Recalculate this flag across all roster rows"
+                                            className="px-3 py-1.5 bg-surface hover:bg-bg border border-border text-[10px] font-black uppercase tracking-widest rounded-lg transition disabled:opacity-50 flex items-center gap-2"
+                                        >
+                                            <RefreshCw size={12} className={isRecalculating ? 'animate-spin' : ''} />
+                                            {isRecalculating ? 'Recalculating...' : 'Recalculate'}
                                         </button>
                                         <button 
                                             onClick={handleSaveFlag}

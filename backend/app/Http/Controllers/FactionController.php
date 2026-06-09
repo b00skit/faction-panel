@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SyncRosterData;
 use App\Models\Faction;
 use App\Models\FactionRecordDatabase;
+use App\Models\FactionRecordEntry;
 use App\Models\FactionSnapshot;
 use App\Models\RosterContent;
 use App\Models\RosterDataset;
@@ -12,6 +14,7 @@ use App\Services\DynamicSectionService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 
 class FactionController extends Controller
@@ -108,15 +111,18 @@ class FactionController extends Controller
             })->afterResponse();
         }
 
-        $allPermissionsConfig = config('permissions.categories');
         $permissions = [];
-
-        foreach ($allPermissionsConfig as $category) {
-            foreach ($category['permissions'] as $key => $details) {
-                if (User::hasFactionPermission($user, $faction, $key)) {
-                    $permissions[] = $key;
+        if ($user) {
+            if ($user->is_superadmin || $faction->faction_leader === $user->id) {
+                foreach (config('permissions.categories', []) as $category) {
+                    $permissions = array_merge($permissions, array_keys($category['permissions']));
                 }
+                $permissions = array_unique($permissions);
+            } else {
+                $permissions = User::getFactionPermissions($user, $faction);
             }
+        } else {
+            $permissions = User::getFactionPermissions(null, $faction);
         }
 
         // Update activity if logged in
@@ -170,22 +176,24 @@ class FactionController extends Controller
             $faction->user_primary_role = $primaryRole ?? $highestRole;
         }
 
-        // Active Users Tracking (Online in last 60 seconds)
-        $onlineUsers = $faction->users()
-            ->where('last_roster_activity', '>=', now()->subSeconds(60))
-            ->with(['roles' => function ($query) use ($faction) {
-                $query->where('faction_id', $faction->id)->where('type', 'primary');
-            }])
-            ->get()
-            ->map(function ($u) {
-                return [
-                    'id' => $u->id,
-                    'username' => $u->username,
-                    'avatar_url' => $u->avatar_url,
-                    'current_roster_id' => $u->pivot->current_roster_id,
-                    'primary_role' => $u->roles->first(),
-                ];
-            });
+        // Active Users Tracking (Online in last 60 seconds) - Cached for 30s
+        $onlineUsers = Cache::remember("faction_{$faction->id}_online_users", 30, function () use ($faction) {
+            return $faction->users()
+                ->where('last_roster_activity', '>=', now()->subSeconds(60))
+                ->with(['roles' => function ($query) use ($faction) {
+                    $query->where('faction_id', $faction->id)->where('type', 'primary');
+                }])
+                ->get()
+                ->map(function ($u) {
+                    return [
+                        'id' => $u->id,
+                        'username' => $u->username,
+                        'avatar_url' => $u->avatar_url,
+                        'current_roster_id' => $u->pivot->current_roster_id,
+                        'primary_role' => $u->roles->first(),
+                    ];
+                });
+        });
 
         $sandboxRosters = collect();
         if ($hasSandboxPerm && $user) {
@@ -222,17 +230,134 @@ class FactionController extends Controller
         $datasets = $faction->rosterDatasets()
             ->with('options')
             ->get();
+        $datasetsById = $datasets->keyBy('id');
 
         // Include Flags
         $flags = $faction->rosterFlags()->get();
 
-        // Include Published Record Databases & Entries — all for resolution, filter for response later
+        $getLinkedDatabaseId = function ($col) use ($datasetsById) {
+            if (isset($col['linked_database_id']) && $col['linked_database_id']) {
+                return $col['linked_database_id'];
+            }
+            if (isset($col['dataset_id']) && $col['dataset_id']) {
+                $ds = $datasetsById->get($col['dataset_id']);
+                if ($ds && $ds->record_database_id) {
+                    return $ds->record_database_id;
+                }
+            }
+
+            return null;
+        };
+
+        // Include Published Record Databases — load structure and perms first, entries later selectively
         $allPublishedDatabases = $faction->recordDatabases()
             ->where('is_published', true)
-            ->with(['entries' => function ($query) {
-                $query->where('is_active', true);
-            }, 'databasePermissions'])
+            ->with(['databasePermissions'])
             ->get();
+
+        // Identify which databases need full entry loading
+        // 1. User has view_database permission
+        // 2. Database is used as a source for a dynamic section
+        // 3. User is an editor of a roster that links to this database
+        $fullLoadDbIds = [];
+        $dynamicDbIds = [];
+        $rosterEditorDbIds = [];
+
+        $isGlobalRecordMod = $user && (
+            $user->is_superadmin ||
+            $faction->faction_leader === $user->id ||
+            User::hasFactionPermission($user, $faction, 'global_faction_record_moderation')
+        );
+
+        foreach ($filteredRosters as $roster) {
+            $isEditor = User::hasRosterPermission($user, $roster, 'edit_defined_fields') ||
+                        User::hasRosterPermission($user, $roster, 'edit_predefined') ||
+                        User::hasRosterPermission($user, $roster, 'modify_roster');
+
+            foreach ($roster->rootSections as $section) {
+                $checkRosterRefs = function ($sec) use (&$checkRosterRefs, &$dynamicDbIds, &$rosterEditorDbIds, $isEditor, $getLinkedDatabaseId, $roster) {
+                    $config = $sec->section_options['dynamic_config'] ?? null;
+                    if ($sec->data_source === 'dynamic' && $config && ($config['source_type'] ?? null) === 'database' && isset($config['source_id'])) {
+                        $dynamicDbIds[] = $config['source_id'];
+                    }
+
+                    if ($isEditor) {
+                        $columns = $sec->use_roster_columns ? ($roster->columns ?? []) : ($sec->columns ?: ($roster->columns ?? []));
+                        foreach ($columns as $col) {
+                            $dbId = $getLinkedDatabaseId($col);
+                            if ($dbId) {
+                                $rosterEditorDbIds[] = $dbId;
+                            }
+                        }
+                    }
+
+                    if ($sec->children) {
+                        foreach ($sec->children as $child) {
+                            $checkRosterRefs($child);
+                        }
+                    }
+                };
+                $checkRosterRefs($section);
+            }
+        }
+        foreach ($sandboxRosters as $roster) {
+            foreach ($roster->rootSections as $section) {
+                $checkRosterRefs = function ($sec) use (&$checkRosterRefs, &$dynamicDbIds, &$rosterEditorDbIds, $getLinkedDatabaseId, $roster) {
+                    $config = $sec->section_options['dynamic_config'] ?? null;
+                    if ($sec->data_source === 'dynamic' && $config && ($config['source_type'] ?? null) === 'database' && isset($config['source_id'])) {
+                        $dynamicDbIds[] = $config['source_id'];
+                    }
+
+                    // Sandbox creators are always editors
+                    $columns = $sec->use_roster_columns ? ($roster->columns ?? []) : ($sec->columns ?: ($roster->columns ?? []));
+                    foreach ($columns as $col) {
+                        $dbId = $getLinkedDatabaseId($col);
+                        if ($dbId) {
+                            $rosterEditorDbIds[] = $dbId;
+                        }
+                    }
+
+                    if ($sec->children) {
+                        foreach ($sec->children as $child) {
+                            $checkRosterRefs($child);
+                        }
+                    }
+                };
+                $checkRosterRefs($section);
+            }
+        }
+        $dynamicDbIds = array_unique($dynamicDbIds);
+        $rosterEditorDbIds = array_unique($rosterEditorDbIds);
+
+        foreach ($allPublishedDatabases as $db) {
+            if ($isGlobalRecordMod ||
+                User::hasRecordPermission($user, $db, 'view_database') ||
+                in_array($db->id, $dynamicDbIds) ||
+                in_array($db->id, $rosterEditorDbIds)
+            ) {
+                $fullLoadDbIds[] = $db->id;
+            }
+        }
+
+        // Bulk load full entry sets for those that need it
+        if (! empty($fullLoadDbIds)) {
+            $fullEntries = FactionRecordEntry::whereIn('database_id', $fullLoadDbIds)
+                ->where('is_active', true)
+                ->get()
+                ->groupBy('database_id');
+
+            foreach ($allPublishedDatabases as $db) {
+                if (in_array($db->id, $fullLoadDbIds)) {
+                    $db->setRelation('entries', $fullEntries->get($db->id, collect()));
+                } else {
+                    $db->setRelation('entries', collect());
+                }
+            }
+        } else {
+            foreach ($allPublishedDatabases as $db) {
+                $db->setRelation('entries', collect());
+            }
+        }
 
         $publishedDatabases = $allPublishedDatabases->filter(fn ($db) => User::hasRecordPermission($user, $db, 'view_database'))->values();
 
@@ -251,32 +376,53 @@ class FactionController extends Controller
             $hiddenFieldsByDb[$db->id] = [];
         }
 
-        $datasetsById = $datasets->keyBy('id');
-
-        $getLinkedDatabaseId = function ($col) use ($datasetsById) {
-            if (isset($col['linked_database_id']) && $col['linked_database_id']) {
-                return $col['linked_database_id'];
-            }
-            if (isset($col['dataset_id']) && $col['dataset_id']) {
-                $ds = $datasetsById->get($col['dataset_id']);
-                if ($ds && $ds->record_database_id) {
-                    return $ds->record_database_id;
-                }
-            }
-
-            return null;
-        };
-
-        // Collect all target row IDs referenced in linked roster columns to resolve them in bulk
+        // Collect all target row IDs and database entry IDs referenced in linked columns to resolve them in bulk
         $linkRowIds = [];
-        $collectLinks = function ($section) use (&$collectLinks, &$linkRowIds) {
+        $referencedDbEntryIds = [];
+        $referencedDbEntryLabels = []; // db_id => [field_id => [labels]]
+        foreach ($allPublishedDatabases as $db) {
+            if (! in_array($db->id, $fullLoadDbIds)) {
+                $referencedDbEntryIds[$db->id] = [];
+                $referencedDbEntryLabels[$db->id] = [];
+            }
+        }
+
+        $collectRefs = function ($section, $roster) use (&$collectRefs, &$linkRowIds, &$referencedDbEntryIds, &$referencedDbEntryLabels, $getLinkedDatabaseId) {
+            $columns = $section->use_roster_columns ? ($roster->columns ?? []) : ($section->columns ?: ($roster->columns ?? []));
+
             if ($section->contents) {
                 foreach ($section->contents as $content) {
                     $data = $content->content;
                     if (is_array($data)) {
-                        foreach ($data as $colId => $val) {
+                        foreach ($columns as $col) {
+                            $colId = $col['id'] ?? null;
+                            if (! $colId) {
+                                continue;
+                            }
+                            $val = $data[$colId] ?? null;
+
+                            // Roster-to-Roster links
                             if (is_array($val) && isset($val['row_id']) && isset($val['col_id'])) {
                                 $linkRowIds[] = $val['row_id'];
+                            }
+
+                            // Database links
+                            $dbId = $getLinkedDatabaseId($col);
+                            if ($dbId && isset($referencedDbEntryIds[$dbId])) {
+                                if ($val && (is_numeric($val) && filter_var($val, FILTER_VALIDATE_INT) !== false)) {
+                                    $referencedDbEntryIds[$dbId][] = (string) $val;
+                                } elseif ($val && is_string($val) && ! str_starts_with($val, 'temp_')) {
+                                    $fieldId = $col['database_field_id'] ?? null;
+                                    if ($fieldId) {
+                                        if ($fieldId === 'id') {
+                                            if (filter_var($val, FILTER_VALIDATE_INT) !== false) {
+                                                $referencedDbEntryLabels[$dbId][$fieldId][] = $val;
+                                            }
+                                        } else {
+                                            $referencedDbEntryLabels[$dbId][$fieldId][] = $val;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -284,17 +430,73 @@ class FactionController extends Controller
             }
             if ($section->children) {
                 foreach ($section->children as $child) {
-                    $collectLinks($child);
+                    $collectRefs($child, $roster);
                 }
             }
         };
 
         foreach ($filteredRosters as $roster) {
             foreach ($roster->rootSections as $section) {
-                $collectLinks($section);
+                $collectRefs($section, $roster);
             }
         }
         $linkRowIds = array_unique($linkRowIds);
+
+        // Bulk load referenced entries for databases that weren't fully loaded
+        $anyRefs = false;
+        foreach ($referencedDbEntryIds as $ids) {
+            if (! empty($ids)) {
+                $anyRefs = true;
+                break;
+            }
+        }
+        if (! $anyRefs) {
+            foreach ($referencedDbEntryLabels as $fields) {
+                if (! empty($fields)) {
+                    $anyRefs = true;
+                    break;
+                }
+            }
+        }
+
+        if ($anyRefs) {
+            $referencedEntries = FactionRecordEntry::where(function ($query) use ($referencedDbEntryIds, $referencedDbEntryLabels) {
+                foreach ($referencedDbEntryIds as $dbId => $ids) {
+                    if (! empty($ids)) {
+                        $query->orWhere(function ($q) use ($dbId, $ids) {
+                            $q->where('database_id', $dbId)->whereIn('entry_id', array_unique($ids));
+                        });
+                    }
+                }
+                foreach ($referencedDbEntryLabels as $dbId => $fields) {
+                    foreach ($fields as $fieldId => $labels) {
+                        if (! empty($labels)) {
+                            $query->orWhere(function ($q) use ($dbId, $fieldId, $labels) {
+                                $q->where('database_id', $dbId);
+                                if ($fieldId === 'id') {
+                                    $q->whereIn('entry_id', array_unique($labels));
+                                } else {
+                                    $q->where(function ($q2) use ($fieldId, $labels) {
+                                        foreach (array_unique($labels) as $label) {
+                                            $q2->orWhere('data->'.$fieldId, $label);
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    }
+                }
+            })
+                ->where('is_active', true)
+                ->get()
+                ->groupBy('database_id');
+
+            foreach ($allPublishedDatabases as $db) {
+                if (! in_array($db->id, $fullLoadDbIds)) {
+                    $db->setRelation('entries', $referencedEntries->get($db->id, collect()));
+                }
+            }
+        }
 
         $resolvedLinksMap = [];
         if (! empty($linkRowIds)) {
@@ -357,7 +559,7 @@ class FactionController extends Controller
                                 }
                                 $db = $dbCache[$dbId];
 
-                                if ($db && is_numeric($value)) {
+                                if ($db && is_numeric($value) && filter_var($value, FILTER_VALIDATE_INT) !== false) {
                                     $entry = $db->entries->firstWhere('entry_id', $value);
                                     if ($entry) {
                                         $fieldId = $col['database_field_id'] ?? $db->database_structure[0]['id'] ?? 'id';
@@ -369,7 +571,7 @@ class FactionController extends Controller
                                     }
                                 }
                             } else {
-                                if (is_numeric($value)) {
+                                if (is_numeric($value) && filter_var($value, FILTER_VALIDATE_INT) !== false) {
                                     $option = $dataset->options->firstWhere('id', $value);
                                     if ($option) {
                                         $value = $option->value;
@@ -398,6 +600,13 @@ class FactionController extends Controller
                         User::hasRosterPermission($user, $roster, 'edit_predefined') ||
                         User::hasRosterPermission($user, $roster, 'modify_roster');
 
+            $hiddenColIds = [];
+            foreach ($columns as $col) {
+                if (str_contains($col['type'] ?? '', 'hidden')) {
+                    $hiddenColIds[] = $col['id'];
+                }
+            }
+
             // Map column IDs to their linked database IDs and fields
             $colDbIds = [];
             foreach ($columns as $col) {
@@ -418,7 +627,7 @@ class FactionController extends Controller
                             $referencedEntriesByDb[$dbId]['fields'][] = $fieldId;
 
                             // If this column type is hidden and user lacks view_hidden_data, mark the field as hidden
-                            if (! $canViewHidden && str_contains($col['type'] ?? '', 'hidden')) {
+                            if (! $canViewHidden && in_array($col['id'], $hiddenColIds)) {
                                 $hiddenFieldsByDb[$dbId][] = $fieldId;
                             }
                         }
@@ -434,7 +643,7 @@ class FactionController extends Controller
                         $sourceKey = $mappings[$col['id']];
                         $referencedEntriesByDb[$dynamicDbId]['fields'][] = $sourceKey;
 
-                        if (! $canViewHidden && str_contains($col['type'] ?? '', 'hidden')) {
+                        if (! $canViewHidden && in_array($col['id'], $hiddenColIds)) {
                             $hiddenFieldsByDb[$dynamicDbId][] = $sourceKey;
                         }
                     }
@@ -450,11 +659,29 @@ class FactionController extends Controller
                     $data = $content->content;
                     if (is_array($data)) {
                         $changed = false;
-                        // Resolve database_data and linked_roster_data into the content object
+                        // Resolve database IDs, database_data and linked_roster_data into the content object for non-editors
                         foreach ($columns as $col) {
                             $colId = $col['id'] ?? null;
                             if (! $colId) {
                                 continue;
+                            }
+
+                            if (! $isEditor) {
+                                $dbId = $getLinkedDatabaseId($col);
+                                if ($dbId) {
+                                    $val = $data[$colId] ?? null;
+                                    if ($val && (is_numeric($val) || (is_string($val) && str_starts_with($val, 'temp_')))) {
+                                        $db = $resolutionDbsById->get($dbId);
+                                        if ($db && $db->relationLoaded('entries')) {
+                                            $entry = $db->entries->firstWhere('entry_id', $val);
+                                            if ($entry) {
+                                                $fieldId = $col['database_field_id'] ?? $db->database_structure[0]['id'] ?? 'id';
+                                                $data[$colId] = ($fieldId === 'id') ? $entry->entry_id : ($entry->data[$fieldId] ?? $val);
+                                                $changed = true;
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
                             if (($col['type'] ?? '') === 'linked_roster_data') {
@@ -494,6 +721,14 @@ class FactionController extends Controller
                                             $changed = true;
                                         }
                                     }
+                                }
+                            }
+
+                            // Apply Masking
+                            if (! $canViewHidden && in_array($colId, $hiddenColIds)) {
+                                if (isset($data[$colId]) && $data[$colId] !== '') {
+                                    unset($data[$colId]);
+                                    $changed = true;
                                 }
                             }
                         }
@@ -655,18 +890,6 @@ class FactionController extends Controller
                 'view_hidden_data' => $canViewHidden,
             ];
             $roster->user_roster_permissions = $perms;
-
-            // Apply data masking if user cannot view hidden data
-            if (! $canViewHidden) {
-                $hiddenColIds = collect($roster->columns ?? [])
-                    ->filter(fn ($col) => str_contains($col['type'] ?? '', 'hidden'))
-                    ->pluck('id')
-                    ->toArray();
-
-                foreach ($roster->rootSections as $section) {
-                    $this->maskSection($section, $hiddenColIds, $roster, true);
-                }
-            }
         });
 
         $sandboxRosters->each(function ($roster) {
@@ -883,8 +1106,9 @@ class FactionController extends Controller
 
         if ($search) {
             $query->where(function ($q) use ($search) {
-                $q->where('username', 'like', "%{$search}%")
-                    ->orWhere('gtaw_username', 'like', "%{$search}%");
+                $searchTerm = '%'.strtolower($search).'%';
+                $q->whereRaw('LOWER(users.username) LIKE ?', [$searchTerm])
+                    ->orWhereRaw('LOWER(users.gtaw_username) LIKE ?', [$searchTerm]);
             });
         }
 
@@ -1003,40 +1227,20 @@ class FactionController extends Controller
         return response()->json(['message' => 'User roles updated.']);
     }
 
-    private function maskSection($section, array $rosterHiddenColIds, $roster = null, $omit = false)
+    public function syncRosterData(string $shortname)
     {
-        $hiddenColIds = $rosterHiddenColIds;
-        if ($section->columns && ! $section->use_roster_columns) {
-            $hiddenColIds = collect($section->columns)
-                ->filter(fn ($col) => str_contains($col['type'] ?? '', 'hidden'))
-                ->pluck('id')
-                ->toArray();
+        $faction = Faction::where('shortname', $shortname)->firstOrFail();
+
+        if (! User::hasFactionPermission(Auth::user(), $faction, 'global_roster_moderation')) {
+            return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        // Mask contents of this section
-        if ($section->contents) {
-            foreach ($section->contents as $content) {
-                $data = $content->content;
-                if (is_array($data)) {
-                    foreach ($hiddenColIds as $colId) {
-                        if (isset($data[$colId]) && $data[$colId] !== '') {
-                            if ($omit) {
-                                unset($data[$colId]);
-                            } else {
-                                $data[$colId] = '????';
-                            }
-                        }
-                    }
-                    $content->content = $data;
-                }
-            }
-        }
+        SyncRosterData::dispatch($faction, Auth::user());
 
-        // Recursively mask children
-        if ($section->children) {
-            foreach ($section->children as $child) {
-                $this->maskSection($child, $rosterHiddenColIds, $roster, $omit);
-            }
-        }
+        $this->audit('faction.sync_roster_data_queued', "Queued manual synchronization of roster data for faction '{$faction->name}'", $faction->id);
+
+        return response()->json([
+            'message' => 'Roster data synchronization queued',
+        ]);
     }
 }

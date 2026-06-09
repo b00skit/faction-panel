@@ -162,12 +162,7 @@ class StatisticsController extends Controller
 
         $widgets = $model->widgets;
         foreach ($widgets as $widget) {
-            $result = $this->statisticsService->calculate($widget);
-            $widget->update([
-                'cache_result' => $result['data'],
-                'is_intensive' => $result['is_intensive'],
-                'last_calculated_at' => now(),
-            ]);
+            $this->statisticsService->calculate($widget, true);
         }
 
         $this->appendPermissions($model, $user, $isGlobalMod);

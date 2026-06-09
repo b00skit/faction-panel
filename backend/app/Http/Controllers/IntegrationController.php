@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Faction;
 use App\Models\FactionRecordDatabase;
+use App\Models\FactionRecordEntry;
 use App\Models\RosterContent;
 use App\Models\RosterSection;
 use App\Models\User;
 use App\Services\GtawService;
+use App\Services\RosterFlagService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -345,6 +347,16 @@ class IntegrationController extends Controller
             $this->updateLinkedRosterColumns($faction, $charDb);
         });
 
+        // After the transaction: recalculate all flags for this faction
+        $flagService = app(RosterFlagService::class);
+        foreach ($faction->rosterFlags()->get() as $flag) {
+            try {
+                $flagService->recalculate($flag);
+            } catch (\Throwable $e) {
+                \Log::warning("Flag recalculate failed for flag {$flag->id} ({$flag->name}): ".$e->getMessage());
+            }
+        }
+
         $this->audit('integration.gtaw.sync', "Synchronized GTA:W members for faction '{$faction->name}'", null, $faction, null, $syncResults);
 
         return response()->json([
@@ -416,16 +428,23 @@ class IntegrationController extends Controller
             ],
         ];
 
+        $apiTypeMap = [
+            'CHARS' => 'gtaw_characters',
+            'ACTIVITY' => 'gtaw_activity',
+            'CHIST' => 'gtaw_history',
+            'CNAME' => 'gtaw_name_changes',
+        ];
+
         $result = [];
 
         foreach ($databases as $shortcode => $config) {
-            $db = $faction->recordDatabases()->where('record_shortcode', $shortcode)->first();
+            $db = $this->findGtawDatabase($faction, $shortcode);
             if (! $db) {
                 $db = $faction->recordDatabases()->create([
                     'name' => $config['name'],
                     'description' => $config['description'],
                     'record_shortcode' => $shortcode,
-                    'is_api_database' => true,
+                    'is_api_database' => $apiTypeMap[$shortcode],
                     'is_published' => $config['is_published'] ?? false,
                     'created_by' => null,
                     'database_structure' => $config['structure'],
@@ -482,7 +501,7 @@ class IntegrationController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $charDb = $faction->recordDatabases()->where('record_shortcode', 'CHARS')->first();
+        $charDb = $this->findGtawDatabase($faction, 'CHARS');
         if ($charDb) {
             $charDb->entries()->delete();
         }
@@ -506,6 +525,7 @@ class IntegrationController extends Controller
 
         // 3. Load all roster contents for these sections
         $contents = RosterContent::whereIn('section_id', $sections->pluck('id'))->get();
+        $contentsById = $contents->keyBy('id');
 
         $sectionsById = $sections->keyBy('id');
         $rostersById = $rosters->keyBy('id');
@@ -560,10 +580,20 @@ class IntegrationController extends Controller
                     continue;
                 }
 
+                // If it is a linked roster data link, resolve it to its actual value
+                if (is_array($val) && isset($val['row_id']) && isset($val['col_id'])) {
+                    $linkedContent = $contentsById->get($val['row_id']);
+                    $val = ($linkedContent && is_array($linkedContent->content)) ? ($linkedContent->content[$val['col_id']] ?? null) : null;
+                }
+
+                if ($val === null || $val === '' || is_array($val)) {
+                    continue;
+                }
+
                 // 4. Find matching entry in CHARS database
                 $matchingEntry = null;
 
-                if (is_numeric($val)) {
+                if (is_numeric($val) && filter_var($val, FILTER_VALIDATE_INT) !== false) {
                     // Try to find the active entry by entry_id
                     $matchingEntry = $activeEntries->firstWhere('entry_id', $val);
 
@@ -583,7 +613,7 @@ class IntegrationController extends Controller
                             }
                             if (! $matchingEntry && $charName) {
                                 $matchingEntry = $activeEntries->first(function ($e) use ($charName) {
-                                    return strcasecmp($e->data['name'] ?? '', $charName) === 0;
+                                    return strcasecmp(trim($e->data['name'] ?? ''), trim($charName)) === 0;
                                 });
                             }
 
@@ -594,10 +624,33 @@ class IntegrationController extends Controller
                             }
                         }
                     }
+
+                    // If still not found, search all databases of this faction for this entry_id
+                    // (e.g. if it was linked to the old database before it got split/recreated)
+                    if (! $matchingEntry) {
+                        $anyEntry = FactionRecordEntry::whereIn('database_id', $faction->recordDatabases()->pluck('id'))
+                            ->where('entry_id', $val)
+                            ->first();
+                        if ($anyEntry) {
+                            $charName = $anyEntry->data['name'] ?? $anyEntry->data['Character Name'] ?? null;
+                            if ($charName) {
+                                // Try to find matching active entry in the current characters database by name
+                                $matchingEntry = $activeEntries->first(function ($e) use ($charName) {
+                                    return strcasecmp(trim($e->data['name'] ?? ''), trim($charName)) === 0;
+                                });
+
+                                if ($matchingEntry) {
+                                    $data[$colId] = $matchingEntry->entry_id;
+                                    $changed = true;
+                                    \Log::info("GTA:W Sync auto-healed roster entry ID {$val} to active entry ID {$matchingEntry->entry_id} via character name '{$charName}'");
+                                }
+                            }
+                        }
+                    }
                 } else {
                     // It is a string (e.g. "John Doe"). Try to find an active entry with matching name
                     $matchingEntry = $activeEntries->first(function ($e) use ($val) {
-                        return strcasecmp($e->data['name'] ?? '', $val) === 0;
+                        return strcasecmp(trim($e->data['name'] ?? ''), trim($val)) === 0;
                     });
 
                     if ($matchingEntry) {
@@ -727,5 +780,70 @@ class IntegrationController extends Controller
                 $content->update(['content' => $data]);
             }
         }
+    }
+
+    private function findGtawDatabase(Faction $faction, string $shortcode)
+    {
+        $apiTypeMap = [
+            'CHARS' => 'gtaw_characters',
+            'ACTIVITY' => 'gtaw_activity',
+            'CHIST' => 'gtaw_history',
+            'CNAME' => 'gtaw_name_changes',
+        ];
+        $targetType = $apiTypeMap[$shortcode] ?? null;
+
+        // 1. Try to find by unique api type string in is_api_database
+        if ($targetType) {
+            $db = $faction->recordDatabases()
+                ->where('is_api_database', $targetType)
+                ->first();
+            if ($db) {
+                return $db;
+            }
+        }
+
+        // 2. Try to find by shortcode (backward compatibility / legacy)
+        $db = $faction->recordDatabases()->where('record_shortcode', $shortcode)->first();
+        if ($db) {
+            // Future proof it: update its is_api_database to the unique string!
+            if ($targetType && $db->getRawOriginal('is_api_database') !== $targetType) {
+                $db->update(['is_api_database' => $targetType]);
+            }
+
+            return $db;
+        }
+
+        // 3. Fallback: Find by structure heuristics (for when user renamed the prefix first time)
+        $apiDatabases = $faction->recordDatabases()->where('is_api_database', '!=', '0')->get();
+
+        foreach ($apiDatabases as $d) {
+            $struct = $d->database_structure;
+            if (! is_array($struct)) {
+                $struct = json_decode($d->getRawOriginal('database_structure'), true) ?: [];
+            }
+            $fieldIds = collect($struct)->pluck('id')->toArray();
+
+            $matched = false;
+            if ($shortcode === 'CHARS' && in_array('is_alt', $fieldIds)) {
+                $matched = true;
+            } elseif ($shortcode === 'ACTIVITY' && in_array('abas', $fieldIds) && ! in_array('is_alt', $fieldIds)) {
+                $matched = true;
+            } elseif ($shortcode === 'CHIST' && in_array('action', $fieldIds)) {
+                $matched = true;
+            } elseif ($shortcode === 'CNAME' && (in_array('old_name', $fieldIds) || in_array('new_name', $fieldIds))) {
+                $matched = true;
+            }
+
+            if ($matched) {
+                // Future proof it: update its is_api_database to the unique string!
+                if ($targetType && $d->getRawOriginal('is_api_database') !== $targetType) {
+                    $d->update(['is_api_database' => $targetType]);
+                }
+
+                return $d;
+            }
+        }
+
+        return null;
     }
 }

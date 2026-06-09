@@ -12,6 +12,7 @@ use App\Models\RosterSection;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class RosterController extends Controller
 {
@@ -158,374 +159,404 @@ class RosterController extends Controller
         $faction = Faction::where('shortname', $shortname)->firstOrFail();
         $user = Auth::guard('sanctum')->user();
 
-        $isGlobalViewer = User::hasFactionPermission($user, $faction, 'view_faction_roster');
-        $hasSandboxPerm = User::hasFactionPermission($user, $faction, 'utilize_sandbox_rosters');
+        $userId = $user ? $user->id : 'guest';
+        $version = Cache::get("roster_version_{$faction->id}", 0);
+        $cacheKey = "roster_index_{$faction->id}_{$userId}_v{$version}";
 
-        $rosters = $faction->rosters()
-            ->where('is_sandbox', false)
-            ->with(['rootSections.children', 'rootSections.contents.editor', 'rosterPermissions'])
-            ->orderBy('order')
-            ->orderBy('id')
-            ->get();
+        $data = Cache::remember($cacheKey, 3600, function () use ($faction, $user) {
+            $isGlobalViewer = User::hasFactionPermission($user, $faction, 'view_faction_roster');
+            $hasSandboxPerm = User::hasFactionPermission($user, $faction, 'utilize_sandbox_rosters');
 
-        $filteredRosters = $rosters->filter(function ($roster) use ($user, $isGlobalViewer) {
-            $hasExplicitPerms = $roster->rosterPermissions->isNotEmpty();
-            if ($hasExplicitPerms) {
-                return User::hasRosterPermission($user, $roster, 'view_roster');
-            }
-
-            return $isGlobalViewer || User::hasRosterPermission($user, $roster, 'view_roster');
-        });
-
-        $sandboxRosters = collect();
-        if ($hasSandboxPerm && $user) {
-            $sandboxRosters = $faction->rosters()
-                ->where('is_sandbox', true)
-                ->where('created_by', $user->id)
+            $rosters = $faction->rosters()
+                ->where('is_sandbox', false)
                 ->with(['rootSections.children', 'rootSections.contents.editor', 'rosterPermissions'])
                 ->orderBy('order')
                 ->orderBy('id')
                 ->get();
-        }
 
-        if ($filteredRosters->isEmpty() && ! $isGlobalViewer && ! $hasSandboxPerm) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        $allRosters = $filteredRosters->concat($sandboxRosters);
-
-        // Include Published Record Databases & Entries — all for resolution, filter for response later
-        $allPublishedDatabases = $faction->recordDatabases()
-            ->where('is_published', true)
-            ->with(['entries' => function ($query) {
-                $query->where('is_active', true);
-            }, 'databasePermissions'])
-            ->get();
-
-        $publishedDatabases = $allPublishedDatabases->filter(fn ($db) => User::hasRecordPermission($user, $db, 'view_database'))->values();
-
-        // Include Datasets for resolution
-        $datasets = $faction->rosterDatasets()->with('options')->get();
-        $datasetsById = $datasets->keyBy('id');
-
-        // Filter and mask record database entries for view-only users
-        $resolutionDbsById = $allPublishedDatabases->keyBy('id');
-        $publishedDbsById = $publishedDatabases->keyBy('id');
-        $referencedEntriesByDb = [];
-        $hiddenFieldsByDb = [];
-
-        foreach ($allPublishedDatabases as $db) {
-            $referencedEntriesByDb[$db->id] = [
-                'ids' => [],
-                'values' => [],
-                'fields' => [],
-            ];
-            $hiddenFieldsByDb[$db->id] = [];
-        }
-
-        $getLinkedDatabaseId = function ($col) use ($datasetsById) {
-            if (isset($col['linked_database_id']) && $col['linked_database_id']) {
-                return $col['linked_database_id'];
-            }
-            if (isset($col['dataset_id']) && $col['dataset_id']) {
-                $ds = $datasetsById->get($col['dataset_id']);
-                if ($ds && $ds->record_database_id) {
-                    return $ds->record_database_id;
+            $filteredRosters = $rosters->filter(function ($roster) use ($user, $isGlobalViewer) {
+                $hasExplicitPerms = $roster->rosterPermissions->isNotEmpty();
+                if ($hasExplicitPerms) {
+                    return User::hasRosterPermission($user, $roster, 'view_roster');
                 }
+
+                return $isGlobalViewer || User::hasRosterPermission($user, $roster, 'view_roster');
+            });
+
+            $sandboxRosters = collect();
+            if ($hasSandboxPerm && $user) {
+                $sandboxRosters = $faction->rosters()
+                    ->where('is_sandbox', true)
+                    ->where('created_by', $user->id)
+                    ->with(['rootSections.children', 'rootSections.contents.editor', 'rosterPermissions'])
+                    ->orderBy('order')
+                    ->orderBy('id')
+                    ->get();
             }
 
-            return null;
-        };
+            if ($filteredRosters->isEmpty() && ! $isGlobalViewer && ! $hasSandboxPerm) {
+                return null;
+            }
 
-        // Collect all target row IDs referenced in linked roster columns to resolve them in bulk
-        $linkRowIds = [];
-        $collectLinks = function ($section) use (&$collectLinks, &$linkRowIds) {
-            if ($section->contents) {
-                foreach ($section->contents as $content) {
-                    $data = $content->content;
-                    if (is_array($data)) {
-                        foreach ($data as $colId => $val) {
-                            if (is_array($val) && isset($val['row_id']) && isset($val['col_id'])) {
-                                $linkRowIds[] = $val['row_id'];
+            $allRosters = $filteredRosters->concat($sandboxRosters);
+
+            // Include Published Record Databases & Entries — all for resolution, filter for response later
+            $allPublishedDatabases = $faction->recordDatabases()
+                ->where('is_published', true)
+                ->with(['entries' => function ($query) {
+                    $query->where('is_active', true);
+                }, 'databasePermissions'])
+                ->get();
+
+            $publishedDatabases = $allPublishedDatabases->filter(fn ($db) => User::hasRecordPermission($user, $db, 'view_database'))->values();
+
+            // Include Datasets for resolution
+            $datasets = $faction->rosterDatasets()->with('options')->get();
+            $datasetsById = $datasets->keyBy('id');
+
+            // Filter and mask record database entries for view-only users
+            $resolutionDbsById = $allPublishedDatabases->keyBy('id');
+            $publishedDbsById = $publishedDatabases->keyBy('id');
+            $referencedEntriesByDb = [];
+            $hiddenFieldsByDb = [];
+
+            foreach ($allPublishedDatabases as $db) {
+                $referencedEntriesByDb[$db->id] = [
+                    'ids' => [],
+                    'values' => [],
+                    'fields' => [],
+                ];
+                $hiddenFieldsByDb[$db->id] = [];
+            }
+
+            $getLinkedDatabaseId = function ($col) use ($datasetsById) {
+                if (isset($col['linked_database_id']) && $col['linked_database_id']) {
+                    return $col['linked_database_id'];
+                }
+                if (isset($col['dataset_id']) && $col['dataset_id']) {
+                    $ds = $datasetsById->get($col['dataset_id']);
+                    if ($ds && $ds->record_database_id) {
+                        return $ds->record_database_id;
+                    }
+                }
+
+                return null;
+            };
+
+            // Collect all target row IDs referenced in linked roster columns to resolve them in bulk
+            $linkRowIds = [];
+            $collectLinks = function ($section) use (&$collectLinks, &$linkRowIds) {
+                if ($section->contents) {
+                    foreach ($section->contents as $content) {
+                        $data = $content->content;
+                        if (is_array($data)) {
+                            foreach ($data as $colId => $val) {
+                                if (is_array($val) && isset($val['row_id']) && isset($val['col_id'])) {
+                                    $linkRowIds[] = $val['row_id'];
+                                }
                             }
                         }
                     }
                 }
-            }
-            if ($section->children) {
-                foreach ($section->children as $child) {
-                    $collectLinks($child);
-                }
-            }
-        };
-
-        foreach ($filteredRosters as $roster) {
-            foreach ($roster->rootSections as $section) {
-                $collectLinks($section);
-            }
-        }
-        $linkRowIds = array_unique($linkRowIds);
-
-        $resolvedLinksMap = [];
-        if (! empty($linkRowIds)) {
-            $contents = RosterContent::whereIn('id', $linkRowIds)
-                ->with(['section.roster.faction', 'section.roster.rosterPermissions'])
-                ->get()
-                ->keyBy('id');
-
-            $datasetCache = [];
-            $rosterColsCache = [];
-
-            foreach ($linkRowIds as $rowId) {
-                $content = $contents->get($rowId);
-                if (! $content) {
-                    continue;
-                }
-
-                $roster = $content->section->roster;
-                if (! User::canViewRoster($user, $roster)) {
-                    continue;
-                }
-
-                $rosterId = $roster->id;
-                if (! isset($rosterColsCache[$rosterId])) {
-                    $rosterColsCache[$rosterId] = collect($roster->columns ?? []);
-                }
-
-                foreach ($content->content as $colId => $value) {
-                    $col = null;
-                    if (! ($content->section->use_roster_columns ?? true)) {
-                        $col = collect($content->section->columns ?? [])->firstWhere('id', $colId);
+                if ($section->children) {
+                    foreach ($section->children as $child) {
+                        $collectLinks($child);
                     }
-                    if (! $col) {
-                        $col = $rosterColsCache[$rosterId]->firstWhere('id', $colId);
+                }
+            };
+
+            foreach ($filteredRosters as $roster) {
+                foreach ($roster->rootSections as $section) {
+                    $collectLinks($section);
+                }
+            }
+            $linkRowIds = array_unique($linkRowIds);
+
+            $resolvedLinksMap = [];
+            if (! empty($linkRowIds)) {
+                $contents = RosterContent::whereIn('id', $linkRowIds)
+                    ->with(['section.roster.faction', 'section.roster.rosterPermissions'])
+                    ->get()
+                    ->keyBy('id');
+
+                $datasetCache = [];
+                $rosterColsCache = [];
+
+                foreach ($linkRowIds as $rowId) {
+                    $content = $contents->get($rowId);
+                    if (! $content) {
+                        continue;
                     }
 
-                    if ($col && str_contains($col['type'] ?? '', 'hidden')) {
-                        if (! User::hasRosterPermission($user, $roster, 'view_hidden_data')) {
-                            $resolvedLinksMap["{$rowId}_{$colId}"] = '????';
+                    $roster = $content->section->roster;
+                    if (! User::canViewRoster($user, $roster)) {
+                        continue;
+                    }
 
-                            continue;
+                    $rosterId = $roster->id;
+                    if (! isset($rosterColsCache[$rosterId])) {
+                        $rosterColsCache[$rosterId] = collect($roster->columns ?? []);
+                    }
+
+                    foreach ($content->content as $colId => $value) {
+                        $col = null;
+                        if (! ($content->section->use_roster_columns ?? true)) {
+                            $col = collect($content->section->columns ?? [])->firstWhere('id', $colId);
                         }
-                    }
-
-                    if ($col && isset($col['dataset_id'])) {
-                        $datasetId = $col['dataset_id'];
-                        if (! isset($datasetCache[$datasetId])) {
-                            $datasetCache[$datasetId] = RosterDataset::find($datasetId);
+                        if (! $col) {
+                            $col = $rosterColsCache[$rosterId]->firstWhere('id', $colId);
                         }
-                        $dataset = $datasetCache[$datasetId];
 
-                        if ($dataset) {
-                            if ($dataset->record_database_id) {
-                                $db = FactionRecordDatabase::find($dataset->record_database_id);
-                                if ($db && is_numeric($value)) {
-                                    $entry = $db->entries()->where('entry_id', $value)->first();
-                                    if ($entry) {
-                                        $fieldId = $col['database_field_id'] ?? $db->database_structure[0]['id'] ?? 'id';
-                                        if ($fieldId === 'id') {
-                                            $value = $entry->entry_id;
-                                        } else {
-                                            $value = $entry->data[$fieldId] ?? $value;
+                        if ($col && str_contains($col['type'] ?? '', 'hidden')) {
+                            if (! User::hasRosterPermission($user, $roster, 'view_hidden_data')) {
+                                $resolvedLinksMap["{$rowId}_{$colId}"] = '????';
+
+                                continue;
+                            }
+                        }
+
+                        if ($col && isset($col['dataset_id'])) {
+                            $datasetId = $col['dataset_id'];
+                            if (! isset($datasetCache[$datasetId])) {
+                                $datasetCache[$datasetId] = RosterDataset::find($datasetId);
+                            }
+                            $dataset = $datasetCache[$datasetId];
+
+                            if ($dataset) {
+                                if ($dataset->record_database_id) {
+                                    $db = FactionRecordDatabase::find($dataset->record_database_id);
+                                    if ($db && is_numeric($value) && filter_var($value, FILTER_VALIDATE_INT) !== false) {
+                                        $entry = $db->entries()->where('entry_id', $value)->first();
+                                        if ($entry) {
+                                            $fieldId = $col['database_field_id'] ?? $db->database_structure[0]['id'] ?? 'id';
+                                            if ($fieldId === 'id') {
+                                                $value = $entry->entry_id;
+                                            } else {
+                                                $value = $entry->data[$fieldId] ?? $value;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    if (is_numeric($value) && filter_var($value, FILTER_VALIDATE_INT) !== false) {
+                                        $option = $dataset->options()->where('id', $value)->first();
+                                        if ($option) {
+                                            $value = $option->value;
                                         }
                                     }
                                 }
-                            } else {
-                                if (is_numeric($value)) {
-                                    $option = $dataset->options()->where('id', $value)->first();
-                                    if ($option) {
-                                        $value = $option->value;
-                                    }
+                            }
+                        }
+
+                        $resolvedLinksMap["{$rowId}_{$colId}"] = (is_array($value) || is_object($value)) ? '-' : (string) $value;
+                    }
+                }
+            }
+
+            $scanSection = function ($section, $roster) use (&$scanSection, &$referencedEntriesByDb, &$hiddenFieldsByDb, $getLinkedDatabaseId, $publishedDbsById, $user, $resolvedLinksMap, $resolutionDbsById) {
+                $config = $section->section_options['dynamic_config'] ?? null;
+                $isDynamicDb = ($section->data_source === 'dynamic') &&
+                    $config &&
+                    (($config['source_type'] ?? null) === 'database') &&
+                    isset($config['source_id']);
+                $dynamicDbId = $isDynamicDb ? $config['source_id'] : null;
+
+                $columns = $section->use_roster_columns ? ($roster->columns ?? []) : ($section->columns ?: ($roster->columns ?? []));
+                $canViewHidden = User::hasRosterPermission($user, $roster, 'view_hidden_data');
+                $isEditor = User::hasRosterPermission($user, $roster, 'edit_defined_fields') ||
+                            User::hasRosterPermission($user, $roster, 'edit_predefined') ||
+                            User::hasRosterPermission($user, $roster, 'modify_roster');
+
+                // Map column IDs to their linked database IDs and fields
+                $colDbIds = [];
+                foreach ($columns as $col) {
+                    if (isset($col['id'])) {
+                        $dbId = $getLinkedDatabaseId($col);
+                        if ($dbId && isset($referencedEntriesByDb[$dbId])) {
+                            $colDbIds[$col['id']] = [
+                                'db_id' => $dbId,
+                                'col' => $col,
+                            ];
+
+                            $db = $publishedDbsById->get($dbId);
+                            $fieldId = $col['database_field_id'] ?? $db->database_structure[0]['id'] ?? null;
+                            if ($fieldId) {
+                                $referencedEntriesByDb[$dbId]['fields'][] = $fieldId;
+
+                                // If this column type is hidden and user lacks view_hidden_data, mark the field as hidden
+                                if (! $canViewHidden && str_contains($col['type'] ?? '', 'hidden')) {
+                                    $hiddenFieldsByDb[$dbId][] = $fieldId;
                                 }
                             }
                         }
                     }
-
-                    $resolvedLinksMap["{$rowId}_{$colId}"] = (is_array($value) || is_object($value)) ? '-' : (string) $value;
                 }
-            }
-        }
 
-        $scanSection = function ($section, $roster) use (&$scanSection, &$referencedEntriesByDb, &$hiddenFieldsByDb, $getLinkedDatabaseId, $publishedDbsById, $user, $resolvedLinksMap, $resolutionDbsById) {
-            $config = $section->section_options['dynamic_config'] ?? null;
-            $isDynamicDb = ($section->data_source === 'dynamic') &&
-                $config &&
-                (($config['source_type'] ?? null) === 'database') &&
-                isset($config['source_id']);
-            $dynamicDbId = $isDynamicDb ? $config['source_id'] : null;
-
-            $columns = $section->use_roster_columns ? ($roster->columns ?? []) : ($section->columns ?: ($roster->columns ?? []));
-            $canViewHidden = User::hasRosterPermission($user, $roster, 'view_hidden_data');
-            $isEditor = User::hasRosterPermission($user, $roster, 'edit_defined_fields') ||
-                        User::hasRosterPermission($user, $roster, 'edit_predefined') ||
-                        User::hasRosterPermission($user, $roster, 'modify_roster');
-
-            // Map column IDs to their linked database IDs and fields
-            $colDbIds = [];
-            foreach ($columns as $col) {
-                if (isset($col['id'])) {
-                    $dbId = $getLinkedDatabaseId($col);
-                    if ($dbId && isset($referencedEntriesByDb[$dbId])) {
-                        $colDbIds[$col['id']] = [
-                            'db_id' => $dbId,
-                            'col' => $col,
-                        ];
-
-                        $db = $publishedDbsById->get($dbId);
-                        $fieldId = $col['database_field_id'] ?? $db->database_structure[0]['id'] ?? null;
-                        if ($fieldId) {
-                            $referencedEntriesByDb[$dbId]['fields'][] = $fieldId;
-
-                            // If this column type is hidden and user lacks view_hidden_data, mark the field as hidden
-                            if (! $canViewHidden && str_contains($col['type'] ?? '', 'hidden')) {
-                                $hiddenFieldsByDb[$dbId][] = $fieldId;
-                            }
+                if ($section->contents) {
+                    foreach ($section->contents as $content) {
+                        if ($dynamicDbId && isset($referencedEntriesByDb[$dynamicDbId])) {
+                            $referencedEntriesByDb[$dynamicDbId]['ids'][] = $content->id;
                         }
-                    }
-                }
-            }
 
-            if ($section->contents) {
-                foreach ($section->contents as $content) {
-                    if ($dynamicDbId && isset($referencedEntriesByDb[$dynamicDbId])) {
-                        $referencedEntriesByDb[$dynamicDbId]['ids'][] = $content->id;
-                    }
+                        $data = $content->content;
+                        if (is_array($data)) {
+                            $changed = false;
+                            // Resolve database IDs, database_data and linked_roster_data into the content object for non-editors
+                            foreach ($columns as $col) {
+                                $colId = $col['id'] ?? null;
+                                if (! $colId) {
+                                    continue;
+                                }
 
-                    $data = $content->content;
-                    if (is_array($data)) {
-                        $changed = false;
-                        // Resolve database_data and linked_roster_data into the content object
-                        foreach ($columns as $col) {
-                            $colId = $col['id'] ?? null;
-                            if (! $colId) {
-                                continue;
-                            }
-
-                            if (($col['type'] ?? '') === 'linked_roster_data') {
                                 if (! $isEditor) {
-                                    $val = $data[$colId] ?? null;
-                                    if (is_array($val) && isset($val['row_id']) && isset($val['col_id'])) {
-                                        $linkKey = "{$val['row_id']}_{$val['col_id']}";
-                                        $data[$colId] = $resolvedLinksMap[$linkKey] ?? '-';
-                                        $changed = true;
+                                    $dbId = $getLinkedDatabaseId($col);
+                                    if ($dbId) {
+                                        $val = $data[$colId] ?? null;
+                                        if ($val && (is_numeric($val) || (is_string($val) && str_starts_with($val, 'temp_')))) {
+                                            $db = $resolutionDbsById->get($dbId);
+                                            if ($db && $db->relationLoaded('entries')) {
+                                                $entry = $db->entries->firstWhere('entry_id', $val);
+                                                if ($entry) {
+                                                    $fieldId = $col['database_field_id'] ?? $db->database_structure[0]['id'] ?? 'id';
+                                                    $data[$colId] = ($fieldId === 'id') ? $entry->entry_id : ($entry->data[$fieldId] ?? $val);
+                                                    $changed = true;
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                            } elseif (str_contains($col['type'] ?? '', 'database_data') && isset($col['source_column_id'])) {
-                                $sourceColId = $col['source_column_id'];
-                                $sourceCol = collect($columns)->firstWhere('id', $sourceColId);
-                                $sourceValue = $data[$sourceColId] ?? null;
 
-                                if ($sourceCol && ($sourceCol['type'] ?? '') === 'linked_roster_data' && is_array($sourceValue)) {
-                                    $linkKey = "{$sourceValue['row_id']}_{$sourceValue['col_id']}";
-                                    $sourceValue = $resolvedLinksMap[$linkKey] ?? null;
-                                }
-
-                                if ($sourceValue) {
-                                    $dbId = $getLinkedDatabaseId($sourceCol);
-                                    $db = $dbId ? $resolutionDbsById->get($dbId) : null;
-
-                                    if ($db && $db->relationLoaded('entries')) {
-                                        $entry = $db->entries->first(function ($e) use ($sourceCol, $sourceValue, $db) {
-                                            $fieldId = $sourceCol['database_field_id'] ?? $db->database_structure[0]['id'] ?? 'id';
-                                            $label = ($fieldId === 'id') ? (string) $e->entry_id : $e->data[$fieldId] ?? null;
-
-                                            return $label == $sourceValue;
-                                        });
-
-                                        if ($entry) {
-                                            $fieldId = $col['data_field_id'] ?? null;
-                                            $data[$colId] = ($fieldId === 'id') ? $entry->entry_id : $entry->data[$fieldId] ?? '-';
+                                if (($col['type'] ?? '') === 'linked_roster_data') {
+                                    if (! $isEditor) {
+                                        $val = $data[$colId] ?? null;
+                                        if (is_array($val) && isset($val['row_id']) && isset($val['col_id'])) {
+                                            $linkKey = "{$val['row_id']}_{$val['col_id']}";
+                                            $data[$colId] = $resolvedLinksMap[$linkKey] ?? '-';
                                             $changed = true;
                                         }
                                     }
-                                }
-                            }
-                        }
+                                } elseif (str_contains($col['type'] ?? '', 'database_data') && isset($col['source_column_id'])) {
+                                    $sourceColId = $col['source_column_id'];
+                                    $sourceCol = collect($columns)->firstWhere('id', $sourceColId);
+                                    $sourceValue = $data[$sourceColId] ?? null;
 
-                        if ($changed) {
-                            $content->content = $data;
-                        }
-
-                        foreach ($colDbIds as $colId => $colInfo) {
-                            $dbId = $colInfo['db_id'];
-                            $val = $data[$colId] ?? null;
-                            if ($val !== null && $val !== '') {
-                                if (is_array($val) && isset($val['row_id']) && isset($val['col_id'])) {
-                                    $linkKey = "{$val['row_id']}_{$val['col_id']}";
-                                    $resolvedVal = $resolvedLinksMap[$linkKey] ?? null;
-                                    if ($resolvedVal !== null && $resolvedVal !== '') {
-                                        $referencedEntriesByDb[$dbId]['values'][] = (string) $resolvedVal;
+                                    if ($sourceCol && ($sourceCol['type'] ?? '') === 'linked_roster_data' && is_array($sourceValue)) {
+                                        $linkKey = "{$sourceValue['row_id']}_{$sourceValue['col_id']}";
+                                        $sourceValue = $resolvedLinksMap[$linkKey] ?? null;
                                     }
-                                } else {
-                                    $referencedEntriesByDb[$dbId]['values'][] = (string) $val;
+
+                                    if ($sourceValue) {
+                                        $dbId = $getLinkedDatabaseId($sourceCol);
+                                        $db = $dbId ? $resolutionDbsById->get($dbId) : null;
+
+                                        if ($db && $db->relationLoaded('entries')) {
+                                            $entry = $db->entries->first(function ($e) use ($sourceCol, $sourceValue, $db) {
+                                                $fieldId = $sourceCol['database_field_id'] ?? $db->database_structure[0]['id'] ?? 'id';
+                                                $label = ($fieldId === 'id') ? (string) $e->entry_id : $e->data[$fieldId] ?? null;
+
+                                                return $label == $sourceValue;
+                                            });
+
+                                            if ($entry) {
+                                                $fieldId = $col['data_field_id'] ?? null;
+                                                $data[$colId] = ($fieldId === 'id') ? $entry->entry_id : $entry->data[$fieldId] ?? '-';
+                                                $changed = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if ($changed) {
+                                $content->content = $data;
+                            }
+
+                            foreach ($colDbIds as $colId => $colInfo) {
+                                $dbId = $colInfo['db_id'];
+                                $val = $data[$colId] ?? null;
+                                if ($val !== null && $val !== '') {
+                                    if (is_array($val) && isset($val['row_id']) && isset($val['col_id'])) {
+                                        $linkKey = "{$val['row_id']}_{$val['col_id']}";
+                                        $resolvedVal = $resolvedLinksMap[$linkKey] ?? null;
+                                        if ($resolvedVal !== null && $resolvedVal !== '') {
+                                            $referencedEntriesByDb[$dbId]['values'][] = (string) $resolvedVal;
+                                        }
+                                    } else {
+                                        $referencedEntriesByDb[$dbId]['values'][] = (string) $val;
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            if ($section->children) {
-                foreach ($section->children as $child) {
-                    $scanSection($child, $roster);
-                }
-            }
-        };
-
-        foreach ($allRosters as $roster) {
-            foreach ($roster->rootSections as $section) {
-                $scanSection($section, $roster);
-            }
-        }
-
-        $allRosters->each(function ($roster) use ($user) {
-            if ($roster->is_sandbox) {
-                $perms = [
-                    'view_roster' => true,
-                    'modify_roster' => true,
-                    'manage_columns' => true,
-                    'manage_layout' => true,
-                    'add_sections' => true,
-                    'remove_sections' => true,
-                    'edit_predefined' => true,
-                    'edit_defined_fields' => true,
-                    'view_hidden_data' => true,
-                ];
-                $roster->user_roster_permissions = $perms;
-            } else {
-                $canModify = User::hasRosterPermission($user, $roster, 'modify_roster');
-                $canViewHidden = $canModify || User::hasRosterPermission($user, $roster, 'view_hidden_data');
-
-                $perms = [
-                    'view_roster' => User::hasRosterPermission($user, $roster, 'view_roster'),
-                    'modify_roster' => $canModify,
-                    'manage_columns' => User::hasRosterPermission($user, $roster, 'manage_columns'),
-                    'manage_layout' => User::hasRosterPermission($user, $roster, 'manage_layout'),
-                    'add_sections' => User::hasRosterPermission($user, $roster, 'add_sections'),
-                    'remove_sections' => User::hasRosterPermission($user, $roster, 'remove_sections'),
-                    'edit_predefined' => User::hasRosterPermission($user, $roster, 'edit_predefined'),
-                    'edit_defined_fields' => User::hasRosterPermission($user, $roster, 'edit_defined_fields'),
-                    'view_hidden_data' => $canViewHidden,
-                ];
-                $roster->user_roster_permissions = $perms;
-
-                // Apply data masking if user cannot view hidden data
-                if (! $canViewHidden) {
-                    $hiddenColIds = collect($roster->columns ?? [])
-                        ->filter(fn ($col) => str_contains($col['type'] ?? '', 'hidden'))
-                        ->pluck('id')
-                        ->toArray();
-
-                    foreach ($roster->rootSections as $section) {
-                        $this->maskSection($section, $hiddenColIds, $roster, true);
+                if ($section->children) {
+                    foreach ($section->children as $child) {
+                        $scanSection($child, $roster);
                     }
                 }
+            };
+
+            foreach ($allRosters as $roster) {
+                foreach ($roster->rootSections as $section) {
+                    $scanSection($section, $roster);
+                }
             }
+
+            $allRosters->each(function ($roster) use ($user) {
+                if ($roster->is_sandbox) {
+                    $perms = [
+                        'view_roster' => true,
+                        'modify_roster' => true,
+                        'manage_columns' => true,
+                        'manage_layout' => true,
+                        'add_sections' => true,
+                        'remove_sections' => true,
+                        'edit_predefined' => true,
+                        'edit_defined_fields' => true,
+                        'view_hidden_data' => true,
+                    ];
+                    $roster->user_roster_permissions = $perms;
+                } else {
+                    $canModify = User::hasRosterPermission($user, $roster, 'modify_roster');
+                    $canViewHidden = $canModify || User::hasRosterPermission($user, $roster, 'view_hidden_data');
+
+                    $perms = [
+                        'view_roster' => User::hasRosterPermission($user, $roster, 'view_roster'),
+                        'modify_roster' => $canModify,
+                        'manage_columns' => User::hasRosterPermission($user, $roster, 'manage_columns'),
+                        'manage_layout' => User::hasRosterPermission($user, $roster, 'manage_layout'),
+                        'add_sections' => User::hasRosterPermission($user, $roster, 'add_sections'),
+                        'remove_sections' => User::hasRosterPermission($user, $roster, 'remove_sections'),
+                        'edit_predefined' => User::hasRosterPermission($user, $roster, 'edit_predefined'),
+                        'edit_defined_fields' => User::hasRosterPermission($user, $roster, 'edit_defined_fields'),
+                        'view_hidden_data' => $canViewHidden,
+                    ];
+                    $roster->user_roster_permissions = $perms;
+
+                    // Apply data masking if user cannot view hidden data
+                    if (! $canViewHidden) {
+                        $hiddenColIds = collect($roster->columns ?? [])
+                            ->filter(fn ($col) => str_contains($col['type'] ?? '', 'hidden'))
+                            ->pluck('id')
+                            ->toArray();
+
+                        foreach ($roster->rootSections as $section) {
+                            $this->maskSection($section, $hiddenColIds, $roster, true);
+                        }
+                    }
+                }
+            });
+
+            return $allRosters->values();
         });
 
         $this->audit('roster.list', "Viewed rosters list for faction {$faction->name}");
 
-        return response()->json($allRosters->values());
+        if ($data === null) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        return response()->json($data);
     }
 
     private function maskSection($section, array $rosterHiddenColIds, $roster = null, $omit = false)
@@ -810,7 +841,7 @@ class RosterController extends Controller
                 if ($dataset) {
                     if ($dataset->record_database_id) {
                         $db = FactionRecordDatabase::find($dataset->record_database_id);
-                        if ($db && is_numeric($value)) {
+                        if ($db && is_numeric($value) && filter_var($value, FILTER_VALIDATE_INT) !== false) {
                             $entry = $db->entries()->where('entry_id', $value)->first();
                             if ($entry) {
                                 $fieldId = $col['database_field_id'] ?? $db->database_structure[0]['id'] ?? 'id';
@@ -822,7 +853,7 @@ class RosterController extends Controller
                             }
                         }
                     } else {
-                        if (is_numeric($value)) {
+                        if (is_numeric($value) && filter_var($value, FILTER_VALIDATE_INT) !== false) {
                             $option = $dataset->options()->where('id', $value)->first();
                             if ($option) {
                                 $value = $option->value;

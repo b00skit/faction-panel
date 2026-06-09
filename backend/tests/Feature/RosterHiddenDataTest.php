@@ -706,3 +706,37 @@ test('FactionController show sends all database entries to users with roster edi
     // They should see all entries (2 entries) since they are not a view-only user
     expect(count($dbData['entries']))->toBe(2);
 });
+
+test('FactionController show does not crash when linked column contains decimal string or temp values for guest/unlogged users', function () {
+    // 1. Create a Public role with view_faction_roster permission so guest is authorized to view
+    $publicRole = $this->faction->roles()->create([
+        'name' => 'Public',
+        'weight' => 0,
+        'color' => '#d1d5db',
+        'type' => 'secondary',
+    ]);
+    $publicRole->permissions()->create(['permission_key' => 'view_faction_roster', 'value' => 'YES']);
+
+    // 2. Link the roster's name column to the database field
+    $cols = $this->roster->columns;
+    $cols[0]['linked_database_id'] = $this->recordDb->id;
+    $cols[0]['database_field_id'] = 'name_field';
+    $this->roster->update(['columns' => $cols]);
+
+    // 3. Set the roster content row to have a float string '0.99' and a temp string 'temp_123'
+    $this->content->update([
+        'content' => [
+            'name' => '0.99',
+            'secret_info' => 'temp_123',
+        ],
+    ]);
+
+    // 4. Request faction panel as guest (unauthenticated)
+    Auth::guard('sanctum')->forgetUser();
+    $response = $this->getJson('/api/factions/lssd');
+
+    // 5. Verify the response is successful (200) and did not fail with a 500 database exception
+    $response->assertStatus(200);
+    $data = $response->json();
+    expect($data['rosters'])->not->toBeEmpty();
+});

@@ -16,6 +16,7 @@ import { ColumnsModal } from './ColumnsModal';
 import { RosterTemplateModal } from './RosterTemplateModal';
 import { CountManagerModal } from './CountManagerModal';
 import { hexToRgb } from '../utils';
+import { useRosterRealtime } from '../hooks/useRosterRealtime';
 
 interface FactionRosterProps {
     user: any;
@@ -113,20 +114,49 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
   const [showRosterContextMenu, setShowRosterContextMenu] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
   const [globalEditingRowId, setGlobalEditingRowId] = useState<number | null>(null);
   const [globalSaveTrigger, setGlobalSaveTrigger] = useState(0);
 
-  // Real-time polling
-  useEffect(() => {
-    const interval = setInterval(() => {
-        // Only poll if not currently editing a roster structure or major settings
-        if (!showCreateModal && !showSectionModal && !showColumnsModal && !showSectionColumnsModal && !showSectionLayoutModal && !showLayoutModal) {
-            fetchRosters();
-        }
-    }, 5000); // 5 seconds
+  // Real-time integration (Reverb)
+  const { presenceUsers } = useRosterRealtime({
+    factionId: activeDivision?.faction_id,
+    rosterId: activeDivision?.id,
+    onRowUpdated: (updatedRow) => {
+        setRosters(prevRosters => {
+            return prevRosters.map(roster => {
+                if (roster.id !== activeDivision?.id) return roster;
+                
+                const updateSection = (sections: any[]): any[] => {
+                    return sections.map(section => {
+                        const newContents = (section.contents || []).map((content: any) => 
+                            content.id === updatedRow.id ? { ...content, ...updatedRow } : content
+                        );
+                        
+                        const newChildren = section.children ? updateSection(section.children) : section.children;
+                        
+                        return { ...section, contents: newContents, children: newChildren };
+                    });
+                };
 
-    return () => clearInterval(interval);
-  }, [showCreateModal, showSectionModal, showColumnsModal, showSectionColumnsModal, showSectionLayoutModal, showLayoutModal, fetchRosters]);
+                return {
+                    ...roster,
+                    root_sections: updateSection(roster.root_sections || [])
+                };
+            });
+        });
+    },
+    onRowAdded: () => {
+        // For now, simpler to re-fetch on add/delete to ensure correct ordering/placement
+        fetchRosters();
+    },
+    onRowDeleted: () => {
+        fetchRosters();
+    },
+    onRosterUpdated: () => {
+        fetchRosters();
+    }
+  });
 
   const allContents = useMemo(() => {
     const contents: any[] = [];
@@ -588,8 +618,13 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                     if (rule.type === 'equals') return val === (rule.value || '').toString().toLowerCase().trim();
                                     if (rule.type === 'contains') return val.includes((rule.value || '').toString().toLowerCase().trim());
                                     if (rule.type === 'exists_elsewhere') {
+                                        if (val === '' || val === '-' || val.startsWith('?')) return false;
                                         const otherPool = rule.scope === 'global' ? allContents : allContents.filter(item => item.roster_id === row.roster_id);
-                                        return otherPool.some(item => item.id !== row.id && Object.values(item.content || {}).some(v => (v || '').toString().toLowerCase().trim() === val));
+                                        return otherPool.some(item => item.id !== row.id && Object.entries(item.content || {}).some(([k, v]) => {
+                                            if (k.endsWith('_cb') || k.endsWith('_tags')) return false;
+                                            const otherVal = (v || '').toString().toLowerCase().trim();
+                                            return otherVal === val && otherVal !== '' && otherVal !== '-' && !otherVal.startsWith('?');
+                                        }));
                                     }
                                     return false;
                                 });
@@ -745,8 +780,13 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                         if (rule.type === 'equals') return val === (rule.value || '').toString().toLowerCase().trim();
                         if (rule.type === 'contains') return val.includes((rule.value || '').toString().toLowerCase().trim());
                         if (rule.type === 'exists_elsewhere') {
+                            if (val === '' || val === '-' || val.startsWith('?')) return false;
                             const otherPool = rule.scope === 'global' ? allContents : allContents.filter(item => item.roster_id === row.roster_id);
-                            return otherPool.some(item => item.id !== row.id && Object.values(item.content || {}).some(v => (v || '').toString().toLowerCase().trim() === val));
+                            return otherPool.some(item => item.id !== row.id && Object.entries(item.content || {}).some(([k, v]) => {
+                                if (k.endsWith('_cb') || k.endsWith('_tags')) return false;
+                                const otherVal = (v || '').toString().toLowerCase().trim();
+                                return otherVal === val && otherVal !== '' && otherVal !== '-' && !otherVal.startsWith('?');
+                            }));
                         }
                         return false;
                     });
@@ -868,7 +908,7 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                     {/* Online Viewers */}
                     <div className="flex items-center -space-x-1.5">
                         {(() => {
-                            const activeViewers = onlineUsers.filter(u => u.current_roster_id === activeDivId);
+                            const activeViewers = presenceUsers;
                             const displayViewers = activeViewers.slice(0, 3);
                             const remainingCount = activeViewers.length - 3;
                             
@@ -881,10 +921,10 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                         >
                                             <div 
                                                 className="w-[18px] h-[18px] rounded-full border-[1.5px] bg-card overflow-hidden transition-transform group-hover/avatar:-translate-y-0.5 shadow-sm"
-                                                style={{ borderColor: u.primary_role?.color || 'var(--border)' }}
+                                                style={{ borderColor: u.color || 'var(--border)' }}
                                             >
                                                 <img 
-                                                    src={u.avatar_url || `https://ui-avatars.com/api/?name=${u.username}&background=random&color=fff&size=40`} 
+                                                    src={`https://ui-avatars.com/api/?name=${u.username}&background=random&color=fff&size=40`} 
                                                     alt={u.username}
                                                     className="w-full h-full object-cover"
                                                 />

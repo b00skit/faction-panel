@@ -537,6 +537,8 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                 const datasetNot = datasets.find(d => Number(d.id) === Number(rule.dataset_id));
                 return !datasetNot?.options?.some((opt: any) => (opt.value || '').toString().toLowerCase().trim() === value);
             case 'exists_elsewhere':
+                if (value === '' || value === '-' || value.startsWith('?')) return false;
+
                 let pool: any[] = [];
                 const safeAllContents = allContents || [];
                 
@@ -560,14 +562,16 @@ export const RosterTable: React.FC<RosterTableProps> = ({
 
                     if (rule.target_col) {
                         const otherVal = resolvedValuesCache.get(`${c.id}_${rule.target_col}`) || '';
-                        return otherVal === value;
+                        return otherVal === value && otherVal !== '' && otherVal !== '-' && !otherVal.startsWith('?');
                     }
                     
                     const targetContent = c.content || {};
-                    return Object.keys(targetContent).some(targetColId => {
-                        const otherVal = resolvedValuesCache.get(`${c.id}_${targetColId}`) || '';
-                        return otherVal === value && otherVal !== '';
-                    });
+                    return Object.keys(targetContent)
+                        .filter(targetColId => !targetColId.endsWith('_cb') && !targetColId.endsWith('_tags'))
+                        .some(targetColId => {
+                            const otherVal = resolvedValuesCache.get(`${c.id}_${targetColId}`) || '';
+                            return otherVal === value && otherVal !== '' && otherVal !== '-' && !otherVal.startsWith('?');
+                        });
                 });
             case 'orphaned_database_link':
                 if (!boundDataset?.record_database_id) return false;
@@ -836,8 +840,9 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                 // Find matching entry
                 const fieldId = col.database_field_id || db.database_structure?.[0]?.id;
                 const entry = db.entries.find((e: any) => {
+                    if (String(e.entry_id) === String(value)) return true;
                     const entryValue = (fieldId === 'id') ? String(e.entry_id) : e.data?.[fieldId];
-                    return entryValue === value;
+                    return String(entryValue) === String(value);
                 });
 
                 if (entry) {
@@ -1028,6 +1033,13 @@ export const RosterTable: React.FC<RosterTableProps> = ({
         String(o.id) === String(value) || (!isValueId && o.label === value)
     );
 
+    let displayEditValue = value;
+    if (isEditing && col.dataset_id && selectedOpt) {
+        if (!hasTyped) {
+            displayEditValue = selectedOpt.label;
+        }
+    }
+
     const getCellDisplayValue = () => {
         // Always return redacted placeholder for hidden columns when user lacks permission
         if (!showValue) return '??????';
@@ -1043,6 +1055,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                 const db = recordData.find(d => d.id === sourceDataset?.record_database_id);
                 if (db && db.entries) {
                     const entry = db.entries.find((e: any) => {
+                        if (String(e.entry_id) === String(sourceValue)) return true;
                         let fieldId = sourceCol?.database_field_id;
                         if (!fieldId || ['table', 'compact', 'cards', 'detailed', 'rows'].includes(fieldId)) {
                             fieldId = db.database_structure?.[0]?.id;
@@ -1050,7 +1063,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                         const label = (fieldId === 'id') ? String(e.entry_id) : 
                                      (fieldId === 'created_at') ? new Date(e.created_at).toLocaleDateString() :
                                      e.data?.[fieldId || ''];
-                        return label === sourceValue;
+                        return String(label) === String(sourceValue);
                     });
                     if (entry) {
                         const fieldId = col.data_field_id;
@@ -1184,6 +1197,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
             if (db && db.entries) {
                 // Find entry that matches sourceValue (by the source column's referenced field)
                 const entry = db.entries.find((e: any) => {
+                    if (String(e.entry_id) === String(sourceValue)) return true;
                     let fieldId = sourceCol?.database_field_id;
                     if (!fieldId || ['table', 'compact', 'cards', 'detailed', 'rows'].includes(fieldId)) {
                         fieldId = db.database_structure?.[0]?.id;
@@ -1193,7 +1207,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                                  (fieldId === 'created_at') ? new Date(e.created_at).toLocaleDateString() :
                                  e.data?.[fieldId || ''];
                     
-                    return label === sourceValue;
+                    return String(label) === String(sourceValue);
                 });
 
                 if (entry) {
@@ -1453,7 +1467,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
             <div className="relative w-full flex flex-row items-center justify-center px-1 overflow-visible">
                 <input 
                 ref={col.id === editingColId ? inputRef : null}
-                value={value} 
+                value={displayEditValue} 
                 autoComplete="off"
                 onChange={e => {
                     setHasTyped(true);
