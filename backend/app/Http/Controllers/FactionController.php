@@ -239,25 +239,29 @@ class FactionController extends Controller
         // Include Flags
         $flags = $faction->rosterFlags()->get();
 
-        $getLinkedDatabaseId = function ($col) use ($datasetsById) {
-            if (isset($col['linked_database_id']) && $col['linked_database_id']) {
-                return $col['linked_database_id'];
-            }
-            if (isset($col['dataset_id']) && $col['dataset_id']) {
-                $ds = $datasetsById->get($col['dataset_id']);
-                if ($ds && $ds->record_database_id) {
-                    return $ds->record_database_id;
-                }
-            }
-
-            return null;
-        };
-
         // Include Published Record Databases — load structure and perms first, entries later selectively
         $allPublishedDatabases = $faction->recordDatabases()
             ->where('is_published', true)
             ->with(['databasePermissions'])
             ->get();
+
+        $getLinkedDatabaseId = function ($col) use ($datasetsById, $allPublishedDatabases) {
+            $rawId = null;
+            if (isset($col['linked_database_id']) && $col['linked_database_id']) {
+                $rawId = $col['linked_database_id'];
+            } elseif (isset($col['dataset_id']) && $col['dataset_id']) {
+                $ds = $datasetsById->get($col['dataset_id']);
+                if ($ds && $ds->record_database_id) {
+                    $rawId = $ds->record_database_id;
+                }
+            }
+
+            if ($rawId) {
+                return FactionRecordDatabase::resolveDatabaseId($rawId, $allPublishedDatabases);
+            }
+
+            return null;
+        };
 
         // Identify which databases need full entry loading
         // 1. User has view_database permission
@@ -279,10 +283,13 @@ class FactionController extends Controller
                         User::hasRosterPermission($user, $roster, 'modify_roster');
 
             foreach ($roster->rootSections as $section) {
-                $checkRosterRefs = function ($sec) use (&$checkRosterRefs, &$dynamicDbIds, &$rosterEditorDbIds, $isEditor, $getLinkedDatabaseId, $roster) {
+                $checkRosterRefs = function ($sec) use (&$checkRosterRefs, &$dynamicDbIds, &$rosterEditorDbIds, $isEditor, $getLinkedDatabaseId, $roster, $allPublishedDatabases) {
                     $config = $sec->section_options['dynamic_config'] ?? null;
                     if ($sec->data_source === 'dynamic' && $config && ($config['source_type'] ?? null) === 'database' && isset($config['source_id'])) {
-                        $dynamicDbIds[] = $config['source_id'];
+                        $resolvedDbId = FactionRecordDatabase::resolveDatabaseId($config['source_id'], $allPublishedDatabases);
+                        if ($resolvedDbId) {
+                            $dynamicDbIds[] = $resolvedDbId;
+                        }
                     }
 
                     if ($isEditor) {
@@ -306,10 +313,13 @@ class FactionController extends Controller
         }
         foreach ($sandboxRosters as $roster) {
             foreach ($roster->rootSections as $section) {
-                $checkRosterRefs = function ($sec) use (&$checkRosterRefs, &$dynamicDbIds, &$rosterEditorDbIds, $getLinkedDatabaseId, $roster) {
+                $checkRosterRefs = function ($sec) use (&$checkRosterRefs, &$dynamicDbIds, &$rosterEditorDbIds, $getLinkedDatabaseId, $roster, $allPublishedDatabases) {
                     $config = $sec->section_options['dynamic_config'] ?? null;
                     if ($sec->data_source === 'dynamic' && $config && ($config['source_type'] ?? null) === 'database' && isset($config['source_id'])) {
-                        $dynamicDbIds[] = $config['source_id'];
+                        $resolvedDbId = FactionRecordDatabase::resolveDatabaseId($config['source_id'], $allPublishedDatabases);
+                        if ($resolvedDbId) {
+                            $dynamicDbIds[] = $resolvedDbId;
+                        }
                     }
 
                     // Sandbox creators are always editors

@@ -229,15 +229,19 @@ class RosterController extends Controller
                 $hiddenFieldsByDb[$db->id] = [];
             }
 
-            $getLinkedDatabaseId = function ($col) use ($datasetsById) {
+            $getLinkedDatabaseId = function ($col) use ($datasetsById, $allPublishedDatabases) {
+                $rawId = null;
                 if (isset($col['linked_database_id']) && $col['linked_database_id']) {
-                    return $col['linked_database_id'];
-                }
-                if (isset($col['dataset_id']) && $col['dataset_id']) {
+                    $rawId = $col['linked_database_id'];
+                } elseif (isset($col['dataset_id']) && $col['dataset_id']) {
                     $ds = $datasetsById->get($col['dataset_id']);
                     if ($ds && $ds->record_database_id) {
-                        return $ds->record_database_id;
+                        $rawId = $ds->record_database_id;
                     }
+                }
+
+                if ($rawId) {
+                    return FactionRecordDatabase::resolveDatabaseId($rawId, $allPublishedDatabases);
                 }
 
                 return null;
@@ -352,13 +356,16 @@ class RosterController extends Controller
                 }
             }
 
-            $scanSection = function ($section, $roster) use (&$scanSection, &$referencedEntriesByDb, &$hiddenFieldsByDb, $getLinkedDatabaseId, $publishedDbsById, $user, $resolvedLinksMap, $resolutionDbsById) {
+            $scanSection = function ($section, $roster) use (&$scanSection, &$referencedEntriesByDb, &$hiddenFieldsByDb, $getLinkedDatabaseId, $publishedDbsById, $user, $resolvedLinksMap, $resolutionDbsById, $allPublishedDatabases) {
                 $config = $section->section_options['dynamic_config'] ?? null;
                 $isDynamicDb = ($section->data_source === 'dynamic') &&
                     $config &&
                     (($config['source_type'] ?? null) === 'database') &&
                     isset($config['source_id']);
-                $dynamicDbId = $isDynamicDb ? $config['source_id'] : null;
+                $dynamicDbId = null;
+                if ($isDynamicDb && isset($config['source_id'])) {
+                    $dynamicDbId = FactionRecordDatabase::resolveDatabaseId($config['source_id'], $allPublishedDatabases);
+                }
 
                 $columns = $section->use_roster_columns ? ($roster->columns ?? []) : ($section->columns ?: ($roster->columns ?? []));
                 $canViewHidden = User::hasRosterPermission($user, $roster, 'view_hidden_data');

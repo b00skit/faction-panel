@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Faction;
+use App\Models\FactionRecordDatabase;
 use App\Models\FactionRecordEntry;
 use App\Models\RosterContent;
 use App\Models\RosterFlag;
@@ -37,8 +38,9 @@ class RosterFlagService
         // ── 2. Build a value-resolution cache (content_id → colId → normalised string) ──
         // We need the database entries to resolve raw numeric entry_ids to display labels.
         $allDbEntries = $this->loadAllDbEntries($faction);
+        $allDatabases = $faction->recordDatabases()->get();
 
-        $cache = $this->buildResolutionCache($contents, $rosters, $sectionsById, $allDbEntries, $datasets);
+        $cache = $this->buildResolutionCache($contents, $rosters, $sectionsById, $allDbEntries, $datasets, $allDatabases);
 
         // ── 3. Determine which columns use this flag ─────────────────────────────
         // A column "uses" this flag when it has an `enabled_flags` array containing
@@ -285,19 +287,11 @@ class RosterFlagService
     }
 
     /**
-     * Build a two-level cache: cache[contentId][colId] = normalised string value.
-     * Resolves numeric entry-id values to their display labels using DB entries.
+     * Build value resolution cache.
      */
-    private function buildResolutionCache(
-        Collection $contents,
-        Collection $rostersById,
-        Collection $sectionsById,
-        array $allDbEntriesByDbId,    // [dbId => [entryId => entry]]
-        Collection $datasetsById
-    ): array {
+    private function buildResolutionCache(Collection $contents, Collection $rostersById, Collection $sectionsById, array $allDbEntriesByDbId, Collection $datasetsById, Collection $allDatabases): array
+    {
         $cache = [];
-
-        // Index contents by id for roster-data-link resolution
         $contentsById = $contents->keyBy('id');
 
         foreach ($contents as $content) {
@@ -334,7 +328,7 @@ class RosterFlagService
                         : null;
                 }
 
-                $resolved = $this->resolveDisplayValue($rawVal, $col, $allDbEntriesByDbId, $datasetsById);
+                $resolved = $this->resolveDisplayValue($rawVal, $col, $allDbEntriesByDbId, $datasetsById, $allDatabases);
                 $cache[$content->id][$colId] = strtolower(trim($resolved));
             }
         }
@@ -346,7 +340,7 @@ class RosterFlagService
      * Resolve a raw cell value to a human-readable string, mirroring
      * the frontend's `getResolvedDisplayValue`.
      */
-    private function resolveDisplayValue(mixed $rawVal, array $col, array $allDbEntriesByDbId, Collection $datasetsById): string
+    private function resolveDisplayValue(mixed $rawVal, array $col, array $allDbEntriesByDbId, Collection $datasetsById, Collection $allDatabases): string
     {
         if ($rawVal === null || $rawVal === '') {
             return '';
@@ -356,19 +350,34 @@ class RosterFlagService
             return '';
         }
 
-        $dbId = $col['linked_database_id'] ?? null;
+        $rawDbId = $col['linked_database_id'] ?? null;
 
         // Fallback: Check if column is linked to a database via a dataset
-        if (! $dbId && isset($col['dataset_id'])) {
+        if (! $rawDbId && isset($col['dataset_id'])) {
             $dataset = $datasetsById->get($col['dataset_id']);
             if ($dataset && $dataset->record_database_id) {
-                $dbId = $dataset->record_database_id;
+                $rawDbId = $dataset->record_database_id;
             }
+        }
+
+        $dbId = null;
+        if ($rawDbId) {
+            $dbId = FactionRecordDatabase::resolveDatabaseId($rawDbId, $allDatabases);
         }
 
         // Column linked directly or via dataset to a record database
         if ($dbId && isset($allDbEntriesByDbId[$dbId])) {
             $entry = $allDbEntriesByDbId[$dbId][$rawVal] ?? null;
+            if (! $entry) {
+                // Try case-insensitive name-based matching
+                foreach ($allDbEntriesByDbId[$dbId] as $item) {
+                    $name = $item['data']['name'] ?? $item['data']['character_name'] ?? $item['data']['Character Name'] ?? null;
+                    if ($name && strcasecmp(trim($name), trim((string) $rawVal)) === 0) {
+                        $entry = $item;
+                        break;
+                    }
+                }
+            }
             if ($entry) {
                 $fieldId = $col['database_field_id'] ?? null;
                 if ($fieldId && $fieldId !== 'id') {

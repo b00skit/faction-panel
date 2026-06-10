@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import Loading from './Loading';
 import { SyncGridRow } from './SyncGridRow';
 import { createPortal } from 'react-dom';
+import { findRecordDatabase } from '../utils';
 
 interface RevisionIndex {
     id: number;
@@ -594,7 +595,7 @@ export const RosterRevisions: React.FC<RosterRevisionsProps> = ({ datasets = [],
           : (col.options || []).map((o: any, idx: number) => ({ ...o, id: o.id || `manual_${idx}` }));
 
         if (boundDataset?.record_database_id) {
-            const db = recordData.find(d => d.id === boundDataset.record_database_id);
+            const db = findRecordDatabase(recordData, boundDataset.record_database_id);
             if (db && db.entries) {
                 effectiveOptions = db.entries.map((entry: any) => {
                     let fieldId = col.database_field_id;

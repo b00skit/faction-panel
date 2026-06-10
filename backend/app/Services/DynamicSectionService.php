@@ -41,7 +41,8 @@ class DynamicSectionService
 
         if ($sourceType === 'database' && $sourceId) {
             if (! isset(self::$databaseCache[$sourceId])) {
-                self::$databaseCache[$sourceId] = FactionRecordDatabase::with('entries')->find($sourceId);
+                $dbId = FactionRecordDatabase::resolveDatabaseId($sourceId, $faction->recordDatabases);
+                self::$databaseCache[$sourceId] = $dbId ? FactionRecordDatabase::with('entries')->find($dbId) : null;
             }
             $database = self::$databaseCache[$sourceId];
 

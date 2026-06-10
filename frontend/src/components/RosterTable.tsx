@@ -7,7 +7,7 @@ import { Plus, Trash2, Check, X, Pencil, Tag, ExternalLink, GripVertical, Separa
 import * as LucideIcons from '../icons';
 import api from '../api';
 import toast from 'react-hot-toast';
-import { hexToRgb } from '../utils';
+import { hexToRgb, findRecordDatabase } from '../utils';
 import { LinkedDataModal } from './LinkedDataModal';
 
 const CellScaler: React.FC<{ children: React.ReactNode, className?: string, tooltipContent?: React.ReactNode, forceShowTooltip?: boolean, disabled?: boolean }> = ({ children, className, tooltipContent, forceShowTooltip, disabled }) => {
@@ -186,7 +186,7 @@ const getResolvedDisplayValue = (
         if (boundDataset) {
             let option = boundDataset.options?.find((o: any) => String(o.id) === String(rawValue));
             if (!option && boundDataset.record_database_id) {
-                const db = recordData.find(d => d.id === boundDataset.record_database_id);
+                const db = findRecordDatabase(recordData, boundDataset.record_database_id);
                 if (db && db.entries) {
                     const entry = db.entries.find((e: any) => {
                         if (String(e.entry_id) === String(rawValue)) return true;
@@ -583,8 +583,8 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                 }
 
                 let option = boundDataset?.options?.find((o: any) => String(o.id) === String(rawValue));
-                if (!option && boundDataset?.record_database_id) {
-                    const db = recordData.find(d => d.id === boundDataset.record_database_id);
+                if (!option && boundDataset.record_database_id) {
+                    const db = findRecordDatabase(recordData, boundDataset.record_database_id);
                     if (db && db.entries) {
                         const entry = db.entries.find((e: any) => {
                             if (String(e.entry_id) === String(rawValue)) return true;
@@ -835,7 +835,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
     if (col && col.dataset_id) {
         const dataset = datasets.find(d => d.id === col.dataset_id);
         if (dataset && dataset.record_database_id) {
-            const db = recordData.find(d => d.id === dataset.record_database_id);
+            const db = findRecordDatabase(recordData, dataset.record_database_id);
             if (db && db.entries) {
                 // Find matching entry
                 const fieldId = col.database_field_id || db.database_structure?.[0]?.id;
@@ -1027,7 +1027,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
 
     // If dynamic dataset, pull from recordData
     if (boundDataset?.record_database_id) {
-        const db = recordData.find(d => d.id === boundDataset.record_database_id);
+        const db = findRecordDatabase(recordData, boundDataset.record_database_id);
         if (db && db.entries) {
             effectiveOptions = db.entries.map((entry: any) => {
                 let fieldId = col.database_field_id;
@@ -1086,7 +1086,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
             }
             if (sourceValue) {
                 const sourceDataset = datasets.find(d => d.id === sourceCol?.dataset_id);
-                const db = recordData.find(d => d.id === sourceDataset?.record_database_id);
+                const db = findRecordDatabase(recordData, sourceDataset?.record_database_id);
                 if (db && db.entries) {
                     const entry = db.entries.find((e: any) => {
                         if (String(e.entry_id) === String(sourceValue)) return true;
@@ -1226,7 +1226,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
         if (sourceValue) {
             // Find the database linked to the source column's dataset
             const sourceDataset = datasets.find(d => d.id === sourceCol?.dataset_id);
-            const db = recordData.find(d => d.id === sourceDataset?.record_database_id);
+            const db = findRecordDatabase(recordData, sourceDataset?.record_database_id);
             
             if (db && db.entries) {
                 // Find entry that matches sourceValue (by the source column's referenced field)

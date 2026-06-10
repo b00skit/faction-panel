@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Events\RosterUpdated;
 use App\Models\Faction;
+use App\Models\FactionRecordDatabase;
 use App\Models\FactionRecordEntry;
 use App\Models\RosterContent;
 use App\Models\RosterSection;
@@ -20,6 +21,7 @@ class RosterSyncService
         $rosters = $faction->rosters()->get()->keyBy('id');
         $sections = RosterSection::whereIn('roster_id', $rosters->keys())->get()->keyBy('id');
         $datasets = $faction->rosterDatasets()->get()->keyBy('id');
+        $allDatabases = $faction->recordDatabases()->get();
         $dbEntries = $this->loadAllDbEntries($faction);
 
         $modified = 0;
@@ -28,7 +30,7 @@ class RosterSyncService
 
         RosterContent::whereIn('section_id', $sections->keys())
             ->whereNull('deleted_at')
-            ->chunkById(200, function ($contents) use ($rosters, $sections, $datasets, $dbEntries, &$modified, &$modifiedRosterIds, &$linkedRowsCache) {
+            ->chunkById(200, function ($contents) use ($rosters, $sections, $datasets, $dbEntries, $allDatabases, &$modified, &$modifiedRosterIds, &$linkedRowsCache) {
                 // \Log::info('Chunk size: ' . count($contents));
                 foreach ($contents as $content) {
                     $section = $sections->get($content->section_id);
@@ -51,7 +53,7 @@ class RosterSyncService
                             continue;
                         }
 
-                        $dbId = $this->getLinkedDatabaseId($col, $datasets);
+                        $dbId = $this->getLinkedDatabaseId($col, $datasets, $allDatabases);
                         if (! $dbId) {
                             continue;
                         }
@@ -81,6 +83,15 @@ class RosterSyncService
                         }
 
                         $entry = $dbEntries[$dbId][$value] ?? null;
+                        if (! $entry && isset($dbEntries[$dbId])) {
+                            foreach ($dbEntries[$dbId] as $item) {
+                                $name = $item->data['name'] ?? $item->data['character_name'] ?? $item->data['Character Name'] ?? null;
+                                if ($name && strcasecmp(trim($name), trim((string) $value)) === 0) {
+                                    $entry = $item;
+                                    break;
+                                }
+                            }
+                        }
                         if (! $entry) {
                             // \Log::info("Entry not found for dbId $dbId and value $value");
                             continue;
@@ -181,16 +192,20 @@ class RosterSyncService
         return array_values($next);
     }
 
-    private function getLinkedDatabaseId(array $col, Collection $datasetsById): ?int
+    private function getLinkedDatabaseId(array $col, Collection $datasetsById, Collection $allDatabases): ?int
     {
+        $rawId = null;
         if (isset($col['linked_database_id']) && $col['linked_database_id']) {
-            return (int) $col['linked_database_id'];
-        }
-        if (isset($col['dataset_id']) && $col['dataset_id']) {
+            $rawId = $col['linked_database_id'];
+        } elseif (isset($col['dataset_id']) && $col['dataset_id']) {
             $ds = $datasetsById->get($col['dataset_id']);
             if ($ds && $ds->record_database_id) {
-                return (int) $ds->record_database_id;
+                $rawId = $ds->record_database_id;
             }
+        }
+
+        if ($rawId) {
+            return FactionRecordDatabase::resolveDatabaseId($rawId, $allDatabases);
         }
 
         return null;

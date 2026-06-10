@@ -15,7 +15,7 @@ import { RosterPermissionsModal } from './RosterPermissionsModal';
 import { ColumnsModal } from './ColumnsModal';
 import { RosterTemplateModal } from './RosterTemplateModal';
 import { CountManagerModal } from './CountManagerModal';
-import { hexToRgb } from '../utils';
+import { hexToRgb, findRecordDatabase } from '../utils';
 import { useRosterRealtime } from '../hooks/useRosterRealtime';
 
 interface FactionRosterProps {
@@ -2054,7 +2054,7 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                                 const sourceType = sectionData.section_options?.dynamic_config?.source_type;
                                                 const sourceId = sectionData.section_options?.dynamic_config?.source_id;
                                                 if (sourceType === 'database') {
-                                                    return recordData.find(db => String(db.id) === String(sourceId))?.database_structure?.map((f: any) => (
+                                                    return findRecordDatabase(recordData, sourceId)?.database_structure?.map((f: any) => (
                                                         <option key={f.id} value={f.id}>{f.name}</option>
                                                     ));
                                                 }
@@ -2181,7 +2181,7 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                                                 const sourceType = sectionData.section_options?.dynamic_config?.source_type;
                                                                 const sourceId = sectionData.section_options?.dynamic_config?.source_id;
                                                                 if (sourceType === 'database') {
-                                                                    return recordData.find(db => String(db.id) === String(sourceId))?.database_structure?.map((f: any) => (
+                                                                    return findRecordDatabase(recordData, sourceId)?.database_structure?.map((f: any) => (
                                                                         <option key={f.id} value={f.id}>{f.name}</option>
                                                                     ));
                                                                 }
@@ -2252,7 +2252,7 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                         const sourceType = sectionData.section_options?.dynamic_config?.source_type;
                                         const sourceId = sectionData.section_options?.dynamic_config?.source_id;
                                         if (sourceType === 'database') {
-                                            return recordData.find(db => String(db.id) === String(sourceId))?.database_structure?.map((f: any) => (
+                                            return findRecordDatabase(recordData, sourceId)?.database_structure?.map((f: any) => (
                                                 <option key={f.id} value={f.id}>{f.name}</option>
                                             ));
                                         }
@@ -2404,7 +2404,7 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                                     const sourceType = sectionData.section_options?.dynamic_config?.source_type;
                                                     const sourceId = sectionData.section_options?.dynamic_config?.source_id;
                                                     if (sourceType === 'database') {
-                                                        return recordData.find(db => String(db.id) === String(sourceId))?.database_structure?.map((f: any) => (
+                                                        return findRecordDatabase(recordData, sourceId)?.database_structure?.map((f: any) => (
                                                             <option key={f.id} value={f.id}>{f.name}</option>
                                                         ));
                                                     }
