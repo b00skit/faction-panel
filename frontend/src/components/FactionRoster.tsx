@@ -974,7 +974,7 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                         })}
                     </div>
 
-                    {canModerate && (
+                    {(canModerate || rosterPerms.edit_defined_fields) && (
                         <div className="flex items-center gap-1 ml-4">
                             <button 
                                 onClick={() => setEditMode(!editMode)}

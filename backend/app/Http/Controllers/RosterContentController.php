@@ -72,7 +72,7 @@ class RosterContentController extends Controller
         $roster = $content->section->roster;
 
         $user = Auth::user();
-        $canEditDefined = User::hasRosterPermission($user, $roster, 'edit_defined_fields');
+        $canEditDefined = User::hasRosterPermission($user, $roster, 'modify_roster');
         $canEditPredefined = User::hasRosterPermission($user, $roster, 'edit_predefined');
 
         if (! $canEditDefined && ! $canEditPredefined) {
@@ -156,7 +156,7 @@ class RosterContentController extends Controller
         $roster = $content->section->roster;
         $user = Auth::user();
 
-        if (! User::hasRosterPermission($user, $roster, 'edit_defined_fields') &&
+        if (! User::hasRosterPermission($user, $roster, 'modify_roster') &&
             ! User::hasRosterPermission($user, $roster, 'edit_predefined')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
@@ -236,7 +236,7 @@ class RosterContentController extends Controller
         $roster = $section->roster;
         $user = Auth::user();
 
-        $canEditDefined = User::hasRosterPermission($user, $roster, 'edit_defined_fields');
+        $canEditDefined = User::hasRosterPermission($user, $roster, 'modify_roster');
         $canEditPredefined = User::hasRosterPermission($user, $roster, 'edit_predefined');
 
         if (! $canEditDefined && ! $canEditPredefined) {

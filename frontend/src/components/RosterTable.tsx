@@ -159,6 +159,7 @@ interface RosterTableProps {
   syncedHeights?: { [key: number]: number };
   onRowHeightSync?: (index: number, height: number, hasCheckbox: boolean) => void;
   isDynamic?: boolean;
+  isRestricted?: boolean;
 }
 
 const getResolvedDisplayValue = (
@@ -234,12 +235,14 @@ export const RosterTable: React.FC<RosterTableProps> = ({
   saveTrigger,
   syncedHeights,
   onRowHeightSync,
-  isDynamic = false
+  isDynamic = false,
+  isRestricted = false
 }) => {
   const { shortname } = useParams<{ shortname: string }>();
-  const canEditDefined = !isDynamic && (canModerate || permissions?.edit_defined_fields);
-  const canEditPredefined = !isDynamic && (canModerate || permissions?.edit_predefined);
+  const canEditDefined = !isRestricted && !isDynamic && (canModerate || permissions?.modify_roster);
+  const canEditPredefined = !isRestricted && !isDynamic && (canModerate || permissions?.edit_predefined);
   const canEditAny = canEditDefined || canEditPredefined;
+  const effectiveEditMode = editMode && !isRestricted;
 
   const activeCols = columns && columns.length > 0 ? columns : [
     { id: 'rank', name: 'Rank', type: 'dropdown', checkboxes: ['Acting'] },
@@ -502,7 +505,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
 
   const evaluateFlag = React.useCallback((row: RosterContent, col: RosterColumn, flag: any) => {
     // If the user does not have edit access to the roster, do not evaluate flags at all.
-    const hasEditAccess = canModerate || permissions?.edit_defined_fields || permissions?.edit_predefined;
+    const hasEditAccess = canModerate || permissions?.modify_roster || permissions?.edit_predefined;
     if (!hasEditAccess) return false;
 
     if (!flag.rules || flag.rules.length === 0) return false;
@@ -950,7 +953,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
     if (isHidden && !canViewHidden) return false;
     if (col.type === 'autofill') return false;
 
-    if (editMode && canEditPredefined) return true;
+    if (effectiveEditMode && canEditPredefined) return true;
     if (col.type.startsWith('predefined_') || col.type.includes('predefined')) {
         return canEditPredefined;
     }
@@ -1017,6 +1020,16 @@ export const RosterTable: React.FC<RosterTableProps> = ({
     const canViewHidden = canModerate || permissions?.view_hidden_data;
     
     const showValue = !isHiddenType || canViewHidden;
+
+    if (!showValue) {
+        return (
+          <div className="flex flex-col items-center justify-center h-full gap-0.5 py-1 transition-all whitespace-nowrap overflow-visible relative group/cell rt-cell-content">
+            <span className="text-[10px] uppercase font-black tracking-widest blur-[3px] select-none opacity-50 rt-cell-hidden-value">
+                ??????
+            </span>
+          </div>
+        );
+    }
 
     const boundDataset = col.dataset_id ? datasets.find(d => d.id === col.dataset_id) : null;
     const datasetOptions = boundDataset?.options || [];
@@ -1829,7 +1842,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
         <thead>
           <tr>
             <th className="rt-th" style={{ borderLeft: `3px solid ${accentColor}` }}>
-                {editMode ? (
+                {effectiveEditMode ? (
                     <div className="flex items-center justify-center">
                         <input 
                             type="checkbox" 
@@ -1840,9 +1853,19 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                     </div>
                 ) : '#'}
             </th>
-            {activeCols.map((col) => (
-              <th key={col.id} className="rt-th text-center">{col.name}</th>
-            ))}
+            {activeCols.map((col) => {
+              const isHiddenType = col.type?.includes('hidden');
+              const canViewHidden = canModerate || permissions?.view_hidden_data;
+              const isHeaderBlurred = isHiddenType && !canViewHidden;
+              return (
+                <th 
+                  key={col.id} 
+                  className={`rt-th text-center ${isHeaderBlurred ? 'blur-[3px] select-none opacity-50 font-black' : ''}`}
+                >
+                  {col.name}
+                </th>
+              );
+            })}
             <th className="rt-th"></th>
           </tr>
         </thead>
@@ -1876,8 +1899,8 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                 as="tr"
                 key={row.id} 
                 value={row}
-                dragListener={editMode && canEditPredefined && !editingRowId}
-                className={`rt-tr group/row ${isEditing ? 'bg-accent/5 z-[5000] relative' : ''} ${selectedRowIds.includes(row.id) ? 'bg-accent/5' : ''} ${editMode && canEditPredefined && !editingRowId ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                dragListener={effectiveEditMode && canEditPredefined && !editingRowId}
+                className={`rt-tr group/row ${isEditing ? 'bg-accent/5 z-[5000] relative' : ''} ${selectedRowIds.includes(row.id) ? 'bg-accent/5' : ''} ${effectiveEditMode && canEditPredefined && !editingRowId ? 'cursor-grab active:cursor-grabbing' : ''}`}
                 style={{ height: syncedHeight ? `${syncedHeight}px` : undefined }}
                 data-row-index={idx}
                 data-has-checkbox={hasCheckbox}
@@ -1888,14 +1911,14 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                     borderLeft: `3px solid ${effectiveRowColor || accentColor}`,
                     ...cellStyle
                   }}
-                  onClick={() => editMode && toggleSelectRow(row.id)}
+                  onClick={() => effectiveEditMode && toggleSelectRow(row.id)}
                 >
                   <div className="flex items-center justify-center w-full h-full gap-1 px-1">
-                    {editMode && canEditPredefined && (
+                    {effectiveEditMode && canEditPredefined && (
                         <GripVertical size={10} className="opacity-20 group-hover/row:opacity-100 transition-opacity shrink-0" />
                     )}
                     <div className="relative flex items-center justify-center flex-1">
-                      {editMode ? (
+                      {effectiveEditMode ? (
                           <>
                               <input 
                                   type="checkbox" 
@@ -2056,7 +2079,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                     </div>
                   ) : (
                     <>
-                      {editMode && (
+                      {effectiveEditMode && (
                         <button onClick={() => onDeleteRow?.(row.id)} className="p-1 text-danger/50 hover:text-danger hover:bg-danger/10 rounded opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={12} /></button>
                       )}
                     </>
@@ -2068,7 +2091,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
           })}
         </Reorder.Group>
         <tbody>
-          {editMode && (
+          {effectiveEditMode && (
             <tr>
               <td 
                 colSpan={activeCols.length + 2} 
@@ -2169,7 +2192,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
               </td>
             </tr>
           )}
-          {contents.length === 0 && !editMode && (
+          {contents.length === 0 && !effectiveEditMode && (
              <tr>
                 <td colSpan={activeCols.length + 2} className="rt-td text-muted italic opacity-40 text-center py-4 uppercase text-[9px] tracking-widest">
                     No data available in this section
