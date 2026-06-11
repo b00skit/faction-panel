@@ -521,6 +521,7 @@ class RosterController extends Controller
                         'edit_predefined' => true,
                         'edit_defined_fields' => true,
                         'view_hidden_data' => true,
+                        'revision_history' => true,
                     ];
                     $roster->user_roster_permissions = $perms;
                 } else {
@@ -537,6 +538,7 @@ class RosterController extends Controller
                         'edit_predefined' => User::hasRosterPermission($user, $roster, 'edit_predefined'),
                         'edit_defined_fields' => User::hasRosterPermission($user, $roster, 'edit_defined_fields'),
                         'view_hidden_data' => $canViewHidden,
+                        'revision_history' => User::hasRosterPermission($user, $roster, 'revision_history'),
                     ];
                     $roster->user_roster_permissions = $perms;
 

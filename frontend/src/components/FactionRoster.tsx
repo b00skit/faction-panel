@@ -1271,139 +1271,149 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
             onReorder={handleReorder}
             className="flex items-center flex-1 overflow-x-auto overflow-y-hidden scrollbar-none gap-1 h-full"
         >
-          {rosters.map((roster: any) => (
-            <Reorder.Item 
-                key={roster.id} 
-                value={roster}
-                className="flex items-center group relative h-full shrink-0"
-            >
-              <div 
-                onClick={() => setActiveDivId(roster.id)}
-                className={`tab pl-4 py-2 cursor-pointer transition-all text-[10px] font-bold uppercase h-full flex items-center gap-1.5 relative border-t-2 ${
-                  canModerate ? 'pr-1' : 'pr-4'
-                } ${
-                  activeDivId === roster.id 
-                    ? 'border-accent text-accent bg-accent/5' 
-                    : 'border-transparent text-muted hover:text-text hover:bg-surface'
-                }`}
+          {rosters.map((roster: any) => {
+            const isOwner = roster.created_by === user?.id;
+            const hasRevisionHistory = !!roster.user_roster_permissions?.revision_history;
+            const showMenu = isGlobalMod || isOwner || hasRevisionHistory;
+            const onlyHasRevisionHistory = showMenu && !isGlobalMod && !isOwner;
+
+            return (
+              <Reorder.Item 
+                  key={roster.id} 
+                  value={roster}
+                  dragListener={isGlobalMod || isSandbox}
+                  className="flex items-center group relative h-full shrink-0"
               >
-                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: roster.color }} />
-                <span>{roster.name}</span>
-
-                {canModerate && (
-                    <div className="flex items-center">
-                        <div className={`transition-opacity flex items-center ${activeMenuId === roster.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                             <button 
-                                type="button"
-                                className={`text-muted hover:text-accent cursor-pointer p-0.5 rounded hover:bg-accent/10 ${activeMenuId === roster.id ? 'text-accent bg-accent/10' : ''}`} 
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    if (activeMenuId === roster.id) {
-                                        setActiveMenuId(null);
-                                    } else {
-                                        const rect = e.currentTarget.getBoundingClientRect();
-                                        setMenuPosition({ left: rect.left + rect.width / 2 });
-                                        setActiveMenuId(roster.id);
-                                    }
-                                }} 
-                             >
-                                <MoreVertical size={12} />
-                             </button>
-                        </div>
-
-                        {activeMenuId === roster.id && (
-                            <div 
-                                className="fixed bottom-[var(--tab-h)] mb-2 bg-card border border-border rounded-lg shadow-2xl p-1 z-[999] min-w-[140px]"
-                                style={{ 
-                                    left: menuPosition.left,
-                                    transform: 'translateX(-50%)'
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                {(isGlobalMod || roster.user_roster_permissions?.modify_roster) && (
-                                    <button 
-                                        onClick={() => handleEditRoster(roster)}
-                                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors"
-                                    >
-                                        <Settings2 size={12} /> Edit Roster
-                                    </button>
-                                )}
-                                {(isGlobalMod || roster.user_roster_permissions?.manage_columns) && (
-                                    <button 
-                                        onClick={() => {
-                                            setShowColumnsModal(roster);
-                                            setActiveMenuId(null);
-                                        }}
-                                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors"
-                                    >
-                                        <Settings2 size={12} /> Manage Columns
-                                    </button>
-                                )}
-                                {(isGlobalMod || roster.user_roster_permissions?.manage_layout) && (
-                                    <button 
-                                        onClick={() => {
-                                            setShowLayoutModal(roster);
-                                            setActiveMenuId(null);
-                                        }}
-                                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors"
-                                    >
-                                        <Layout size={12} /> Manage Layout
-                                    </button>
-                                )}
-                                {!isSandbox && (isGlobalMod || roster.user_roster_permissions?.modify_roster) && (
-                                    <button 
-                                        onClick={() => {
-                                            setShowCountsModal({ target: roster, type: 'roster' });
-                                            setActiveMenuId(null);
-                                        }}
-                                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors"
-                                    >
-                                        <Calculator size={12} /> Manage Counts
-                                    </button>
-                                )}
-                                {!isSandbox && (isGlobalMod || roster.user_roster_permissions?.modify_roster) && (
-                                    <button 
-                                        onClick={() => {
-                                            setShowPermissionsModal(roster);
-                                            setActiveMenuId(null);
-                                        }}
-                                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors"
-                                    >
-                                        <Shield size={12} /> Permissions
-                                    </button>
-                                )}
-                                {!isSandbox && (isGlobalMod || roster.user_roster_permissions?.revision_history) && (
-                                    <button 
-                                        onClick={() => {
-                                            setActiveMenuId(null);
-                                            navigate(`/${shortname}/rosters/${roster.id}/revisions`);
-                                        }}
-                                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors"
-                                    >
-                                        <Clock size={12} /> View Revision History
-                                    </button>
-                                )}
-                                {(isGlobalMod || roster.user_roster_permissions?.modify_roster) && (
-                                    <button 
-                                        onClick={() => handleDelete(roster.id)}
-                                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-danger/70 hover:text-danger hover:bg-danger/5 rounded transition-colors"
-                                    >
-                                        <Trash2 size={12} /> Remove Roster
-                                    </button>
-                                )}
-                                <div className="border-t border-border mt-1 pt-1">
-                                    <div className="px-3 py-1.5 text-[8px] font-black uppercase text-muted/50 tracking-widest flex items-center gap-2">
-                                        <GripVertical size={10} /> Drag to reorder
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-              </div>
-            </Reorder.Item>
-          ))}
+                <div 
+                  onClick={() => setActiveDivId(roster.id)}
+                  className={`tab pl-4 py-2 cursor-pointer transition-all text-[10px] font-bold uppercase h-full flex items-center gap-1.5 relative border-t-2 ${
+                    showMenu ? 'pr-1' : 'pr-4'
+                  } ${
+                    activeDivId === roster.id 
+                      ? 'border-accent text-accent bg-accent/5' 
+                      : 'border-transparent text-muted hover:text-text hover:bg-surface'
+                  }`}
+                >
+                  <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: roster.color }} />
+                  <span>{roster.name}</span>
+  
+                  {showMenu && (
+                      <div className="flex items-center">
+                          <div className={`transition-opacity flex items-center ${activeMenuId === roster.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                               <button 
+                                  type="button"
+                                  className={`text-muted hover:text-accent cursor-pointer p-0.5 rounded hover:bg-accent/10 ${activeMenuId === roster.id ? 'text-accent bg-accent/10' : ''}`} 
+                                  onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      if (activeMenuId === roster.id) {
+                                          setActiveMenuId(null);
+                                      } else {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          setMenuPosition({ left: rect.left + rect.width / 2 });
+                                          setActiveMenuId(roster.id);
+                                      }
+                                  }} 
+                               >
+                                  <MoreVertical size={12} />
+                               </button>
+                          </div>
+  
+                          {activeMenuId === roster.id && (
+                              <div 
+                                  className="fixed bottom-[var(--tab-h)] mb-2 bg-card border border-border rounded-lg shadow-2xl p-1 z-[999] min-w-[140px]"
+                                  style={{ 
+                                      left: menuPosition.left,
+                                      transform: 'translateX(-50%)'
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                              >
+                                  {!onlyHasRevisionHistory && (isGlobalMod || roster.user_roster_permissions?.modify_roster) && (
+                                      <button 
+                                          onClick={() => handleEditRoster(roster)}
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors"
+                                      >
+                                          <Settings2 size={12} /> Edit Roster
+                                      </button>
+                                  )}
+                                  {!onlyHasRevisionHistory && (isGlobalMod || roster.user_roster_permissions?.manage_columns) && (
+                                      <button 
+                                          onClick={() => {
+                                              setShowColumnsModal(roster);
+                                              setActiveMenuId(null);
+                                          }}
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors"
+                                      >
+                                          <Settings2 size={12} /> Manage Columns
+                                      </button>
+                                  )}
+                                  {!onlyHasRevisionHistory && (isGlobalMod || roster.user_roster_permissions?.manage_layout) && (
+                                      <button 
+                                          onClick={() => {
+                                              setShowLayoutModal(roster);
+                                              setActiveMenuId(null);
+                                          }}
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors"
+                                      >
+                                          <Layout size={12} /> Manage Layout
+                                      </button>
+                                  )}
+                                  {!onlyHasRevisionHistory && !isSandbox && (isGlobalMod || roster.user_roster_permissions?.modify_roster) && (
+                                      <button 
+                                          onClick={() => {
+                                              setShowCountsModal({ target: roster, type: 'roster' });
+                                              setActiveMenuId(null);
+                                          }}
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors"
+                                      >
+                                          <Calculator size={12} /> Manage Counts
+                                      </button>
+                                  )}
+                                  {!onlyHasRevisionHistory && !isSandbox && (isGlobalMod || roster.user_roster_permissions?.modify_roster) && (
+                                      <button 
+                                          onClick={() => {
+                                              setShowPermissionsModal(roster);
+                                              setActiveMenuId(null);
+                                          }}
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors"
+                                      >
+                                          <Shield size={12} /> Permissions
+                                      </button>
+                                  )}
+                                  {!isSandbox && (isGlobalMod || roster.user_roster_permissions?.revision_history) && (
+                                      <button 
+                                          onClick={() => {
+                                              setActiveMenuId(null);
+                                              navigate(`/${shortname}/rosters/${roster.id}/revisions`);
+                                          }}
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors"
+                                      >
+                                          <Clock size={12} /> View Revision History
+                                      </button>
+                                  )}
+                                  {!onlyHasRevisionHistory && (isGlobalMod || roster.user_roster_permissions?.modify_roster) && (
+                                      <button 
+                                          onClick={() => handleDelete(roster.id)}
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-danger/70 hover:text-danger hover:bg-danger/5 rounded transition-colors"
+                                      >
+                                          <Trash2 size={12} /> Remove Roster
+                                      </button>
+                                  )}
+                                  {!onlyHasRevisionHistory && (isGlobalMod || isSandbox) && (
+                                      <div className="border-t border-border mt-1 pt-1">
+                                          <div className="px-3 py-1.5 text-[8px] font-black uppercase text-muted/50 tracking-widest flex items-center gap-2">
+                                              <GripVertical size={10} /> Drag to reorder
+                                          </div>
+                                      </div>
+                                  )}
+                              </div>
+                          )}
+                      </div>
+                  )}
+                </div>
+              </Reorder.Item>
+            );
+          })}
 
           {canCreate && (
             <div className="relative flex items-center gap-1 ml-2 shrink-0">
