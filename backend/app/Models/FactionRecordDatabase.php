@@ -48,7 +48,7 @@ class FactionRecordDatabase extends Model
 
     public static function resolveDatabaseId($identifier, $factionDatabases): ?int
     {
-        if (!$identifier) {
+        if (! $identifier) {
             return null;
         }
         if (is_numeric($identifier)) {
@@ -64,6 +64,7 @@ class FactionRecordDatabase extends Model
         // 1. Check by is_api_database
         $matched = $factionDatabases->first(function ($db) use ($strIdentifier) {
             $raw = $db->getRawOriginal('is_api_database') ?: $db->is_api_database;
+
             return is_string($raw) && strcasecmp($raw, $strIdentifier) === 0;
         });
         if ($matched) {
@@ -89,6 +90,7 @@ class FactionRecordDatabase extends Model
             $targetType = $apiTypeMap[$strIdentifier];
             $matched = $factionDatabases->first(function ($db) use ($targetType) {
                 $raw = $db->getRawOriginal('is_api_database') ?: $db->is_api_database;
+
                 return is_string($raw) && strcasecmp($raw, $targetType) === 0;
             });
             if ($matched) {

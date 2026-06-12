@@ -15,13 +15,11 @@ class NotificationCreated implements ShouldBroadcast
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public $notification;
+
     protected $userIds;
 
     /**
      * Create a new event instance.
-     *
-     * @param Notification $notification
-     * @param array $userIds
      */
     public function __construct(Notification $notification, array $userIds)
     {
@@ -40,6 +38,7 @@ class NotificationCreated implements ShouldBroadcast
         foreach ($this->userIds as $id) {
             $channels[] = new PrivateChannel("App.Models.User.{$id}");
         }
+
         return $channels;
     }
 

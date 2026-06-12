@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\DynamicSectionService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
@@ -129,7 +130,7 @@ class FactionController extends Controller
         if ($user) {
             $currentRosterId = $request->query('roster_id');
             $pivot = $faction->users()->where('user_id', $user->id)->first()?->pivot;
-            $lastActivity = $pivot?->last_roster_activity ? \Illuminate\Support\Carbon::parse($pivot->last_roster_activity) : null;
+            $lastActivity = $pivot?->last_roster_activity ? Carbon::parse($pivot->last_roster_activity) : null;
             if (! $lastActivity || now()->diffInSeconds($lastActivity) > 60) {
                 $faction->users()->updateExistingPivot($user->id, [
                     'current_roster_id' => $currentRosterId,

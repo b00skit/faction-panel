@@ -1,11 +1,12 @@
 <?php
 
+use App\Events\RosterUpdated;
 use App\Models\Faction;
 use App\Models\Roster;
 use App\Models\RosterContent;
+use App\Models\RosterPermission;
 use App\Models\RosterSection;
 use App\Models\User;
-use App\Events\RosterUpdated;
 use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
@@ -237,7 +238,7 @@ test('updating roster permissions dispatches RosterUpdated event', function () {
     ]);
 
     // Create a roster permission which should trigger saved event
-    $rosterPermission = \App\Models\RosterPermission::create([
+    $rosterPermission = RosterPermission::create([
         'roster_id' => $roster->id,
         'role_id' => null,
         'group_id' => null,
@@ -256,4 +257,3 @@ test('updating roster permissions dispatches RosterUpdated event', function () {
         return $event->roster->id === $roster->id;
     });
 });
-

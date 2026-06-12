@@ -12,9 +12,9 @@ use Illuminate\Support\Facades\Auth;
 
 class DynamicSectionService
 {
-    private static $databaseCache = [];
+    private $databaseCache = [];
 
-    private static $rosterValueCache = [];
+    private $rosterValueCache = [];
 
     /**
      * Resolve dynamic content for a section.
@@ -40,11 +40,11 @@ class DynamicSectionService
         $data = [];
 
         if ($sourceType === 'database' && $sourceId) {
-            if (! isset(self::$databaseCache[$sourceId])) {
+            if (! isset($this->databaseCache[$sourceId])) {
                 $dbId = FactionRecordDatabase::resolveDatabaseId($sourceId, $faction->recordDatabases);
-                self::$databaseCache[$sourceId] = $dbId ? FactionRecordDatabase::with('entries')->find($dbId) : null;
+                $this->databaseCache[$sourceId] = $dbId ? FactionRecordDatabase::with('entries')->find($dbId) : null;
             }
-            $database = self::$databaseCache[$sourceId];
+            $database = $this->databaseCache[$sourceId];
 
             if ($database && $database->faction_id === $faction->id) {
                 foreach ($database->entries as $entry) {
@@ -340,8 +340,8 @@ class DynamicSectionService
     protected function getCachedRosterValues(Faction $faction, $rosterId, $field)
     {
         $cacheKey = "{$rosterId}_{$field}";
-        if (isset(self::$rosterValueCache[$cacheKey])) {
-            return self::$rosterValueCache[$cacheKey];
+        if (isset($this->rosterValueCache[$cacheKey])) {
+            return $this->rosterValueCache[$cacheKey];
         }
 
         $values = [];
@@ -359,24 +359,74 @@ class DynamicSectionService
                 });
         });
 
+        // Preload datasets and databases to resolve IDs to display values
+        $datasets = $faction->rosterDatasets()->with('options')->get();
+        $datasetsById = $datasets->keyBy('id');
+
+        $allPublishedDatabases = $faction->recordDatabases()
+            ->where('is_published', true)
+            ->with(['entries' => function ($query) {
+                $query->where('is_active', true);
+            }])
+            ->get();
+        $resolutionDbsById = $allPublishedDatabases->keyBy('id');
+
         $rosters = $rostersQuery->with('sections.contents')->get();
         foreach ($rosters as $roster) {
             foreach ($roster->sections as $sec) {
+                $columns = $sec->use_roster_columns ? ($roster->columns ?? []) : ($sec->columns ?: ($roster->columns ?? []));
+                $col = collect($columns)->firstWhere('id', $field);
+
                 foreach ($sec->contents as $cont) {
                     if ($cont->type === 'spacer') {
                         continue;
                     }
                     $val = $cont->content[$field] ?? null;
-                    if ($val && is_string($val)) {
-                        $values[] = strtolower(trim($val));
+
+                    // Resolve DB-linked dataset/column or standard dropdown dataset IDs
+                    if ($col && $val !== null && $val !== '') {
+                        $dbId = null;
+                        if (isset($col['linked_database_id']) && $col['linked_database_id']) {
+                            $dbId = FactionRecordDatabase::resolveDatabaseId($col['linked_database_id'], $allPublishedDatabases);
+                        } elseif (isset($col['dataset_id']) && $col['dataset_id']) {
+                            $datasetId = $col['dataset_id'];
+                            $dataset = $datasetsById->get($datasetId);
+                            if ($dataset && $dataset->record_database_id) {
+                                $dbId = FactionRecordDatabase::resolveDatabaseId($dataset->record_database_id, $allPublishedDatabases);
+                            }
+                        }
+
+                        if ($dbId) {
+                            $db = $resolutionDbsById->get($dbId);
+                            if ($db && is_numeric($val) && filter_var($val, FILTER_VALIDATE_INT) !== false) {
+                                $entry = $db->entries->firstWhere('entry_id', $val);
+                                if ($entry) {
+                                    $fieldId = $col['database_field_id'] ?? $db->database_structure[0]['id'] ?? 'id';
+                                    $val = ($fieldId === 'id') ? $entry->entry_id : ($entry->data[$fieldId] ?? $val);
+                                }
+                            }
+                        } elseif (isset($col['dataset_id']) && $col['dataset_id']) {
+                            $datasetId = $col['dataset_id'];
+                            $dataset = $datasetsById->get($datasetId);
+                            if ($dataset && is_numeric($val) && filter_var($val, FILTER_VALIDATE_INT) !== false) {
+                                $option = $dataset->options->firstWhere('id', $val);
+                                if ($option) {
+                                    $val = $option->value;
+                                }
+                            }
+                        }
+                    }
+
+                    if ($val !== null && $val !== '') {
+                        $values[] = strtolower(trim((string) $val));
                     }
                 }
             }
         }
 
-        self::$rosterValueCache[$cacheKey] = array_unique($values);
+        $this->rosterValueCache[$cacheKey] = array_unique($values);
 
-        return self::$rosterValueCache[$cacheKey];
+        return $this->rosterValueCache[$cacheKey];
     }
 
     protected function applyCustomization(RosterContent $content, array $customization, array $sourceItem)

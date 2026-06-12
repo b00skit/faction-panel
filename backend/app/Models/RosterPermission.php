@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Events\RosterUpdated;
 use Illuminate\Database\Eloquent\Model;
 
 class RosterPermission extends Model
@@ -9,10 +10,10 @@ class RosterPermission extends Model
     protected static function booted()
     {
         $clear = function ($rosterPermission) {
-            $roster = \App\Models\Roster::find($rosterPermission->roster_id);
+            $roster = Roster::find($rosterPermission->roster_id);
             if ($roster) {
-                \App\Models\Faction::invalidateRosterCache($roster->faction_id);
-                \App\Events\RosterUpdated::dispatch($roster);
+                Faction::invalidateRosterCache($roster->faction_id);
+                RosterUpdated::dispatch($roster);
             }
         };
         static::saved($clear);

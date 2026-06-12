@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Events\NotificationCreated;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -14,7 +15,7 @@ class Notification extends Model
         static::created(function ($notification) {
             $userIds = self::getEligibleUserIds($notification);
             if (! empty($userIds)) {
-                event(new \App\Events\NotificationCreated($notification, $userIds));
+                event(new NotificationCreated($notification, $userIds));
             }
         });
     }
@@ -29,8 +30,9 @@ class Notification extends Model
                 $userIds[] = $notification->user_id;
             } else {
                 // Global system notification: broadcast to all users
-                $userIds = \App\Models\User::pluck('id')->toArray();
+                $userIds = User::pluck('id')->toArray();
             }
+
             return $userIds;
         }
 
@@ -41,7 +43,7 @@ class Notification extends Model
             return [];
         }
 
-        $faction = \App\Models\Faction::find($factionId);
+        $faction = Faction::find($factionId);
         if (! $faction) {
             return [];
         }
@@ -52,15 +54,15 @@ class Notification extends Model
         }
 
         // 2. Add all superadmins
-        $superadmins = \App\Models\User::where('is_superadmin', true)->pluck('id')->toArray();
+        $superadmins = User::where('is_superadmin', true)->pluck('id')->toArray();
         foreach ($superadmins as $saId) {
             $userIds[] = (int) $saId;
         }
 
         // 3. Add all users in the faction who are eligible based on roles/groups permissions
         $members = $faction->users()->get();
-        
-        $schemePermissions = \App\Models\NotificationSchemePermission::where('notification_scheme_id', $schemeId)
+
+        $schemePermissions = NotificationSchemePermission::where('notification_scheme_id', $schemeId)
             ->whereJsonContains('permissions', 'receive')
             ->get();
 
@@ -75,14 +77,16 @@ class Notification extends Model
             }
 
             // Check if user has administrator permission globally in faction
-            if (\App\Models\User::hasFactionPermission($member, $faction, 'administrator')) {
+            if (User::hasFactionPermission($member, $faction, 'administrator')) {
                 $userIds[] = $mId;
+
                 continue;
             }
 
             // If scheme permissions has a null-null entry, it means any member of the faction receives it
             if ($hasNullPermission) {
                 $userIds[] = $mId;
+
                 continue;
             }
 
@@ -90,6 +94,7 @@ class Notification extends Model
             $memberRoleIds = $member->roles()->where('faction_id', $factionId)->pluck('roles.id')->map('intval')->toArray();
             if (array_intersect($memberRoleIds, $allowedRoleIds)) {
                 $userIds[] = $mId;
+
                 continue;
             }
 
@@ -97,6 +102,7 @@ class Notification extends Model
             $memberGroupIds = $member->groups()->where('faction_id', $factionId)->pluck('groups.id')->map('intval')->toArray();
             if (array_intersect($memberGroupIds, $allowedGroupIds)) {
                 $userIds[] = $mId;
+
                 continue;
             }
         }

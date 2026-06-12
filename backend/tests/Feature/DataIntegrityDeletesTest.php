@@ -12,7 +12,6 @@ use App\Models\RosterDataset;
 use App\Models\RosterDatasetOption;
 use App\Models\RosterSection;
 use App\Models\User;
-use Illuminate\Support\Facades\Auth;
 
 test('deleting a user cascades form submissions and comments, but preserves other users submissions', function () {
     $leader = User::factory()->create();
@@ -112,7 +111,7 @@ test('deleting a dataset cascade-deletes options and falls back gracefully in ro
                 'name' => 'Rank',
                 'type' => 'dropdown',
                 'dataset_id' => $dataset->id,
-            ]
+            ],
         ],
         'created_by' => $leader->id,
     ]);
@@ -129,7 +128,7 @@ test('deleting a dataset cascade-deletes options and falls back gracefully in ro
     $content = RosterContent::create([
         'section_id' => $section->id,
         'content' => [
-            'rank' => (string) $option1->id
+            'rank' => (string) $option1->id,
         ],
         'created_by' => $leader->id,
     ]);

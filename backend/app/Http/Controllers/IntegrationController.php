@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\RosterUpdated;
 use App\Models\Faction;
 use App\Models\FactionRecordDatabase;
 use App\Models\FactionRecordEntry;
@@ -9,6 +10,7 @@ use App\Models\RosterContent;
 use App\Models\RosterSection;
 use App\Models\User;
 use App\Services\GtawService;
+use App\Services\NotificationService;
 use App\Services\RosterFlagService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -234,7 +236,7 @@ class IntegrationController extends Controller
                         ],
                         'created_by' => null,
                     ]);
-                    \App\Services\NotificationService::triggerDatabaseEntryEvent($actEntry, 'created');
+                    NotificationService::triggerDatabaseEntryEvent($actEntry, 'created');
                     $syncResults['activity_logs']++;
                 }
 
@@ -251,7 +253,7 @@ class IntegrationController extends Controller
                             ],
                             'created_by' => null,
                         ]);
-                        \App\Services\NotificationService::triggerDatabaseEntryEvent($ncEntry, 'created');
+                        NotificationService::triggerDatabaseEntryEvent($ncEntry, 'created');
                         $syncResults['name_changes']++;
                     }
 
@@ -267,7 +269,7 @@ class IntegrationController extends Controller
 
                     if ($hasChanges) {
                         $existingEntry->update(['data' => $memberData]);
-                        \App\Services\NotificationService::triggerDatabaseEntryEvent($existingEntry, 'updated');
+                        NotificationService::triggerDatabaseEntryEvent($existingEntry, 'updated');
                         $syncResults['updated']++;
                     }
                 } else {
@@ -277,7 +279,7 @@ class IntegrationController extends Controller
                         'data' => $memberData,
                         'created_by' => null,
                     ]);
-                    \App\Services\NotificationService::triggerDatabaseEntryEvent($newCharEntry, 'created');
+                    NotificationService::triggerDatabaseEntryEvent($newCharEntry, 'created');
 
                     // Log to history
                     $histEntry = $historyDb->entries()->create([
@@ -290,7 +292,7 @@ class IntegrationController extends Controller
                         ],
                         'created_by' => null,
                     ]);
-                    \App\Services\NotificationService::triggerDatabaseEntryEvent($histEntry, 'created');
+                    NotificationService::triggerDatabaseEntryEvent($histEntry, 'created');
 
                     $syncResults['added']++;
                 }
@@ -311,7 +313,7 @@ class IntegrationController extends Controller
                         ],
                         'created_by' => null,
                     ]);
-                    \App\Services\NotificationService::triggerDatabaseEntryEvent($remHistEntry, 'created');
+                    NotificationService::triggerDatabaseEntryEvent($remHistEntry, 'created');
 
                     $entry->delete();
                     $syncResults['removed']++;
@@ -800,7 +802,7 @@ class IntegrationController extends Controller
             foreach ($modifiedRosterIds as $rosterId) {
                 $roster = $rostersById->get($rosterId);
                 if ($roster) {
-                    \App\Events\RosterUpdated::dispatch($roster);
+                    RosterUpdated::dispatch($roster);
                 }
             }
         }
