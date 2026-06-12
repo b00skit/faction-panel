@@ -167,3 +167,49 @@ test('dynamic section not_in_roster rule resolves entry IDs to strings correctly
     expect($resolvedContents->count())->toBe(1);
     expect($resolvedContents->first()->content['name'])->toBe('Eliana Kingsley');
 });
+
+test('dynamic section not_in_roster rule handles array values in rosters without throwing exceptions', function () {
+    // Add a content row containing an array value (e.g. for checkbox columns or other complex data types)
+    $this->section->contents()->create([
+        'type' => 'predefined',
+        'content' => [
+            'name' => ['some_complex_array_data'],
+            'rank' => 'Deputy',
+        ],
+        'created_by' => $this->leader->id,
+    ]);
+
+    $dynamicSection = $this->roster->sections()->create([
+        'name' => 'Lost Characters',
+        'shortname' => 'LOST',
+        'type' => 'section',
+        'order' => 1,
+        'data_source' => 'dynamic',
+        'section_options' => [
+            'dynamic_config' => [
+                'source_type' => 'database',
+                'source_id' => (string) $this->recordDb->id,
+                'mappings' => [
+                    'name' => 'name',
+                    'rank' => 'rank',
+                ],
+                'rules' => [
+                    [
+                        'type' => 'not_in_roster',
+                        'roster_id' => 'all',
+                        'match_field' => 'name',
+                        'target_field' => 'name',
+                    ],
+                ],
+            ],
+        ],
+        'created_by' => $this->leader->id,
+    ]);
+
+    // Resolve dynamic section content - should not throw Array to string conversion exception
+    $service = new DynamicSectionService;
+    $service->resolve($dynamicSection, $this->faction);
+
+    // Assert that the resolution is successful and matches the expected count
+    expect($dynamicSection->contents->count())->toBe(1);
+});

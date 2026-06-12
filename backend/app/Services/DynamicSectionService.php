@@ -417,7 +417,7 @@ class DynamicSectionService
                         }
                     }
 
-                    if ($val !== null && $val !== '') {
+                    if ($val !== null && $val !== '' && is_scalar($val)) {
                         $values[] = strtolower(trim((string) $val));
                     }
                 }
