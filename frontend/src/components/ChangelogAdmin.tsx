@@ -19,13 +19,35 @@ const ChangelogAdmin: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const editId = searchParams.get('edit') ? parseInt(searchParams.get('edit')!) : null;
 
+    const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
+    const [editingItemContent, setEditingItemContent] = useState<string>('');
+    const [editingItemType, setEditingItemType] = useState<ChangelogItem['type']>('Feature');
+
     const handleCloseEdit = () => {
         setEditing(null);
+        setEditingItemIndex(null);
         if (searchParams.has('edit')) {
             const newParams = new URLSearchParams(searchParams);
             newParams.delete('edit');
             setSearchParams(newParams);
         }
+    };
+
+    const startEditItem = (index: number, item: ChangelogItem) => {
+        setEditingItemIndex(index);
+        setEditingItemContent(item.content);
+        setEditingItemType(item.type);
+    };
+
+    const saveEditedItem = () => {
+        if (!editingItemContent.trim() || !editing) return;
+        const updatedItems = [...(editing.items || [])];
+        updatedItems[editingItemIndex!] = {
+            type: editingItemType,
+            content: editingItemContent.trim()
+        };
+        setEditing({ ...editing, items: updatedItems });
+        setEditingItemIndex(null);
     };
 
     const handleAddItem = () => {
@@ -67,6 +89,7 @@ const ChangelogAdmin: React.FC = () => {
                 }
             }
         }
+        setEditingItemIndex(null);
         setEditing({ ...entry, items, released_at });
     };
 
@@ -141,6 +164,7 @@ const ChangelogAdmin: React.FC = () => {
         setEditing({ version: '', title: '', items: [], released_at: new Date().toISOString().split('T')[0], order: 0 });
         setNewItemType('Feature');
         setNewItemContent('');
+        setEditingItemIndex(null);
         if (searchParams.has('edit')) {
             const newParams = new URLSearchParams(searchParams);
             newParams.delete('edit');
@@ -233,30 +257,92 @@ const ChangelogAdmin: React.FC = () => {
                                         No items added yet. Add items below.
                                     </div>
                                 ) : (
-                                    editing.items.map((item, index) => (
-                                        <div key={index} className="flex items-center gap-2 bg-surface border border-border rounded-lg p-2">
-                                            <span className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${
-                                                item.type === 'Feature' ? 'bg-emerald-500/10 text-emerald-500' :
-                                                item.type === 'Modification' ? 'bg-sky-500/10 text-sky-500' :
-                                                item.type === 'Backend' ? 'bg-indigo-500/10 text-indigo-500' :
-                                                'bg-danger/10 text-danger'
-                                            }`}>
-                                                {item.type}
-                                            </span>
-                                            <span className="text-xs flex-1 truncate">{item.content}</span>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    const updatedItems = [...(editing.items || [])];
-                                                    updatedItems.splice(index, 1);
-                                                    setEditing({ ...editing, items: updatedItems });
-                                                }}
-                                                className="p-1 hover:bg-danger/10 text-muted hover:text-danger rounded transition shrink-0"
-                                            >
-                                                <X size={12} />
-                                            </button>
-                                        </div>
-                                    ))
+                                    editing.items.map((item, index) => {
+                                        const isThisEditing = editingItemIndex === index;
+                                        if (isThisEditing) {
+                                            return (
+                                                <div key={index} className="flex items-center gap-2 bg-surface border border-accent/30 rounded-lg p-2">
+                                                    <select
+                                                        value={editingItemType}
+                                                        onChange={e => setEditingItemType(e.target.value as any)}
+                                                        className="bg-card border border-border p-1 rounded text-[10px] font-bold shrink-0 h-[26px] w-[100px]"
+                                                    >
+                                                        <option value="Feature">Feature</option>
+                                                        <option value="Modification">Modification</option>
+                                                        <option value="Backend">Backend</option>
+                                                        <option value="Fix">Fix</option>
+                                                    </select>
+                                                    <input
+                                                        type="text"
+                                                        value={editingItemContent}
+                                                        onChange={e => setEditingItemContent(e.target.value)}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                saveEditedItem();
+                                                            } else if (e.key === 'Escape') {
+                                                                setEditingItemIndex(null);
+                                                            }
+                                                        }}
+                                                        className="flex-1 bg-card border border-border p-1 rounded text-xs h-[26px]"
+                                                        autoFocus
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={saveEditedItem}
+                                                        className="p-1 hover:bg-emerald-500/10 text-emerald-500 rounded transition shrink-0"
+                                                        title="Save Item"
+                                                    >
+                                                        <Check size={12} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditingItemIndex(null)}
+                                                        className="p-1 hover:bg-muted/15 text-muted rounded transition shrink-0"
+                                                        title="Cancel"
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <div key={index} className="flex items-center gap-2 bg-surface border border-border rounded-lg p-2">
+                                                <span className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${
+                                                    item.type === 'Feature' ? 'bg-emerald-500/10 text-emerald-500' :
+                                                    item.type === 'Modification' ? 'bg-sky-500/10 text-sky-500' :
+                                                    item.type === 'Backend' ? 'bg-indigo-500/10 text-indigo-500' :
+                                                    'bg-danger/10 text-danger'
+                                                }`}>
+                                                    {item.type}
+                                                </span>
+                                                <span className="text-xs flex-1 truncate">{item.content}</span>
+                                                <div className="flex gap-1 shrink-0">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => startEditItem(index, item)}
+                                                        className="p-1 hover:bg-accent/10 text-muted hover:text-accent rounded transition shrink-0"
+                                                        title="Edit Item"
+                                                    >
+                                                        <Edit2 size={12} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const updatedItems = [...(editing.items || [])];
+                                                            updatedItems.splice(index, 1);
+                                                            setEditing({ ...editing, items: updatedItems });
+                                                        }}
+                                                        className="p-1 hover:bg-danger/10 text-muted hover:text-danger rounded transition shrink-0"
+                                                        title="Delete Item"
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
                                 )}
                             </div>
 
