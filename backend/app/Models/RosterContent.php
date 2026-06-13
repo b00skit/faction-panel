@@ -19,6 +19,7 @@ class RosterContent extends Model
             $roster = $content->section?->roster;
             if ($roster) {
                 Faction::invalidateRosterCache($roster->faction_id);
+                Faction::invalidateDiagramsCache($roster->faction_id);
                 RosterRowAdded::dispatch($content);
             }
         });
@@ -27,6 +28,7 @@ class RosterContent extends Model
             $roster = $content->section?->roster;
             if ($roster) {
                 Faction::invalidateRosterCache($roster->faction_id);
+                Faction::invalidateDiagramsCache($roster->faction_id);
                 RosterRowUpdated::dispatch($content);
             }
         });
@@ -35,6 +37,7 @@ class RosterContent extends Model
             $roster = $content->section?->roster;
             if ($roster) {
                 Faction::invalidateRosterCache($roster->faction_id);
+                Faction::invalidateDiagramsCache($roster->faction_id);
                 RosterRowDeleted::dispatch($content->id, $roster->id, $roster->faction_id);
             }
 

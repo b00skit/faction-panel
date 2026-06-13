@@ -371,7 +371,7 @@ export const SectionCard: React.FC<SectionCardProps> = ({
                 user={user}
                 isLeadership={section.type === 'master'} 
                 accentColor={effectiveColor} 
-                columns={columns} 
+                columns={sectionColumns} 
                 datasets={datasets}
                 recordData={recordData}
                 flags={flags}
@@ -477,7 +477,7 @@ export const SectionCard: React.FC<SectionCardProps> = ({
           allContents={allContents}
           user={user}
           accentColor={effectiveColor} 
-          columns={columns} 
+          columns={sectionColumns} 
           datasets={datasets}
           recordData={recordData}
           flags={flags}

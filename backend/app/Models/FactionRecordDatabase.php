@@ -53,9 +53,15 @@ class FactionRecordDatabase extends Model
         }
         if (is_numeric($identifier)) {
             $idVal = (int) $identifier;
-            $matched = $factionDatabases->firstWhere('id', $idVal);
-            if ($matched) {
-                return $matched->id;
+            if ($factionDatabases) {
+                $matched = collect($factionDatabases)->firstWhere('id', $idVal);
+                if ($matched) {
+                    return $matched->id;
+                }
+            }
+            $db = self::find($idVal);
+            if ($db) {
+                return $db->id;
             }
         }
 
