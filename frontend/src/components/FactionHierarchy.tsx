@@ -614,7 +614,6 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                         style={slots[0].value_color ? { color: slots[0].value_color } : {}}
                                                         title={isEditable ? 'Click to edit' : undefined}
                                                     >
-                                                        {!!slots[0].roster_content_id && <Link2 size={10} className="text-accent shrink-0" />}
                                                         <span>{slots[0].value || 'VACANT'}</span>
                                                     </div>
                                                 )}
@@ -694,7 +693,6 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                                     style={slot.value_color ? { color: slot.value_color } : {}}
                                                                     title={isEditable ? 'Click to edit' : undefined}
                                                                 >
-                                                                    {isConnected && <Link2 size={10} className="text-accent shrink-0" />}
                                                                     <span>{slot.value || 'VACANT'}</span>
                                                                 </div>
                                                             )}
@@ -777,7 +775,6 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                     style={slots[0].value_color ? { color: slots[0].value_color } : {}}
                                                     title={isEditable ? 'Click to edit' : undefined}
                                                 >
-                                                    {!!slots[0].roster_content_id && <Link2 size={10} className="text-accent shrink-0" />}
                                                     <span>{slots[0].value || 'VACANT'}</span>
                                                 </div>
                                             )}
@@ -856,7 +853,6 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                                     style={slot.value_color ? { color: slot.value_color } : {}}
                                                                     title={isEditable ? 'Click to edit' : undefined}
                                                                 >
-                                                                    {isConnected && <Link2 size={10} className="text-accent shrink-0" />}
                                                                     <span>{slot.value || 'VACANT'}</span>
                                                                 </div>
                                                             )}
@@ -945,7 +941,6 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                     style={slot.value_color ? { color: slot.value_color } : {}}
                                                     title={isEditable ? 'Click to edit' : undefined}
                                                 >
-                                                    {isConnected && <Link2 size={10} className="text-accent shrink-0" />}
                                                     <span>{slot.value || 'VACANT'}</span>
                                                 </div>
                                             )}
