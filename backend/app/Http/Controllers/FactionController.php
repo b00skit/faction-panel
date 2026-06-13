@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\DynamicSectionService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
@@ -125,13 +126,17 @@ class FactionController extends Controller
             $permissions = User::getFactionPermissions(null, $faction);
         }
 
-        // Update activity if logged in
+        // Update activity if logged in (throttled to once every 60 seconds to prevent DB write pressure)
         if ($user) {
             $currentRosterId = $request->query('roster_id');
-            $faction->users()->updateExistingPivot($user->id, [
-                'current_roster_id' => $currentRosterId,
-                'last_roster_activity' => now(),
-            ]);
+            $pivot = $faction->users()->where('user_id', $user->id)->first()?->pivot;
+            $lastActivity = $pivot?->last_roster_activity ? Carbon::parse($pivot->last_roster_activity) : null;
+            if (! $lastActivity || now()->diffInSeconds($lastActivity) > 60) {
+                $faction->users()->updateExistingPivot($user->id, [
+                    'current_roster_id' => $currentRosterId,
+                    'last_roster_activity' => now(),
+                ]);
+            }
         }
 
         $canViewGlobal = in_array('view_faction_roster', $permissions);
@@ -176,8 +181,8 @@ class FactionController extends Controller
             $faction->user_primary_role = $primaryRole ?? $highestRole;
         }
 
-        // Active Users Tracking (Online in last 60 seconds) - Cached for 30s
-        $onlineUsers = Cache::remember("faction_{$faction->id}_online_users", 30, function () use ($faction) {
+        // Active Users Tracking (Online in last 60 seconds) - Cached for 10 seconds
+        $onlineUsers = Cache::remember("faction_{$faction->id}_online_users_list", 10, function () use ($faction) {
             return $faction->users()
                 ->where('last_roster_activity', '>=', now()->subSeconds(60))
                 ->with(['roles' => function ($query) use ($faction) {
@@ -235,25 +240,29 @@ class FactionController extends Controller
         // Include Flags
         $flags = $faction->rosterFlags()->get();
 
-        $getLinkedDatabaseId = function ($col) use ($datasetsById) {
-            if (isset($col['linked_database_id']) && $col['linked_database_id']) {
-                return $col['linked_database_id'];
-            }
-            if (isset($col['dataset_id']) && $col['dataset_id']) {
-                $ds = $datasetsById->get($col['dataset_id']);
-                if ($ds && $ds->record_database_id) {
-                    return $ds->record_database_id;
-                }
-            }
-
-            return null;
-        };
-
         // Include Published Record Databases — load structure and perms first, entries later selectively
         $allPublishedDatabases = $faction->recordDatabases()
             ->where('is_published', true)
             ->with(['databasePermissions'])
             ->get();
+
+        $getLinkedDatabaseId = function ($col) use ($datasetsById, $allPublishedDatabases) {
+            $rawId = null;
+            if (isset($col['linked_database_id']) && $col['linked_database_id']) {
+                $rawId = $col['linked_database_id'];
+            } elseif (isset($col['dataset_id']) && $col['dataset_id']) {
+                $ds = $datasetsById->get($col['dataset_id']);
+                if ($ds && $ds->record_database_id) {
+                    $rawId = $ds->record_database_id;
+                }
+            }
+
+            if ($rawId) {
+                return FactionRecordDatabase::resolveDatabaseId($rawId, $allPublishedDatabases);
+            }
+
+            return null;
+        };
 
         // Identify which databases need full entry loading
         // 1. User has view_database permission
@@ -275,10 +284,13 @@ class FactionController extends Controller
                         User::hasRosterPermission($user, $roster, 'modify_roster');
 
             foreach ($roster->rootSections as $section) {
-                $checkRosterRefs = function ($sec) use (&$checkRosterRefs, &$dynamicDbIds, &$rosterEditorDbIds, $isEditor, $getLinkedDatabaseId, $roster) {
+                $checkRosterRefs = function ($sec) use (&$checkRosterRefs, &$dynamicDbIds, &$rosterEditorDbIds, $isEditor, $getLinkedDatabaseId, $roster, $allPublishedDatabases) {
                     $config = $sec->section_options['dynamic_config'] ?? null;
                     if ($sec->data_source === 'dynamic' && $config && ($config['source_type'] ?? null) === 'database' && isset($config['source_id'])) {
-                        $dynamicDbIds[] = $config['source_id'];
+                        $resolvedDbId = FactionRecordDatabase::resolveDatabaseId($config['source_id'], $allPublishedDatabases);
+                        if ($resolvedDbId) {
+                            $dynamicDbIds[] = $resolvedDbId;
+                        }
                     }
 
                     if ($isEditor) {
@@ -302,10 +314,13 @@ class FactionController extends Controller
         }
         foreach ($sandboxRosters as $roster) {
             foreach ($roster->rootSections as $section) {
-                $checkRosterRefs = function ($sec) use (&$checkRosterRefs, &$dynamicDbIds, &$rosterEditorDbIds, $getLinkedDatabaseId, $roster) {
+                $checkRosterRefs = function ($sec) use (&$checkRosterRefs, &$dynamicDbIds, &$rosterEditorDbIds, $getLinkedDatabaseId, $roster, $allPublishedDatabases) {
                     $config = $sec->section_options['dynamic_config'] ?? null;
                     if ($sec->data_source === 'dynamic' && $config && ($config['source_type'] ?? null) === 'database' && isset($config['source_id'])) {
-                        $dynamicDbIds[] = $config['source_id'];
+                        $resolvedDbId = FactionRecordDatabase::resolveDatabaseId($config['source_id'], $allPublishedDatabases);
+                        if ($resolvedDbId) {
+                            $dynamicDbIds[] = $resolvedDbId;
+                        }
                     }
 
                     // Sandbox creators are always editors
@@ -888,6 +903,7 @@ class FactionController extends Controller
                 'edit_predefined' => User::hasRosterPermission($user, $roster, 'edit_predefined'),
                 'edit_defined_fields' => User::hasRosterPermission($user, $roster, 'edit_defined_fields'),
                 'view_hidden_data' => $canViewHidden,
+                'revision_history' => User::hasRosterPermission($user, $roster, 'revision_history'),
             ];
             $roster->user_roster_permissions = $perms;
         });
@@ -903,6 +919,7 @@ class FactionController extends Controller
                 'edit_predefined' => true,
                 'edit_defined_fields' => true,
                 'view_hidden_data' => true,
+                'revision_history' => true,
             ];
             $roster->user_roster_permissions = $perms;
         });

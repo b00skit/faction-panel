@@ -13,7 +13,7 @@ interface RosterPermissionsModalProps {
 const AVAILABLE_PERMISSIONS = [
     { key: 'view_roster', name: 'View Roster', description: 'Basic visibility of this roster' },
     { key: 'modify_roster', name: 'Modify Roster', description: 'Edit name, color, and basic settings' },
-    { key: 'edit_defined_fields', name: 'Edit Defined Fields', description: 'Update data in standard columns' },
+    { key: 'edit_defined_fields', name: 'Roster Edit Mode', description: 'Allows toggling edit mode on the roster' },
     { key: 'edit_predefined', name: 'Edit Template', description: 'Modify predefined fields/dropdowns' },
     { key: 'add_sections', name: 'Add Sections', description: 'Create new sections and subsections' },
     { key: 'remove_sections', name: 'Remove Sections', description: 'Delete sections and their content' },

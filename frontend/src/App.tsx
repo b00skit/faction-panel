@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, useParams, Navigate, useLocation, useSearchParams, Outlet } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import api from './api';
+import echo from './echo';
 import { Faction as FactionType } from './types';
 import Loading from './components/Loading';
 import Login from './components/Login';
@@ -137,6 +138,30 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
       if (favicon) favicon.href = factionData.favicon;
     }
   }, [factionData]);
+
+  useEffect(() => {
+    if (!factionData?.id) return;
+
+    const updatesChannel = `faction.${factionData.id}.updates`;
+
+    echo.join(updatesChannel)
+      .here((users: any[]) => {
+        setOnlineUsers(users);
+      })
+      .joining((user: any) => {
+        setOnlineUsers((prev) => [...prev.filter(u => u.id !== user.id), user]);
+      })
+      .leaving((user: any) => {
+        setOnlineUsers((prev) => prev.filter((u) => u.id !== user.id));
+      })
+      .listen('.roster.updated', (e: { roster_id: number }) => {
+        fetchAllData();
+      });
+
+    return () => {
+      echo.leave(updatesChannel);
+    };
+  }, [factionData?.id]);
 
   const handleSetActiveDivId = (id: number | null) => {
     setActiveDivId(id);

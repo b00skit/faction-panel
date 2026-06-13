@@ -138,7 +138,7 @@ test('faction payload does not leak rosters relation', function () {
 test('RosterContentController update preserves hidden data for unauthorized users', function () {
     // 1. Grant public permission to edit defined fields
     $this->roster->rosterPermissions()->create([
-        'permissions' => ['view_roster', 'edit_defined_fields'],
+        'permissions' => ['view_roster', 'modify_roster'],
     ]);
 
     // 2. Normal user tries to update the row name, but does not provide secret_info
@@ -160,7 +160,7 @@ test('RosterContentController update preserves hidden data for unauthorized user
 test('RosterContentController update overwrites unauthorized modification attempt with existing hidden data', function () {
     // 1. Grant public permission to edit defined fields
     $this->roster->rosterPermissions()->create([
-        'permissions' => ['view_roster', 'edit_defined_fields'],
+        'permissions' => ['view_roster', 'modify_roster'],
     ]);
 
     // 2. Normal user tries to update, including changing the secret_info
@@ -182,7 +182,7 @@ test('RosterContentController update overwrites unauthorized modification attemp
 test('RosterContentController batchUpdate preserves hidden data for unauthorized users', function () {
     // 1. Grant public permission to edit defined fields
     $this->roster->rosterPermissions()->create([
-        'permissions' => ['view_roster', 'edit_defined_fields'],
+        'permissions' => ['view_roster', 'modify_roster'],
     ]);
 
     // 2. Normal user tries to batch update the row, including changing the secret_info

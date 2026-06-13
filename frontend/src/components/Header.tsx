@@ -4,6 +4,7 @@ import { Shield, Moon, Sun, LogOut, User, LogIn, ChevronDown, Settings, LayoutGr
 import QuickSearch from './QuickSearch';
 import api from '../api';
 import toast from 'react-hot-toast';
+import echo from '../echo';
 
 interface HeaderProps {
   isDark: boolean;
@@ -81,8 +82,25 @@ export const Header: React.FC<HeaderProps> = ({
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const userChannel = `App.Models.User.${user.id}`;
+    echo.private(userChannel)
+      .listen('.notification.created', (e: any) => {
+        setNotifications(prev => [e, ...prev]);
+        setUnreadCount(prev => prev + 1);
+        toast.success(`Notification: ${e.title}`, {
+          icon: '🔔',
+          duration: 4000
+        });
+      });
+
+    return () => {
+      echo.leave(userChannel);
+    };
   }, [user]);
 
   useEffect(() => {

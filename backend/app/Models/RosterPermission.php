@@ -2,10 +2,24 @@
 
 namespace App\Models;
 
+use App\Events\RosterUpdated;
 use Illuminate\Database\Eloquent\Model;
 
 class RosterPermission extends Model
 {
+    protected static function booted()
+    {
+        $clear = function ($rosterPermission) {
+            $roster = Roster::find($rosterPermission->roster_id);
+            if ($roster) {
+                Faction::invalidateRosterCache($roster->faction_id);
+                RosterUpdated::dispatch($roster);
+            }
+        };
+        static::saved($clear);
+        static::deleted($clear);
+    }
+
     protected $fillable = [
         'roster_id',
         'group_id',

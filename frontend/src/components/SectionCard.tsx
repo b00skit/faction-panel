@@ -73,8 +73,14 @@ export const SectionCard: React.FC<SectionCardProps> = ({
   onRowHeightSync,
   isChild = false
 }) => {
-  const canEditSection = canModerate || permissions?.add_sections;
-  const canAddChildSection = canModerate || permissions?.add_sections;
+  const sectionColumns = section.use_roster_columns ? rosterColumns : (section.columns || rosterColumns);
+  const hasHiddenColumns = (sectionColumns || []).some((col: any) => col.type?.includes('hidden'));
+  const canViewHidden = canModerate || permissions?.view_hidden_data;
+  const hasEditPermissions = canModerate || permissions?.edit_defined_fields || permissions?.edit_predefined;
+  const isSectionRestricted = hasEditPermissions && !canViewHidden && hasHiddenColumns;
+
+  const canEditSection = (canModerate || permissions?.add_sections) && !isSectionRestricted;
+  const canAddChildSection = (canModerate || permissions?.add_sections) && !isSectionRestricted;
 
   const renderCounts = (target: any) => {
     if (!target.counts || target.counts.length === 0) return null;
@@ -394,6 +400,7 @@ export const SectionCard: React.FC<SectionCardProps> = ({
                 syncedHeights={syncedHeights}
                 onRowHeightSync={onRowHeightSync}
                 isDynamic={isDynamic}
+                isRestricted={isSectionRestricted}
             />
         )}
 
@@ -499,6 +506,7 @@ export const SectionCard: React.FC<SectionCardProps> = ({
           syncedHeights={syncedHeights}
           onRowHeightSync={onRowHeightSync}
           isDynamic={isDynamic}
+          isRestricted={isSectionRestricted}
         />
       )}
 

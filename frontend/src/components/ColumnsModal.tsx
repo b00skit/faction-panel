@@ -5,6 +5,7 @@ import { ALL_ICONS } from '../icons';
 import { Reorder } from 'motion/react';
 import api from '../api';
 import { Roster } from '../types';
+import { findRecordDatabase } from '../utils';
 
 interface ColumnsModalProps {
   target: { id: number; name: string; columns?: any[]; use_roster_columns?: boolean | number };
@@ -275,7 +276,7 @@ export const ColumnsModal: React.FC<ColumnsModalProps> = ({ target, parentColumn
                                         className="w-full bg-surface border border-border p-2 rounded text-xs text-text focus:border-accent outline-none disabled:opacity-50"
                                     >
                                         <option value="">Select Field...</option>
-                                        {recordDatabases.find(db => db.id === col.linked_database_id)?.database_structure?.map((f: any) => (
+                                        {findRecordDatabase(recordDatabases, col.linked_database_id)?.database_structure?.map((f: any) => (
                                             <option key={f.id} value={f.id}>{f.name}</option>
                                         ))}
                                         <option value="id">Record ID</option>
@@ -320,7 +321,7 @@ export const ColumnsModal: React.FC<ColumnsModalProps> = ({ target, parentColumn
                                 
                                 // If it's a database-linked dataset, default the field
                                 if (ds?.record_database_id) {
-                                    const db = recordDatabases.find(d => d.id === ds.record_database_id);
+                                    const db = findRecordDatabase(recordDatabases, ds.record_database_id);
                                     const firstFieldId = db?.database_structure?.[0]?.id;
                                     updates.database_field_id = firstFieldId || 'id';
                                 } else {
@@ -345,7 +346,7 @@ export const ColumnsModal: React.FC<ColumnsModalProps> = ({ target, parentColumn
                                     onChange={(e) => updateColumn(index, 'database_field_id', e.target.value)}
                                     className="w-full bg-bg border border-border p-1.5 rounded text-[10px] font-bold text-accent focus:border-accent outline-none"
                                 >
-                                    {recordDatabases.find(db => db.id === datasets.find(d => d.id === col.dataset_id)?.record_database_id)?.database_structure?.map((f: any) => (
+                                    {findRecordDatabase(recordDatabases, datasets.find(d => d.id === col.dataset_id)?.record_database_id)?.database_structure?.map((f: any) => (
                                         <option key={f.id} value={f.id}>{f.name}</option>
                                     ))}                                    <option value="id">Record ID</option>
                                 </select>
@@ -451,7 +452,7 @@ if (!label) return null;
                           const key = cb.id || `cb_${cbIdx}_${label}`;
                           
                           const linkedDataset = datasets.find(d => d.id === col.dataset_id);
-                          const linkedDb = recordDatabases.find(db => db.id === linkedDataset?.record_database_id);
+                          const linkedDb = findRecordDatabase(recordDatabases, linkedDataset?.record_database_id);
                           const dbStructure = linkedDb?.database_structure || [];
 
                           return (
@@ -598,7 +599,7 @@ if (!label) return null;
                           const autoApply = typeof tag === 'string' ? null : tag.auto_apply;
 
                           const linkedDataset = datasets.find(d => d.id === col.dataset_id);
-                          const linkedDb = recordDatabases.find(db => db.id === linkedDataset?.record_database_id);
+                          const linkedDb = findRecordDatabase(recordDatabases, linkedDataset?.record_database_id);
                           const dbStructure = linkedDb?.database_structure || [];
                           
                           const tagIcons = ALL_ICONS;

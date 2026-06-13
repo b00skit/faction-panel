@@ -147,6 +147,7 @@ export interface FactionRecordDatabase {
   database_structure: any[];
   permissions: any;
   is_api_database: boolean;
+  api_database_type: string | null;
   is_published: boolean;
   detail_customization?: any;
   created_by: number | null;
@@ -154,6 +155,7 @@ export interface FactionRecordDatabase {
     id: number;
     username: string;
   };
+  entries?: any[];
 }
 
 export interface RosterDatasetOption {

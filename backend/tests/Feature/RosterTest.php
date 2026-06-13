@@ -1,10 +1,13 @@
 <?php
 
+use App\Events\RosterUpdated;
 use App\Models\Faction;
 use App\Models\Roster;
 use App\Models\RosterContent;
+use App\Models\RosterPermission;
 use App\Models\RosterSection;
 use App\Models\User;
+use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
     $this->user = User::factory()->create(['is_superadmin' => true]);
@@ -220,4 +223,37 @@ test('non-member cannot modify roster', function () {
             'name' => 'Unauthorized Edit',
         ])
         ->assertStatus(403);
+});
+
+test('updating roster permissions dispatches RosterUpdated event', function () {
+    Event::fake([RosterUpdated::class]);
+
+    $roster = Roster::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Roster',
+        'shortname' => 'ROST',
+        'color' => '#ffffff',
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    // Create a roster permission which should trigger saved event
+    $rosterPermission = RosterPermission::create([
+        'roster_id' => $roster->id,
+        'role_id' => null,
+        'group_id' => null,
+        'permissions' => ['view_roster' => 'YES'],
+    ]);
+
+    Event::assertDispatched(RosterUpdated::class, function ($event) use ($roster) {
+        return $event->roster->id === $roster->id;
+    });
+
+    Event::fake([RosterUpdated::class]); // reset fake for delete test
+
+    $rosterPermission->delete();
+
+    Event::assertDispatched(RosterUpdated::class, function ($event) use ($roster) {
+        return $event->roster->id === $roster->id;
+    });
 });

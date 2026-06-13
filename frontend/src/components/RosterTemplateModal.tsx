@@ -323,7 +323,7 @@ export const RosterTemplateModal: React.FC<RosterTemplateModalProps> = ({ shortn
                                                                                         <option value="">Default Field</option>
                                                                                         <option value="id">Entry ID</option>
                                                                                         <option value="created_at">Date Created</option>
-                                                                                        {recordDatabases.find(db => db.id === datasets.find(d => d.id === col.dataset_id).record_database_id)?.database_structure?.map((f: any) => (
+                                                                                        {recordDatabases.find(db => db.id === datasets.find(d => d.id === col.dataset_id)?.record_database_id)?.database_structure?.map((f: any) => (
                                                                                             <option key={f.id} value={f.id}>{f.name}</option>
                                                                                         ))}
                                                                                     </select>

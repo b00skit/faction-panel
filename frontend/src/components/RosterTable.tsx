@@ -7,7 +7,7 @@ import { Plus, Trash2, Check, X, Pencil, Tag, ExternalLink, GripVertical, Separa
 import * as LucideIcons from '../icons';
 import api from '../api';
 import toast from 'react-hot-toast';
-import { hexToRgb } from '../utils';
+import { hexToRgb, findRecordDatabase } from '../utils';
 import { LinkedDataModal } from './LinkedDataModal';
 
 const CellScaler: React.FC<{ children: React.ReactNode, className?: string, tooltipContent?: React.ReactNode, forceShowTooltip?: boolean, disabled?: boolean }> = ({ children, className, tooltipContent, forceShowTooltip, disabled }) => {
@@ -159,6 +159,7 @@ interface RosterTableProps {
   syncedHeights?: { [key: number]: number };
   onRowHeightSync?: (index: number, height: number, hasCheckbox: boolean) => void;
   isDynamic?: boolean;
+  isRestricted?: boolean;
 }
 
 const getResolvedDisplayValue = (
@@ -186,7 +187,7 @@ const getResolvedDisplayValue = (
         if (boundDataset) {
             let option = boundDataset.options?.find((o: any) => String(o.id) === String(rawValue));
             if (!option && boundDataset.record_database_id) {
-                const db = recordData.find(d => d.id === boundDataset.record_database_id);
+                const db = findRecordDatabase(recordData, boundDataset.record_database_id);
                 if (db && db.entries) {
                     const entry = db.entries.find((e: any) => {
                         if (String(e.entry_id) === String(rawValue)) return true;
@@ -234,12 +235,14 @@ export const RosterTable: React.FC<RosterTableProps> = ({
   saveTrigger,
   syncedHeights,
   onRowHeightSync,
-  isDynamic = false
+  isDynamic = false,
+  isRestricted = false
 }) => {
   const { shortname } = useParams<{ shortname: string }>();
-  const canEditDefined = !isDynamic && (canModerate || permissions?.edit_defined_fields);
-  const canEditPredefined = !isDynamic && (canModerate || permissions?.edit_predefined);
+  const canEditDefined = !isRestricted && !isDynamic && (canModerate || permissions?.modify_roster);
+  const canEditPredefined = !isRestricted && !isDynamic && (canModerate || permissions?.edit_predefined);
   const canEditAny = canEditDefined || canEditPredefined;
+  const effectiveEditMode = editMode && !isRestricted;
 
   const activeCols = columns && columns.length > 0 ? columns : [
     { id: 'rank', name: 'Rank', type: 'dropdown', checkboxes: ['Acting'] },
@@ -502,7 +505,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
 
   const evaluateFlag = React.useCallback((row: RosterContent, col: RosterColumn, flag: any) => {
     // If the user does not have edit access to the roster, do not evaluate flags at all.
-    const hasEditAccess = canModerate || permissions?.edit_defined_fields || permissions?.edit_predefined;
+    const hasEditAccess = canModerate || permissions?.modify_roster || permissions?.edit_predefined;
     if (!hasEditAccess) return false;
 
     if (!flag.rules || flag.rules.length === 0) return false;
@@ -583,8 +586,8 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                 }
 
                 let option = boundDataset?.options?.find((o: any) => String(o.id) === String(rawValue));
-                if (!option && boundDataset?.record_database_id) {
-                    const db = recordData.find(d => d.id === boundDataset.record_database_id);
+                if (!option && boundDataset.record_database_id) {
+                    const db = findRecordDatabase(recordData, boundDataset.record_database_id);
                     if (db && db.entries) {
                         const entry = db.entries.find((e: any) => {
                             if (String(e.entry_id) === String(rawValue)) return true;
@@ -835,7 +838,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
     if (col && col.dataset_id) {
         const dataset = datasets.find(d => d.id === col.dataset_id);
         if (dataset && dataset.record_database_id) {
-            const db = recordData.find(d => d.id === dataset.record_database_id);
+            const db = findRecordDatabase(recordData, dataset.record_database_id);
             if (db && db.entries) {
                 // Find matching entry
                 const fieldId = col.database_field_id || db.database_structure?.[0]?.id;
@@ -950,7 +953,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
     if (isHidden && !canViewHidden) return false;
     if (col.type === 'autofill') return false;
 
-    if (editMode && canEditPredefined) return true;
+    if (effectiveEditMode && canEditPredefined) return true;
     if (col.type.startsWith('predefined_') || col.type.includes('predefined')) {
         return canEditPredefined;
     }
@@ -960,6 +963,40 @@ export const RosterTable: React.FC<RosterTableProps> = ({
 
   const [focusedColId, setFocusedColId] = useState<string | null>(null);
   const [hasTyped, setHasTyped] = useState(false);
+  const [suggestionCoords, setSuggestionCoords] = useState<{ top: number, left: number, width: number, position: 'top' | 'bottom' } | null>(null);
+
+  useEffect(() => {
+    if (focusedColId && inputRef.current) {
+      const updateCoords = () => {
+        if (!inputRef.current) return;
+        const rect = inputRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const isTop = spaceBelow < 210; // suggestion list height max-h is max-h-48 (192px) + header + padding
+        
+        setSuggestionCoords({
+          top: isTop ? rect.top : rect.bottom,
+          left: rect.left + rect.width / 2,
+          width: Math.max(rect.width, 160),
+          position: isTop ? 'top' : 'bottom'
+        });
+      };
+
+      updateCoords();
+
+      const animationFrameId = requestAnimationFrame(updateCoords);
+      
+      window.addEventListener('scroll', updateCoords, true);
+      window.addEventListener('resize', updateCoords);
+      
+      return () => {
+        cancelAnimationFrame(animationFrameId);
+        window.removeEventListener('scroll', updateCoords, true);
+        window.removeEventListener('resize', updateCoords);
+      };
+    } else {
+      setSuggestionCoords(null);
+    }
+  }, [focusedColId, editData, hasTyped]);
 
   const inlineCheckboxes = localStorage.getItem('roster-inline-checkboxes') === 'true';
 
@@ -984,6 +1021,16 @@ export const RosterTable: React.FC<RosterTableProps> = ({
     
     const showValue = !isHiddenType || canViewHidden;
 
+    if (!showValue) {
+        return (
+          <div className="flex flex-col items-center justify-center h-full gap-0.5 py-1 transition-all whitespace-nowrap overflow-visible relative group/cell rt-cell-content">
+            <span className="text-[10px] uppercase font-black tracking-widest blur-[3px] select-none opacity-50 rt-cell-hidden-value">
+                ??????
+            </span>
+          </div>
+        );
+    }
+
     const boundDataset = col.dataset_id ? datasets.find(d => d.id === col.dataset_id) : null;
     const datasetOptions = boundDataset?.options || [];
     
@@ -993,7 +1040,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
 
     // If dynamic dataset, pull from recordData
     if (boundDataset?.record_database_id) {
-        const db = recordData.find(d => d.id === boundDataset.record_database_id);
+        const db = findRecordDatabase(recordData, boundDataset.record_database_id);
         if (db && db.entries) {
             effectiveOptions = db.entries.map((entry: any) => {
                 let fieldId = col.database_field_id;
@@ -1052,7 +1099,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
             }
             if (sourceValue) {
                 const sourceDataset = datasets.find(d => d.id === sourceCol?.dataset_id);
-                const db = recordData.find(d => d.id === sourceDataset?.record_database_id);
+                const db = findRecordDatabase(recordData, sourceDataset?.record_database_id);
                 if (db && db.entries) {
                     const entry = db.entries.find((e: any) => {
                         if (String(e.entry_id) === String(sourceValue)) return true;
@@ -1192,7 +1239,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
         if (sourceValue) {
             // Find the database linked to the source column's dataset
             const sourceDataset = datasets.find(d => d.id === sourceCol?.dataset_id);
-            const db = recordData.find(d => d.id === sourceDataset?.record_database_id);
+            const db = findRecordDatabase(recordData, sourceDataset?.record_database_id);
             
             if (db && db.entries) {
                 // Find entry that matches sourceValue (by the source column's referenced field)
@@ -1581,8 +1628,18 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                 )}
                 </CellScaler>
 
-          {filteredSuggestions.length > 0 && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-card border border-border rounded-lg shadow-[0_10px_40px_-5px_rgba(0,0,0,0.5)] z-[9999] overflow-hidden min-w-[160px] animate-in fade-in slide-in-from-top-1 duration-100">
+          {filteredSuggestions.length > 0 && suggestionCoords && createPortal(
+                <div 
+                    className="fixed bg-card border border-border rounded-lg shadow-[0_10px_40px_-5px_rgba(0,0,0,0.5)] z-[99999] overflow-hidden min-w-[160px] animate-in fade-in duration-100"
+                    style={{
+                        top: suggestionCoords.top,
+                        left: suggestionCoords.left,
+                        width: `${suggestionCoords.width}px`,
+                        transform: `translateX(-50%) ${suggestionCoords.position === 'top' ? 'translateY(-100%) translateY(-5px)' : 'translateY(5px)'}`,
+                        '--accent': accentColor,
+                        '--accent-rgb': accentColor?.startsWith('#') ? hexToRgb(accentColor) : undefined
+                    } as React.CSSProperties}
+                >
                     <div className="px-2 py-1 bg-surface/50 text-[7px] font-black text-muted/50 uppercase tracking-widest border-b border-border/30 mb-0.5">Suggestions</div>
                     <div className="max-h-48 overflow-y-auto p-1 space-y-0.5">
                         {filteredSuggestions.map((opt: any) => (
@@ -1603,7 +1660,8 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                             </button>
                         ))}
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
             {activeTagMenu?.rowId === row.id && activeTagMenu?.colId === col.id && createPortal(
                 <div 
@@ -1784,7 +1842,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
         <thead>
           <tr>
             <th className="rt-th" style={{ borderLeft: `3px solid ${accentColor}` }}>
-                {editMode ? (
+                {effectiveEditMode ? (
                     <div className="flex items-center justify-center">
                         <input 
                             type="checkbox" 
@@ -1795,9 +1853,19 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                     </div>
                 ) : '#'}
             </th>
-            {activeCols.map((col) => (
-              <th key={col.id} className="rt-th text-center">{col.name}</th>
-            ))}
+            {activeCols.map((col) => {
+              const isHiddenType = col.type?.includes('hidden');
+              const canViewHidden = canModerate || permissions?.view_hidden_data;
+              const isHeaderBlurred = isHiddenType && !canViewHidden;
+              return (
+                <th 
+                  key={col.id} 
+                  className={`rt-th text-center ${isHeaderBlurred ? 'blur-[3px] select-none opacity-50 font-black' : ''}`}
+                >
+                  {col.name}
+                </th>
+              );
+            })}
             <th className="rt-th"></th>
           </tr>
         </thead>
@@ -1831,8 +1899,8 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                 as="tr"
                 key={row.id} 
                 value={row}
-                dragListener={editMode && canEditPredefined && !editingRowId}
-                className={`rt-tr group/row ${isEditing ? 'bg-accent/5 z-[5000] relative' : ''} ${selectedRowIds.includes(row.id) ? 'bg-accent/5' : ''} ${editMode && canEditPredefined && !editingRowId ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                dragListener={effectiveEditMode && canEditPredefined && !editingRowId}
+                className={`rt-tr group/row ${isEditing ? 'bg-accent/5 z-[5000] relative' : ''} ${selectedRowIds.includes(row.id) ? 'bg-accent/5' : ''} ${effectiveEditMode && canEditPredefined && !editingRowId ? 'cursor-grab active:cursor-grabbing' : ''}`}
                 style={{ height: syncedHeight ? `${syncedHeight}px` : undefined }}
                 data-row-index={idx}
                 data-has-checkbox={hasCheckbox}
@@ -1843,14 +1911,14 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                     borderLeft: `3px solid ${effectiveRowColor || accentColor}`,
                     ...cellStyle
                   }}
-                  onClick={() => editMode && toggleSelectRow(row.id)}
+                  onClick={() => effectiveEditMode && toggleSelectRow(row.id)}
                 >
                   <div className="flex items-center justify-center w-full h-full gap-1 px-1">
-                    {editMode && canEditPredefined && (
+                    {effectiveEditMode && canEditPredefined && (
                         <GripVertical size={10} className="opacity-20 group-hover/row:opacity-100 transition-opacity shrink-0" />
                     )}
                     <div className="relative flex items-center justify-center flex-1">
-                      {editMode ? (
+                      {effectiveEditMode ? (
                           <>
                               <input 
                                   type="checkbox" 
@@ -2011,7 +2079,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                     </div>
                   ) : (
                     <>
-                      {editMode && (
+                      {effectiveEditMode && (
                         <button onClick={() => onDeleteRow?.(row.id)} className="p-1 text-danger/50 hover:text-danger hover:bg-danger/10 rounded opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={12} /></button>
                       )}
                     </>
@@ -2023,7 +2091,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
           })}
         </Reorder.Group>
         <tbody>
-          {editMode && (
+          {effectiveEditMode && (
             <tr>
               <td 
                 colSpan={activeCols.length + 2} 
@@ -2124,7 +2192,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
               </td>
             </tr>
           )}
-          {contents.length === 0 && !editMode && (
+          {contents.length === 0 && !effectiveEditMode && (
              <tr>
                 <td colSpan={activeCols.length + 2} className="rt-td text-muted italic opacity-40 text-center py-4 uppercase text-[9px] tracking-widest">
                     No data available in this section

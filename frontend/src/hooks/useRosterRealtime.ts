@@ -58,7 +58,7 @@ export const useRosterRealtime = ({
             });
 
         // Listen for global faction updates that might affect rosters
-        echo.private(updatesChannel)
+        echo.join(updatesChannel)
             .listen('.roster.updated', (e: { roster_id: number }) => {
                 if (e.roster_id === rosterId) {
                     onRosterUpdated?.();
