@@ -8,10 +8,10 @@ use App\Models\FactionRecordDatabase;
 use App\Models\FactionRecordEntry;
 use App\Models\FactionSnapshot;
 use App\Models\RosterContent;
-use App\Models\RosterDataset;
 use App\Models\User;
 use App\Services\DynamicSectionService;
 use App\Services\NotificationService;
+use App\Services\RosterResolutionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -557,45 +557,7 @@ class FactionController extends Controller
                         }
                     }
 
-                    if ($col && isset($col['dataset_id'])) {
-                        $datasetId = $col['dataset_id'];
-                        if (! isset($datasetCache[$datasetId])) {
-                            $datasetCache[$datasetId] = RosterDataset::with('options')->find($datasetId);
-                        }
-                        $dataset = $datasetCache[$datasetId];
-
-                        if ($dataset) {
-                            if ($dataset->record_database_id) {
-                                $dbId = $dataset->record_database_id;
-                                if (! isset($dbCache[$dbId])) {
-                                    $dbCache[$dbId] = FactionRecordDatabase::with(['entries' => function ($q) {
-                                        $q->where('is_active', true);
-                                    }])->find($dbId);
-                                }
-                                $db = $dbCache[$dbId];
-
-                                if ($db && is_numeric($value) && filter_var($value, FILTER_VALIDATE_INT) !== false) {
-                                    $entry = $db->entries->firstWhere('entry_id', $value);
-                                    if ($entry) {
-                                        $fieldId = $col['database_field_id'] ?? $db->database_structure[0]['id'] ?? 'id';
-                                        if ($fieldId === 'id') {
-                                            $value = $entry->entry_id;
-                                        } else {
-                                            $value = $entry->data[$fieldId] ?? $value;
-                                        }
-                                    }
-                                }
-                            } else {
-                                if (is_numeric($value) && filter_var($value, FILTER_VALIDATE_INT) !== false) {
-                                    $option = $dataset->options->firstWhere('id', $value);
-                                    if ($option) {
-                                        $value = $option->value;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
+                    $value = RosterResolutionService::resolveCellValue($content, $colId);
                     $resolvedLinksMap["{$rowId}_{$colId}"] = (is_array($value) || is_object($value)) ? '-' : (string) $value;
                 }
             }

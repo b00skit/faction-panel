@@ -8,6 +8,10 @@ use App\Models\RosterDataset;
 
 class RosterResolutionService
 {
+    protected static $dbCache = [];
+
+    protected static $datasetCache = [];
+
     /**
      * Resolves the string display value of a roster content cell.
      * Recursively follows linked roster cells and resolves database/dataset entry IDs.
@@ -61,16 +65,23 @@ class RosterResolutionService
         if (isset($col['linked_database_id']) && $col['linked_database_id']) {
             $dbId = FactionRecordDatabase::resolveDatabaseId($col['linked_database_id'], $factionDatabases);
         } elseif (isset($col['dataset_id']) && $col['dataset_id']) {
-            $dataset = RosterDataset::find($col['dataset_id']);
+            $datasetId = $col['dataset_id'];
+            if (! array_key_exists($datasetId, self::$datasetCache)) {
+                self::$datasetCache[$datasetId] = RosterDataset::find($datasetId);
+            }
+            $dataset = self::$datasetCache[$datasetId];
             if ($dataset && $dataset->record_database_id) {
                 $dbId = FactionRecordDatabase::resolveDatabaseId($dataset->record_database_id, $factionDatabases);
             }
         }
 
         if ($dbId) {
-            $db = FactionRecordDatabase::with(['entries' => function ($query) {
-                $query->where('is_active', true);
-            }])->find($dbId);
+            if (! array_key_exists($dbId, self::$dbCache)) {
+                self::$dbCache[$dbId] = FactionRecordDatabase::with(['entries' => function ($query) {
+                    $query->where('is_active', true);
+                }])->find($dbId);
+            }
+            $db = self::$dbCache[$dbId];
 
             if ($db && is_numeric($val) && filter_var($val, FILTER_VALIDATE_INT) !== false) {
                 $entry = $db->entries->firstWhere('entry_id', $val);
@@ -82,7 +93,11 @@ class RosterResolutionService
                 }
             }
         } elseif (isset($col['dataset_id']) && $col['dataset_id']) {
-            $dataset = RosterDataset::with('options')->find($col['dataset_id']);
+            $datasetId = $col['dataset_id'];
+            if (! array_key_exists($datasetId.'_options', self::$datasetCache)) {
+                self::$datasetCache[$datasetId.'_options'] = RosterDataset::with('options')->find($datasetId);
+            }
+            $dataset = self::$datasetCache[$datasetId.'_options'];
             if ($dataset && is_numeric($val) && filter_var($val, FILTER_VALIDATE_INT) !== false) {
                 $option = $dataset->options->firstWhere('id', $val);
                 if ($option) {
