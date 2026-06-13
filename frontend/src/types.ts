@@ -470,6 +470,7 @@ export interface Notification {
   type: 'system' | 'user' | 'faction';
   title: string;
   message: string;
+  link?: string | null;
   data?: any;
   is_read: boolean;
   created_at: string;

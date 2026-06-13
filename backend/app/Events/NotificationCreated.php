@@ -63,6 +63,7 @@ class NotificationCreated implements ShouldBroadcast
             'type' => $this->notification->type,
             'title' => $this->notification->title,
             'message' => $this->notification->message,
+            'link' => $this->notification->link,
             'data' => $this->notification->data,
             'is_read' => $this->notification->is_read,
             'created_at' => $this->notification->created_at ? $this->notification->created_at->toIso8601String() : null,

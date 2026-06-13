@@ -184,7 +184,13 @@ export const Header: React.FC<HeaderProps> = ({
       }
     }
 
-    if (notif.data) {
+    if (notif.link) {
+      if (notif.link.startsWith('http://') || notif.link.startsWith('https://')) {
+        window.open(notif.link, '_blank', 'noopener,noreferrer');
+      } else {
+        navigate(notif.link);
+      }
+    } else if (notif.data) {
       const short = notif.faction_shortname || branding?.shortname;
       if (notif.data.database_id) {
         navigate(`/${short}/records?database=${notif.data.database_id}`);
@@ -382,10 +388,17 @@ export const Header: React.FC<HeaderProps> = ({
                         {!notif.is_read && <div className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-accent" />}
                         <div className="pl-3">
                           <p className="text-[10px] font-bold text-text truncate pr-4">{notif.title}</p>
-                          <p className="text-[9px] text-muted font-medium mt-0.5 line-clamp-2">{notif.message}</p>
+                          {notif.type === 'system' ? (
+                            <p 
+                              className="text-[9px] text-muted font-medium mt-0.5 line-clamp-2"
+                              dangerouslySetInnerHTML={{ __html: notif.message }}
+                            />
+                          ) : (
+                            <p className="text-[9px] text-muted font-medium mt-0.5 line-clamp-2">{notif.message}</p>
+                          )}
                           <span className="text-[8px] text-muted/60 font-bold block mt-1.5">{new Date(notif.created_at).toLocaleString()}</span>
                         </div>
-                        {notif.data && (
+                        {(notif.link || notif.data) && (
                           <ExternalLink size={10} className="absolute right-3 top-3 text-muted/40 group-hover:text-accent transition-colors" />
                         )}
                       </div>
@@ -442,10 +455,17 @@ export const Header: React.FC<HeaderProps> = ({
                             {!notif.is_read && <div className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-accent" />}
                             <div className="pl-3">
                               <p className="text-[10px] font-bold text-text truncate pr-4">{notif.title}</p>
-                              <p className="text-[9px] text-muted font-medium mt-0.5 line-clamp-2">{notif.message}</p>
+                              {notif.type === 'system' ? (
+                                <p 
+                                  className="text-[9px] text-muted font-medium mt-0.5 line-clamp-2"
+                                  dangerouslySetInnerHTML={{ __html: notif.message }}
+                                />
+                              ) : (
+                                <p className="text-[9px] text-muted font-medium mt-0.5 line-clamp-2">{notif.message}</p>
+                              )}
                               <span className="text-[8px] text-muted/60 font-bold block mt-1.5">{new Date(notif.created_at).toLocaleString()}</span>
                             </div>
-                            {notif.data && (
+                            {(notif.link || notif.data) && (
                               <ExternalLink size={10} className="absolute right-3 top-3 text-muted/40 group-hover:text-accent transition-colors" />
                             )}
                           </div>
@@ -467,7 +487,7 @@ export const Header: React.FC<HeaderProps> = ({
                               <p className="text-[9px] text-muted font-medium mt-0.5 line-clamp-2">{notif.message}</p>
                               <span className="text-[8px] text-muted/60 font-bold block mt-1.5">{new Date(notif.created_at).toLocaleString()}</span>
                             </div>
-                            {notif.data && (
+                            {(notif.link || notif.data) && (
                               <ExternalLink size={10} className="absolute right-3 top-3 text-muted/40 group-hover:text-accent transition-colors" />
                             )}
                           </div>

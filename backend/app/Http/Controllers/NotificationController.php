@@ -93,6 +93,7 @@ class NotificationController extends Controller
                 'type' => $notif->type,
                 'title' => $notif->title,
                 'message' => $notif->message,
+                'link' => $notif->link,
                 'data' => $notif->data,
                 'is_read' => $isRead,
                 'created_at' => $notif->created_at,

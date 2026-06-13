@@ -264,12 +264,14 @@ class SuperadminController extends Controller
             'title' => 'required|string|max:255',
             'message' => 'required|string',
             'user_id' => 'nullable|integer|exists:users,id',
+            'link' => 'nullable|string|max:2048',
         ]);
 
         $notif = Notification::create([
             'type' => 'system',
             'title' => $validated['title'],
             'message' => $validated['message'],
+            'link' => $validated['link'] ?? null,
             'user_id' => $validated['user_id'] ?? null,
             'is_read' => false,
         ]);

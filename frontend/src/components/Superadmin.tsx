@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Loading from './Loading';
 import toast from 'react-hot-toast';
-import { Shield, ArrowLeft, Users, Building2, Edit2, Trash2, UserPlus, Check, X, CreditCard, Plus, Settings, ScrollText, BookOpen, Bell } from 'lucide-react';
+import { Shield, ArrowLeft, Users, Building2, Edit2, Trash2, UserPlus, Check, X, CreditCard, Plus, Settings, ScrollText, BookOpen, Bell, ExternalLink } from 'lucide-react';
 import { User, Faction, MembershipTier } from '../types';
 import HelpAdmin from './HelpAdmin';
 import CreditAdmin from './CreditAdmin';
@@ -192,6 +192,7 @@ const Superadmin: React.FC<SuperadminProps> = ({ user, onLogin }) => {
         const [sysTitle, setSysTitle] = useState('');
         const [sysMessage, setSysMessage] = useState('');
         const [sysUserId, setSysUserId] = useState('');
+        const [sysLink, setSysLink] = useState('');
         const [sysProcessing, setSysProcessing] = useState(false);
 
         const fetchSysNotifications = async () => {
@@ -221,12 +222,14 @@ const Superadmin: React.FC<SuperadminProps> = ({ user, onLogin }) => {
                 await api.post('/superadmin/notifications', {
                     title: sysTitle,
                     message: sysMessage,
-                    user_id: sysUserId ? parseInt(sysUserId) : null
+                    user_id: sysUserId ? parseInt(sysUserId) : null,
+                    link: sysLink.trim() || null
                 });
                 toast.success('System notification issued successfully', { id: loadToast });
                 setSysTitle('');
                 setSysMessage('');
                 setSysUserId('');
+                setSysLink('');
                 fetchSysNotifications();
             } catch (err: any) {
                 toast.error(err.response?.data?.message || 'Failed to issue notification', { id: loadToast });
@@ -276,7 +279,16 @@ const Superadmin: React.FC<SuperadminProps> = ({ user, onLogin }) => {
                                                 </span>
                                             )}
                                         </div>
-                                        <p className="text-xs text-muted font-medium mt-1">{n.message}</p>
+                                        <p 
+                                            className="text-xs text-muted font-medium mt-1"
+                                            dangerouslySetInnerHTML={{ __html: n.message }}
+                                        />
+                                        {n.link && (
+                                            <div className="flex items-center gap-1 mt-1 text-[10px] text-accent font-bold">
+                                                <ExternalLink size={10} />
+                                                <a href={n.link} target="_blank" rel="noopener noreferrer" className="hover:underline break-all">{n.link}</a>
+                                            </div>
+                                        )}
                                         <span className="text-[8px] text-muted/60 font-bold block mt-2">{new Date(n.created_at).toLocaleString()}</span>
                                     </div>
                                     <button 
@@ -327,6 +339,16 @@ const Superadmin: React.FC<SuperadminProps> = ({ user, onLogin }) => {
                             onChange={e => setSysUserId(e.target.value)}
                             placeholder="Leave blank to broadcast to everyone"
                             className="w-full bg-surface border border-border p-3 rounded-xl text-xs font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-black uppercase tracking-widest text-muted mb-1.5">Notification Link (Optional)</label>
+                          <input
+                            type="text"
+                            value={sysLink}
+                            onChange={e => setSysLink(e.target.value)}
+                            placeholder="e.g. https://google.com or /help"
+                            className="w-full bg-surface border border-border p-3 rounded-xl text-xs font-bold"
                           />
                         </div>
                         <button
