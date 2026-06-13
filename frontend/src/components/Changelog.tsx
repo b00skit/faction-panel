@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api';
 import Loading from './Loading';
-import { ArrowLeft, ScrollText } from 'lucide-react';
+import { ArrowLeft, ScrollText, Edit2 } from 'lucide-react';
 
-import { ChangelogEntry } from '../types';
+import { ChangelogEntry, User } from '../types';
 
 interface ChangelogProps {
     siteVersion?: string;
+    user?: User | null;
 }
 
-const Changelog: React.FC<ChangelogProps> = ({ siteVersion }) => {
+const Changelog: React.FC<ChangelogProps> = ({ siteVersion, user }) => {
     const [entries, setEntries] = useState<ChangelogEntry[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -56,6 +57,15 @@ const Changelog: React.FC<ChangelogProps> = ({ siteVersion }) => {
                                 <span className="ml-auto text-[9px] text-muted font-bold uppercase tracking-widest">
                                     {new Date(entry.released_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
                                 </span>
+                                {user?.is_superadmin && (
+                                    <Link
+                                        to={`/superadmin?tab=changelog&edit=${entry.id}`}
+                                        className="p-1 hover:bg-accent/15 text-muted hover:text-accent border border-border/50 hover:border-accent/30 rounded-lg transition flex items-center justify-center shrink-0"
+                                        title="Edit Entry"
+                                    >
+                                        <Edit2 size={12} />
+                                    </Link>
+                                )}
                             </div>
                             {entry.body && (
                                 <div 

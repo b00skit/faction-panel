@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import Loading from './Loading';
 import toast from 'react-hot-toast';
@@ -17,8 +17,31 @@ interface SuperadminProps {
 
 const Superadmin: React.FC<SuperadminProps> = ({ user, onLogin }) => {
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const tabParam = searchParams.get('tab');
+    
+    const [activeTab, setActiveTab] = useState<'factions' | 'users' | 'tiers' | 'settings' | 'help' | 'credits' | 'changelog' | 'notifications'>(
+        (tabParam && ['factions', 'users', 'tiers', 'settings', 'help', 'credits', 'changelog', 'notifications'].includes(tabParam) 
+            ? tabParam 
+            : 'factions') as any
+    );
+
+    const handleTabChange = (tab: 'factions' | 'users' | 'tiers' | 'settings' | 'help' | 'credits' | 'changelog' | 'notifications') => {
+        setActiveTab(tab);
+        const newParams = new URLSearchParams(searchParams);
+        newParams.set('tab', tab);
+        newParams.delete('edit'); // clear edit param when switching tabs
+        setSearchParams(newParams);
+    };
+
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab && ['factions', 'users', 'tiers', 'settings', 'help', 'credits', 'changelog', 'notifications'].includes(tab)) {
+            setActiveTab(tab as any);
+        }
+    }, [searchParams]);
+
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'factions' | 'users' | 'tiers' | 'settings' | 'help' | 'credits' | 'changelog' | 'notifications'>('factions');
     
     const [factions, setFactions] = useState<Faction[]>([]);
     const [usersList, setUsersList] = useState<User[]>([]);
@@ -383,7 +406,7 @@ const Superadmin: React.FC<SuperadminProps> = ({ user, onLogin }) => {
                 {/* Tabs */}
                 <div className="flex gap-2 border-b border-border mb-6">
                     <button
-                        onClick={() => setActiveTab('factions')}
+                        onClick={() => handleTabChange('factions')}
                         className={`flex items-center gap-2 px-6 py-3 font-bold text-[10px] uppercase tracking-widest transition-all ${
                             activeTab === 'factions' 
                                 ? 'border-b-2 border-accent text-accent bg-accent/5' 
@@ -393,7 +416,7 @@ const Superadmin: React.FC<SuperadminProps> = ({ user, onLogin }) => {
                         <Building2 size={14} /> Factions
                     </button>
                     <button
-                        onClick={() => setActiveTab('users')}
+                        onClick={() => handleTabChange('users')}
                         className={`flex items-center gap-2 px-6 py-3 font-bold text-[10px] uppercase tracking-widest transition-all ${
                             activeTab === 'users' 
                                 ? 'border-b-2 border-accent text-accent bg-accent/5' 
@@ -403,7 +426,7 @@ const Superadmin: React.FC<SuperadminProps> = ({ user, onLogin }) => {
                         <Users size={14} /> Users
                     </button>
                     <button
-                        onClick={() => setActiveTab('tiers')}
+                        onClick={() => handleTabChange('tiers')}
                         className={`flex items-center gap-2 px-6 py-3 font-bold text-[10px] uppercase tracking-widest transition-all ${
                             activeTab === 'tiers' 
                                 ? 'border-b-2 border-accent text-accent bg-accent/5' 
@@ -413,7 +436,7 @@ const Superadmin: React.FC<SuperadminProps> = ({ user, onLogin }) => {
                         <CreditCard size={14} /> Membership Tiers
                     </button>
                     <button
-                        onClick={() => setActiveTab('settings')}
+                        onClick={() => handleTabChange('settings')}
                         className={`flex items-center gap-2 px-6 py-3 font-bold text-[10px] uppercase tracking-widest transition-all ${
                             activeTab === 'settings' 
                                 ? 'border-b-2 border-accent text-accent bg-accent/5' 
@@ -423,7 +446,7 @@ const Superadmin: React.FC<SuperadminProps> = ({ user, onLogin }) => {
                         <Settings size={14} /> System Settings
                     </button>
                     <button
-                        onClick={() => setActiveTab('help')}
+                        onClick={() => handleTabChange('help')}
                         className={`flex items-center gap-2 px-6 py-3 font-bold text-[10px] uppercase tracking-widest transition-all ${
                             activeTab === 'help' 
                                 ? 'border-b-2 border-accent text-accent bg-accent/5' 
@@ -433,7 +456,7 @@ const Superadmin: React.FC<SuperadminProps> = ({ user, onLogin }) => {
                         <BookOpen size={14} /> Help Center
                     </button>
                     <button
-                        onClick={() => setActiveTab('credits')}
+                        onClick={() => handleTabChange('credits')}
                         className={`flex items-center gap-2 px-6 py-3 font-bold text-[10px] uppercase tracking-widest transition-all ${
                             activeTab === 'credits'
                                 ? 'border-b-2 border-accent text-accent bg-accent/5'
@@ -443,7 +466,7 @@ const Superadmin: React.FC<SuperadminProps> = ({ user, onLogin }) => {
                         <Shield size={14} /> Credits
                     </button>
                     <button
-                        onClick={() => setActiveTab('changelog')}
+                        onClick={() => handleTabChange('changelog')}
                         className={`flex items-center gap-2 px-6 py-3 font-bold text-[10px] uppercase tracking-widest transition-all ${
                             activeTab === 'changelog'
                                 ? 'border-b-2 border-accent text-accent bg-accent/5'
@@ -453,7 +476,7 @@ const Superadmin: React.FC<SuperadminProps> = ({ user, onLogin }) => {
                         <ScrollText size={14} /> Changelog
                     </button>
                     <button
-                        onClick={() => setActiveTab('notifications')}
+                        onClick={() => handleTabChange('notifications')}
                         className={`flex items-center gap-2 px-6 py-3 font-bold text-[10px] uppercase tracking-widest transition-all ${
                             activeTab === 'notifications'
                                 ? 'border-b-2 border-accent text-accent bg-accent/5'

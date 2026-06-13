@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../api';
 import toast from 'react-hot-toast';
 import { Plus, Edit2, Trash2, X, Check, ScrollText } from 'lucide-react';
@@ -14,6 +15,18 @@ const ChangelogAdmin: React.FC = () => {
     const [newItemType, setNewItemType] = useState<ChangelogItem['type']>('Feature');
     const [newItemContent, setNewItemContent] = useState('');
     const confirm = useConfirm();
+
+    const [searchParams, setSearchParams] = useSearchParams();
+    const editId = searchParams.get('edit') ? parseInt(searchParams.get('edit')!) : null;
+
+    const handleCloseEdit = () => {
+        setEditing(null);
+        if (searchParams.has('edit')) {
+            const newParams = new URLSearchParams(searchParams);
+            newParams.delete('edit');
+            setSearchParams(newParams);
+        }
+    };
 
     const handleAddItem = () => {
         if (!newItemContent.trim() || !editing) return;
@@ -41,12 +54,34 @@ const ChangelogAdmin: React.FC = () => {
             });
             items = parsedItems.length > 0 ? parsedItems : [{ type: 'Feature', content: entry.body }];
         }
-        setEditing({ ...entry, items });
+        let released_at = '';
+        if (entry.released_at) {
+            const match = entry.released_at.match(/^(\d{4}-\d{2}-\d{2})/);
+            if (match) {
+                released_at = match[1];
+            } else {
+                try {
+                    released_at = new Date(entry.released_at).toISOString().split('T')[0];
+                } catch {
+                    released_at = '';
+                }
+            }
+        }
+        setEditing({ ...entry, items, released_at });
     };
 
     useEffect(() => {
         fetchEntries();
     }, []);
+
+    useEffect(() => {
+        if (editId && entries.length > 0) {
+            const entryToEdit = entries.find(e => e.id === editId);
+            if (entryToEdit && (!editing || editing.id !== editId)) {
+                startEdit(entryToEdit);
+            }
+        }
+    }, [editId, entries]);
 
     const fetchEntries = async () => {
         try {
@@ -75,7 +110,7 @@ const ChangelogAdmin: React.FC = () => {
                 await api.post('/superadmin/changelog', editing);
             }
             toast.success('Saved', { id: loadToast });
-            setEditing(null);
+            handleCloseEdit();
             fetchEntries();
         } catch (err: any) {
             toast.error(err.response?.data?.message || 'Failed to save', { id: loadToast });
@@ -106,6 +141,11 @@ const ChangelogAdmin: React.FC = () => {
         setEditing({ version: '', title: '', items: [], released_at: new Date().toISOString().split('T')[0], order: 0 });
         setNewItemType('Feature');
         setNewItemContent('');
+        if (searchParams.has('edit')) {
+            const newParams = new URLSearchParams(searchParams);
+            newParams.delete('edit');
+            setSearchParams(newParams);
+        }
     };
 
     if (loading) return <div className="text-muted text-xs p-4">Loading...</div>;
@@ -257,7 +297,7 @@ const ChangelogAdmin: React.FC = () => {
                         <div className="flex gap-2 justify-end">
                             <button
                                 type="button"
-                                onClick={() => setEditing(null)}
+                                onClick={handleCloseEdit}
                                 className="flex items-center gap-1 px-4 py-2 border border-border rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-surface transition"
                             >
                                 <X size={12} /> Cancel

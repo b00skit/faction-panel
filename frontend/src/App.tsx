@@ -579,7 +579,7 @@ export default function App() {
              <Route path="/help/article/:slug" element={<HelpArticleView />} />
              <Route path="/welcome" element={<Welcome />} />
              <Route path="/credits" element={<Credits />} />
-             <Route path="/changelog" element={<Changelog siteVersion={siteVersion} />} />
+             <Route path="/changelog" element={<Changelog siteVersion={siteVersion} user={user} />} />
           </Route>
 
           <Route path="/:shortname/*" element={
