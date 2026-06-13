@@ -105,3 +105,43 @@ test('superadmin can update changelog entry with items', function () {
     expect($entry->fresh()->items)->toBeArray();
     expect($entry->fresh()->items[0]['content'])->toBe('Added item');
 });
+
+test('non-superadmin cannot create changelog entry', function () {
+    $user = User::factory()->create(['is_superadmin' => false]);
+
+    $response = $this->actingAs($user)->postJson('/api/superadmin/changelog', [
+        'version' => 'v2.1.0',
+        'title' => 'Release 2.1.0',
+        'released_at' => '2026-06-08',
+    ]);
+
+    $response->assertStatus(403);
+});
+
+test('non-superadmin cannot update changelog entry', function () {
+    $user = User::factory()->create(['is_superadmin' => false]);
+    $entry = ChangelogEntry::create([
+        'version' => 'v1.0.0',
+        'title' => 'Initial',
+        'released_at' => '2026-06-01',
+    ]);
+
+    $response = $this->actingAs($user)->putJson("/api/superadmin/changelog/{$entry->id}", [
+        'title' => 'Updated Title',
+    ]);
+
+    $response->assertStatus(403);
+});
+
+test('non-superadmin cannot delete changelog entry', function () {
+    $user = User::factory()->create(['is_superadmin' => false]);
+    $entry = ChangelogEntry::create([
+        'version' => 'v1.0.0',
+        'title' => 'Initial',
+        'released_at' => '2026-06-01',
+    ]);
+
+    $response = $this->actingAs($user)->deleteJson("/api/superadmin/changelog/{$entry->id}");
+
+    $response->assertStatus(403);
+});

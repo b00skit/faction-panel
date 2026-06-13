@@ -57,7 +57,13 @@ const Changelog: React.FC<ChangelogProps> = ({ siteVersion }) => {
                                     {new Date(entry.released_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
                                 </span>
                             </div>
-                            {entry.items && entry.items.length > 0 ? (
+                            {entry.body && (
+                                <div 
+                                    className="text-sm text-muted leading-relaxed mb-4 html-content" 
+                                    dangerouslySetInnerHTML={{ __html: entry.body }} 
+                                />
+                            )}
+                            {entry.items && entry.items.length > 0 && (
                                 <div className="space-y-4 mt-2">
                                     {(['Feature', 'Modification', 'Backend', 'Fix'] as const).map(type => {
                                         const typeItems = entry.items!.filter(item => item.type === type);
@@ -78,18 +84,16 @@ const Changelog: React.FC<ChangelogProps> = ({ siteVersion }) => {
                                                 </h3>
                                                 <ul className="space-y-1 pl-3 text-xs text-muted leading-relaxed list-none">
                                                     {typeItems.map((item, idx) => (
-                                                        <li key={idx} className="relative pl-3 before:content-['•'] before:absolute before:left-0 before:text-muted/60">
-                                                            {item.content}
-                                                        </li>
+                                                        <li 
+                                                            key={idx} 
+                                                            className="relative pl-3 before:content-['•'] before:absolute before:left-0 before:text-muted/60"
+                                                            dangerouslySetInnerHTML={{ __html: item.content }}
+                                                        />
                                                     ))}
                                                 </ul>
                                             </div>
                                         );
                                     })}
-                                </div>
-                            ) : (
-                                <div className="text-sm text-muted whitespace-pre-line leading-relaxed">
-                                    {entry.body}
                                 </div>
                             )}
                         </div>

@@ -62,8 +62,8 @@ const ChangelogAdmin: React.FC = () => {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editing) return;
-        if (!editing.items || editing.items.length === 0) {
-            toast.error('Please add at least one changelog item');
+        if ((!editing.items || editing.items.length === 0) && !editing.body?.trim()) {
+            toast.error('Please add at least one changelog item or a description body');
             return;
         }
         setProcessing(true);
@@ -171,6 +171,16 @@ const ChangelogAdmin: React.FC = () => {
                                 className="w-full bg-surface border border-border p-2.5 rounded-lg text-sm"
                                 placeholder="What's new in this release..."
                                 required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[9px] font-bold uppercase tracking-widest text-muted mb-1">Body / Description (HTML supported)</label>
+                            <textarea
+                                value={editing.body || ''}
+                                onChange={e => setEditing({ ...editing, body: e.target.value })}
+                                className="w-full bg-surface border border-border p-2.5 rounded-lg text-sm"
+                                placeholder="Describe the release in detail (HTML tags are supported)..."
+                                rows={4}
                             />
                         </div>
                         <div className="space-y-3">
@@ -284,7 +294,13 @@ const ChangelogAdmin: React.FC = () => {
                                         {new Date(entry.released_at).toLocaleDateString()}
                                     </span>
                                 </div>
-                                {entry.items && entry.items.length > 0 ? (
+                                {entry.body && (
+                                    <div 
+                                        className="text-xs text-muted line-clamp-2 mt-1 html-content" 
+                                        dangerouslySetInnerHTML={{ __html: entry.body }} 
+                                    />
+                                )}
+                                {entry.items && entry.items.length > 0 && (
                                     <div className="flex flex-wrap gap-1.5 mt-2">
                                         {entry.items.map((item, idx) => (
                                             <span key={idx} className="inline-flex items-center gap-1.5 text-[9px] text-muted bg-surface border border-border px-2 py-0.5 rounded font-medium">
@@ -294,12 +310,10 @@ const ChangelogAdmin: React.FC = () => {
                                                     item.type === 'Backend' ? 'bg-indigo-500' :
                                                     'bg-danger'
                                                 }`} />
-                                                {item.content}
+                                                <span dangerouslySetInnerHTML={{ __html: item.content }} />
                                             </span>
                                         ))}
                                     </div>
-                                ) : (
-                                    <p className="text-xs text-muted line-clamp-2 whitespace-pre-line mt-1">{entry.body}</p>
                                 )}
                             </div>
                             <div className="flex gap-2 shrink-0">

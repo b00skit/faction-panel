@@ -18,6 +18,10 @@ class ChangelogController extends Controller
 
     public function store(Request $request)
     {
+        if (! $request->user() || ! $request->user()->is_superadmin) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $data = $request->validate([
             'version' => 'required|string|max:50',
             'title' => 'required|string|max:255',
@@ -38,6 +42,10 @@ class ChangelogController extends Controller
 
     public function update(Request $request, ChangelogEntry $entry)
     {
+        if (! $request->user() || ! $request->user()->is_superadmin) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $data = $request->validate([
             'version' => 'sometimes|string|max:50',
             'title' => 'sometimes|string|max:255',
@@ -57,8 +65,12 @@ class ChangelogController extends Controller
         return response()->json($entry->fresh());
     }
 
-    public function destroy(ChangelogEntry $entry)
+    public function destroy(Request $request, ChangelogEntry $entry)
     {
+        if (! $request->user() || ! $request->user()->is_superadmin) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $this->audit('changelog.delete', "Deleted changelog entry '{$entry->title}' ({$entry->version})", null, $entry, $entry->getAttributes());
 
         $entry->delete();
