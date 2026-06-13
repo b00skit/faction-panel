@@ -388,3 +388,146 @@ test('hierarchy and node modifications invalidate cache and broadcast HierarchyU
     expect($response3->json()[0]['name'])->toBe('Invalidated Name');
 });
 
+test('handles and resolves slots with cross-roster linked and database columns without failing validation or corrupting data', function () {
+    // 1. Create a dynamic database and database entry
+    $db = App\Models\FactionRecordDatabase::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Characters',
+        'is_published' => true,
+        'database_structure' => [
+            ['id' => 'name', 'name' => 'Name', 'type' => 'text'],
+        ],
+        'created_by' => $this->user->id,
+    ]);
+
+    $dbEntry = $db->entries()->create([
+        'entry_id' => 101,
+        'database_id' => $db->id,
+        'data' => ['name' => 'John Character'],
+        'is_active' => true,
+        'created_by' => $this->user->id,
+    ]);
+
+    // 2. Create rosters
+    $sourceRoster = Roster::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Source Roster',
+        'shortname' => 'SRC',
+        'color' => '#3b82f6',
+        'order' => 0,
+        'columns' => [
+            ['id' => 'name', 'name' => 'Name', 'type' => 'text'],
+            ['id' => 'rank', 'name' => 'Rank', 'type' => 'text'],
+        ],
+        'created_by' => $this->user->id,
+    ]);
+
+    $srcSection = RosterSection::create([
+        'roster_id' => $sourceRoster->id,
+        'name' => 'Command',
+        'shortname' => 'CMD',
+        'type' => 'section',
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $srcRow = RosterContent::create([
+        'section_id' => $srcSection->id,
+        'type' => 'predefined',
+        'content' => ['name' => 'Alice Source', 'rank' => 'Director'],
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $targetRoster = Roster::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Target Roster',
+        'shortname' => 'TGT',
+        'color' => '#ef4444',
+        'order' => 1,
+        'columns' => [
+            ['id' => 'linked_name', 'name' => 'Linked Name', 'type' => 'linked_roster_data'],
+            ['id' => 'db_rank', 'name' => 'DB Rank', 'type' => 'text', 'linked_database_id' => $db->id, 'database_field_id' => 'name'],
+        ],
+        'created_by' => $this->user->id,
+    ]);
+
+    $tgtSection = RosterSection::create([
+        'roster_id' => $targetRoster->id,
+        'name' => 'Staff',
+        'shortname' => 'STF',
+        'type' => 'section',
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    // This row has targetRoster columns:
+    // 'linked_name' links to SRC roster Alice Source row, 'name' column
+    // 'db_rank' links to DB Character Entry 101 ('John Character')
+    $tgtRow = RosterContent::create([
+        'section_id' => $tgtSection->id,
+        'type' => 'predefined',
+        'content' => [
+            'linked_name' => ['roster_id' => $sourceRoster->id, 'row_id' => $srcRow->id, 'col_id' => 'name'],
+            'db_rank' => 101,
+        ],
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    // 3. Create hierarchy
+    $hierarchy = Hierarchy::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Diagram',
+        'color' => '#ffffff',
+        'roster_id' => $targetRoster->id,
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $node = HierarchyNode::create([
+        'hierarchy_id' => $hierarchy->id,
+        'title' => 'Card',
+        'color' => '#ffffff',
+        'slots' => [
+            [
+                'id' => 'slot_1',
+                'roster_content_id' => $tgtRow->id,
+                'label' => 'Director', // resolved rank from linked column
+                'value' => 'Alice Source', // resolved name from linked column
+            ]
+        ],
+        'order' => 0,
+    ]);
+
+    // 4. Update the card
+    // We send an object (linked link config) in slots.value and label to test that validator ignores it
+    // and that it resolves correctly on return without corrupting targetRoster content
+    $response = $this->actingAs($this->user)
+        ->putJson("/api/hierarchy-nodes/{$node->id}", [
+            'title' => 'Updated Card',
+            'slots' => [
+                [
+                    'id' => 'slot_1',
+                    'roster_content_id' => $tgtRow->id,
+                    'label' => ['roster_id' => $sourceRoster->id, 'row_id' => $srcRow->id, 'col_id' => 'rank'], // Object instead of string
+                    'value' => 'Alice Source',
+                ]
+            ]
+        ]);
+
+    $response->assertStatus(200);
+
+    $updatedNode = $response->json();
+    // Slots should be resolved to strings
+    expect($updatedNode['slots'][0]['label'])->toBe('John Character');
+    expect($updatedNode['slots'][0]['value'])->toBe('Alice Source');
+
+    // Ensure the roster content was NOT corrupted (it should still have the linked roster config / database ID)
+    $tgtRow->refresh();
+    expect($tgtRow->content['linked_name'])->toBeArray();
+    expect($tgtRow->content['linked_name']['row_id'])->toBe($srcRow->id);
+    expect($tgtRow->content['db_rank'])->toBe(101);
+});
+
+

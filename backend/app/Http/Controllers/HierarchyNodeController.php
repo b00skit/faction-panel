@@ -32,8 +32,8 @@ class HierarchyNodeController extends Controller
             'slots' => 'nullable|array',
             'slots.*.id' => 'required|string',
             'slots.*.roster_content_id' => 'nullable|integer|exists:roster_contents,id',
-            'slots.*.label' => 'nullable|string|max:255',
-            'slots.*.value' => 'nullable|string|max:255',
+            'slots.*.label' => 'nullable',
+            'slots.*.value' => 'nullable',
             'slots.*.color' => ['nullable', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'slots.*.label_color' => ['nullable', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'slots.*.label_bold' => 'nullable|boolean',
@@ -68,6 +68,7 @@ class HierarchyNodeController extends Controller
 
         $this->audit('hierarchy_node.create', "Created node '{$node->title}' in hierarchy '{$hierarchy->name}'", $hierarchy->faction_id, $node, null, $node->getAttributes());
 
+        $node = \App\Services\RosterResolutionService::resolveNodeSlots($node);
         return response()->json($node, 201);
     }
 
@@ -94,8 +95,8 @@ class HierarchyNodeController extends Controller
             'slots' => 'sometimes|nullable|array',
             'slots.*.id' => 'required|string',
             'slots.*.roster_content_id' => 'nullable|integer|exists:roster_contents,id',
-            'slots.*.label' => 'nullable|string|max:255',
-            'slots.*.value' => 'nullable|string|max:255',
+            'slots.*.label' => 'nullable',
+            'slots.*.value' => 'nullable',
             'slots.*.color' => ['nullable', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'slots.*.label_color' => ['nullable', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'slots.*.label_bold' => 'nullable|boolean',
@@ -136,6 +137,7 @@ class HierarchyNodeController extends Controller
 
                         // Identify column keys from Roster columns if possible, else defaults
                         $roster = $content->section->roster;
+                        $columns = [];
                         if ($roster && $roster->columns) {
                             $columns = $roster->columns;
                             $nameCol = collect($columns)->first(fn($c) => ($c['id'] ?? '') === 'name' || str_contains(strtolower($c['name'] ?? ''), 'name'));
@@ -144,15 +146,40 @@ class HierarchyNodeController extends Controller
                             if ($rankCol) $rankColId = $rankCol['id'];
                         }
 
-                        // Check if we are updating values or if we should pull them (e.g. if the user didn't modify label/value)
+                        $nameCol = collect($columns)->firstWhere('id', $nameColId);
+                        $rankCol = collect($columns)->firstWhere('id', $rankColId);
+
+                        // Check if these columns are read-only / dynamic (linked to database/other rosters)
+                        $isNameColDynamic = $nameCol && (
+                            str_contains($nameCol['type'] ?? '', 'linked_roster_data') ||
+                            !empty($nameCol['linked_database_id']) ||
+                            !empty($nameCol['dataset_id'])
+                        );
+
+                        $isRankColDynamic = $rankCol && (
+                            str_contains($rankCol['type'] ?? '', 'linked_roster_data') ||
+                            !empty($rankCol['linked_database_id']) ||
+                            !empty($rankCol['dataset_id'])
+                        );
+
                         $wasDirty = false;
-                        if (array_key_exists('label', $slot) && $slot['label'] !== ($oldContent[$rankColId] ?? null)) {
-                            $newContent[$rankColId] = $slot['label'];
-                            $wasDirty = true;
+                        
+                        // Resolve current values to compare with the text input from the slot
+                        $resolvedRankVal = \App\Services\RosterResolutionService::resolveCellValue($content, $rankColId);
+                        $resolvedNameVal = \App\Services\RosterResolutionService::resolveCellValue($content, $nameColId);
+
+                        // If user edited the text and the target column is NOT dynamic/read-only, update it
+                        if (array_key_exists('label', $slot) && $slot['label'] !== $resolvedRankVal) {
+                            if (!$isRankColDynamic) {
+                                $newContent[$rankColId] = $slot['label'];
+                                $wasDirty = true;
+                            }
                         }
-                        if (array_key_exists('value', $slot) && $slot['value'] !== ($oldContent[$nameColId] ?? null)) {
-                            $newContent[$nameColId] = $slot['value'];
-                            $wasDirty = true;
+                        if (array_key_exists('value', $slot) && $slot['value'] !== $resolvedNameVal) {
+                            if (!$isNameColDynamic) {
+                                $newContent[$nameColId] = $slot['value'];
+                                $wasDirty = true;
+                            }
                         }
 
                         if ($wasDirty) {
@@ -161,11 +188,11 @@ class HierarchyNodeController extends Controller
 
                             // Log Roster Revision
                             RosterRevision::logRevision($roster->id, "Updated via Hierarchy diagram '{$hierarchy->name}' (Card: {$node->title})", Auth::id());
-                        } else {
-                            // If the values weren't updated by user, pull current values from roster to synchronize
-                            $slot['label'] = $oldContent[$rankColId] ?? $slot['label'];
-                            $slot['value'] = $oldContent[$nameColId] ?? $slot['value'];
                         }
+
+                        // Always set slot's label and value to the resolved string values to avoid storing objects or IDs in slots JSON
+                        $slot['label'] = \App\Services\RosterResolutionService::resolveCellValue($content, $rankColId);
+                        $slot['value'] = \App\Services\RosterResolutionService::resolveCellValue($content, $nameColId);
                     }
                 }
             }
@@ -176,68 +203,7 @@ class HierarchyNodeController extends Controller
         $this->audit('hierarchy_node.update', "Updated node '{$node->title}' in hierarchy '{$hierarchy->name}'", $hierarchy->faction_id, $node, $oldValues, $node->getDirty());
 
         $node->refresh();
-
-        if (!empty($node->roster_sync_config['enabled']) && !empty($node->roster_sync_config['section_id'])) {
-            $secId = (int)$node->roster_sync_config['section_id'];
-            $start = isset($node->roster_sync_config['row_start']) ? (int)$node->roster_sync_config['row_start'] : 1;
-            $end = isset($node->roster_sync_config['row_end']) ? (int)$node->roster_sync_config['row_end'] : null;
-            $keyCol = !empty($node->roster_sync_config['key_col']) ? $node->roster_sync_config['key_col'] : 'rank';
-            $valueCol = !empty($node->roster_sync_config['value_col']) ? $node->roster_sync_config['value_col'] : 'name';
-            
-            $rows = RosterContent::where('section_id', $secId)->orderBy('order')->orderBy('id')->get();
-            $offset = max(0, $start - 1);
-            $limit = $end ? ($end - $start + 1) : null;
-            if ($limit !== null) {
-                $rows = $rows->slice($offset, $limit);
-            } else {
-                $rows = $rows->slice($offset);
-            }
-            
-            $dynamicSlots = [];
-            foreach ($rows as $row) {
-                $labelColor = $node->roster_sync_config['label_color'] ?? null;
-                $labelBold = isset($node->roster_sync_config['label_bold']) ? (bool)$node->roster_sync_config['label_bold'] : true;
-                $valueColor = $node->roster_sync_config['value_color'] ?? null;
-                $valueBold = isset($node->roster_sync_config['value_bold']) ? (bool)$node->roster_sync_config['value_bold'] : true;
-                
-                $dynamicSlots[] = [
-                    'id' => 'auto_' . $row->id,
-                    'roster_content_id' => $row->id,
-                    'label' => $row->content[$keyCol] ?? '',
-                    'value' => $row->content[$valueCol] ?? '',
-                    'label_color' => $labelColor,
-                    'label_bold' => $labelBold,
-                    'value_color' => $valueColor,
-                    'value_bold' => $valueBold,
-                    'roster_content' => [
-                        'id' => $row->id,
-                        'section_id' => $row->section_id,
-                        'content' => $row->content,
-                        'color' => $row->color,
-                    ]
-                ];
-            }
-            $node->slots = $dynamicSlots;
-        } else {
-            // Eager load resolved slot contents before returning
-            $slots = $node->slots ?? [];
-            $resolvedSlots = [];
-            foreach ($slots as $slot) {
-                if (!empty($slot['roster_content_id'])) {
-                    $rc = RosterContent::find($slot['roster_content_id']);
-                    if ($rc) {
-                        $slot['roster_content'] = [
-                            'id' => $rc->id,
-                            'section_id' => $rc->section_id,
-                            'content' => $rc->content,
-                            'color' => $rc->color,
-                        ];
-                    }
-                }
-                $resolvedSlots[] = $slot;
-            }
-            $node->slots = $resolvedSlots;
-        }
+        $node = \App\Services\RosterResolutionService::resolveNodeSlots($node);
 
         return response()->json($node);
     }

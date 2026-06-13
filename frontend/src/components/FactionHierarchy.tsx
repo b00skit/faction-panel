@@ -135,6 +135,42 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
     const canCreateHierarchy = user?.is_superadmin || permissions.includes('create_hierarchy');
     const canManageTabs = user?.is_superadmin || permissions.includes('global_hierarchy_moderation');
 
+    // Helper: resolve a raw cell value recursively if it's a cross-roster link object
+    const resolveRawCellValue = (val: any, rosterList: any[]): string => {
+        if (!val) return '';
+        if (typeof val === 'object') {
+            if (val.row_id && val.col_id) {
+                // Find row in all rosters
+                for (const r of rosterList) {
+                    const findRow = (section: any): any => {
+                        if (section.contents) {
+                            const found = section.contents.find((c: any) => c.id === val.row_id);
+                            if (found) return found;
+                        }
+                        if (section.children) {
+                            for (const child of section.children) {
+                                const found = findRow(child);
+                                if (found) return found;
+                            }
+                        }
+                        return null;
+                    };
+                    const rootSecs = r.root_sections || r.rootSections || [];
+                    for (const sec of rootSecs) {
+                        const found = findRow(sec);
+                        if (found) {
+                            const rawCell = found.content?.[val.col_id];
+                            return resolveRawCellValue(rawCell, rosterList);
+                        }
+                    }
+                }
+                return '-';
+            }
+            return JSON.stringify(val);
+        }
+        return String(val);
+    };
+
     // Helper: get all members from a roster
     const getRosterMembers = (rosterId: number) => {
         const roster = rosters.find(r => r.id === rosterId);
@@ -150,8 +186,10 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
         const extract = (section: any) => {
             if (section.contents) {
                 section.contents.forEach((c: any) => {
-                    const name = c.content?.[nameKey] || '-';
-                    const rank = c.content?.[rankKey] || '-';
+                    const rawName = c.content?.[nameKey] ?? '';
+                    const rawRank = c.content?.[rankKey] ?? '';
+                    const name = resolveRawCellValue(rawName, rosters) || '-';
+                    const rank = resolveRawCellValue(rawRank, rosters) || '-';
                     members.push({ id: c.id, name, rank, content: c.content });
                 });
             }
