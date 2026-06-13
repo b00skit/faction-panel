@@ -241,3 +241,58 @@ test('aggregatePool applies count_unique correctly', function () {
 
     expect($result)->toBe(2);
 });
+
+test('matchCondition handles contains_checkbox and contains_tag conditions correctly', function () {
+    $service = new StatisticsService;
+    $reflection = new ReflectionClass($service);
+    $method = $reflection->getMethod('matchCondition');
+    $method->setAccessible(true);
+
+    $condCheckbox = [
+        'target_col' => 'col_status',
+        'match_type' => 'contains_checkbox',
+        'match_value' => 'LOA',
+    ];
+
+    $condTag = [
+        'target_col' => 'col_status',
+        'match_type' => 'contains_tag',
+        'match_value' => 'Special',
+    ];
+
+    // Case 1: contains_checkbox finds value in _cb array
+    $data1 = [
+        'col_status_cb' => ['LOA', 'Active'],
+        'col_status_tags' => [],
+    ];
+    expect($method->invoke($service, $data1, $condCheckbox))->toBeTrue();
+
+    // Case 2: contains_checkbox finds value in _tags array (fallback)
+    $data2 = [
+        'col_status_cb' => [],
+        'col_status_tags' => ['LOA'],
+    ];
+    expect($method->invoke($service, $data2, $condCheckbox))->toBeTrue();
+
+    // Case 3: contains_checkbox fails if value is not present
+    $data3 = [
+        'col_status_cb' => ['Active'],
+        'col_status_tags' => ['Special'],
+    ];
+    expect($method->invoke($service, $data3, $condCheckbox))->toBeFalse();
+
+    // Case 4: contains_tag finds value in _tags array
+    $data4 = [
+        'col_status_cb' => [],
+        'col_status_tags' => ['Special', 'Active'],
+    ];
+    expect($method->invoke($service, $data4, $condTag))->toBeTrue();
+
+    // Case 5: contains_tag fails if value is only in _cb array
+    $data5 = [
+        'col_status_cb' => ['Special'],
+        'col_status_tags' => ['LOA'],
+    ];
+    expect($method->invoke($service, $data5, $condTag))->toBeFalse();
+});
+

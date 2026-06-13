@@ -601,6 +601,20 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                             if (cond.settings.match_type === 'not_equals') return val !== matchVal;
                             if (cond.settings.match_type === 'contains') return val.includes(matchVal);
                             if (cond.settings.match_type === 'is_null') return !rawVal || rawVal === '';
+                            if (cond.settings.match_type === 'contains_checkbox') {
+                                const cbKey = `${col.id}_cb`;
+                                const tagsKey = `${col.id}_tags`;
+                                const rowCheckboxes = content[cbKey] || [];
+                                const rowTags = content[tagsKey] || [];
+                                const targetVal = cond.settings.match_value;
+                                return rowCheckboxes.includes(targetVal) || rowTags.includes(targetVal);
+                            }
+                            if (cond.settings.match_type === 'contains_tag') {
+                                const tagsKey = `${col.id}_tags`;
+                                const rowTags = content[tagsKey] || [];
+                                const targetVal = cond.settings.match_value;
+                                return rowTags.includes(targetVal);
+                            }
                             return true;
                         }
 
@@ -763,6 +777,20 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                 if (c.settings.match_type === 'exists') return !!val;
                 if (c.settings.match_type === 'equals') return val.toLowerCase() === (c.settings.match_value || '').toString().toLowerCase().trim();
                 if (c.settings.match_type === 'contains') return val.toLowerCase().includes((c.settings.match_value || '').toString().toLowerCase().trim());
+                if (c.settings.match_type === 'contains_checkbox') {
+                    const cbKey = `${c.settings.target_col}_cb`;
+                    const tagsKey = `${c.settings.target_col}_tags`;
+                    const rowCheckboxes = content[cbKey] || [];
+                    const rowTags = content[tagsKey] || [];
+                    const targetVal = c.settings.match_value;
+                    return rowCheckboxes.includes(targetVal) || rowTags.includes(targetVal);
+                }
+                if (c.settings.match_type === 'contains_tag') {
+                    const tagsKey = `${c.settings.target_col}_tags`;
+                    const rowTags = content[tagsKey] || [];
+                    const targetVal = c.settings.match_value;
+                    return rowTags.includes(targetVal);
+                }
                 return true;
             }
 

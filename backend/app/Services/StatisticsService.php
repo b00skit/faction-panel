@@ -200,10 +200,11 @@ class StatisticsService
             return null;
         }
 
-        // Don't use SQL if "in_roster" matching is used (requires cross-table logic)
+        // Don't use SQL if "in_roster" or checkbox/tag matching is used
         $conditions = $s['conditions'] ?? [];
         foreach ($conditions as $cond) {
-            if (($cond['match_type'] ?? '') === 'in_roster') {
+            $mType = $cond['match_type'] ?? '';
+            if (in_array($mType, ['in_roster', 'contains_checkbox', 'contains_tag'], true)) {
                 return null;
             }
         }
@@ -448,6 +449,15 @@ class StatisticsService
             return null;
         }
 
+        // Don't use SQL if filters have complex match types
+        $filters = $config['filters'] ?? [];
+        foreach ($filters as $filter) {
+            $mType = $filter['match_type'] ?? '';
+            if (in_array($mType, ['in_roster', 'contains_checkbox', 'contains_tag'], true)) {
+                return null;
+            }
+        }
+
         $query = $this->getSourceQuery($sourceType, $sourceId, $config);
         if (! $query) {
             return null;
@@ -578,8 +588,9 @@ class StatisticsService
         // Try SQL path first if there are no brackets and we are not in tests or DB is ready
         $hasBrackets = collect($count['conditions'])->contains(fn ($c) => ($c['brackets_open'] ?? 0) > 0 || ($c['brackets_close'] ?? 0) > 0);
         $hasInRoster = collect($count['conditions'])->contains(fn ($c) => ($c['match_type'] ?? '') === 'in_roster');
+        $hasCheckboxesOrTags = collect($count['conditions'])->contains(fn ($c) => in_array($c['match_type'] ?? '', ['contains_checkbox', 'contains_tag'], true) || in_array($c['type'] ?? '', ['checkboxes', 'tags'], true));
 
-        if (! $hasBrackets && ! $hasInRoster) {
+        if (! $hasBrackets && ! $hasInRoster && ! $hasCheckboxesOrTags) {
             try {
                 $sqlValue = $this->evaluateCountWithSql($count, $parentType, $parentId);
                 if ($sqlValue !== null) {
@@ -857,6 +868,27 @@ class StatisticsService
         $matchType = $cond['match_type'] ?? 'equals';
 
         switch ($matchType) {
+            case 'contains_checkbox':
+                $cbKey = $targetCol . '_cb';
+                $tagsKey = $targetCol . '_tags';
+                $rowCheckboxes = $data[$cbKey] ?? [];
+                $rowTags = $data[$tagsKey] ?? [];
+                if (! is_array($rowCheckboxes)) {
+                    $rowCheckboxes = [];
+                }
+                if (! is_array($rowTags)) {
+                    $rowTags = [];
+                }
+
+                return in_array($matchVal, $rowCheckboxes, true) || in_array($matchVal, $rowTags, true);
+            case 'contains_tag':
+                $tagsKey = $targetCol . '_tags';
+                $rowTags = $data[$tagsKey] ?? [];
+                if (! is_array($rowTags)) {
+                    $rowTags = [];
+                }
+
+                return in_array($matchVal, $rowTags, true);
             case 'exists':
                 return ! empty($val);
             case 'equals':

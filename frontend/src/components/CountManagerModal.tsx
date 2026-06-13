@@ -601,29 +601,64 @@ export const CountManagerModal: React.FC<CountManagerModalProps> = ({
                                                                                         <div className="grid grid-cols-2 gap-3">
                                                                                             <div>
                                                                                                 <label className="block text-[8px] font-black uppercase tracking-widest text-muted mb-1.5">Match Type</label>
-                                                                                                <select 
-                                                                                                    value={cond.settings.match_type}
-                                                                                                    onChange={e => updateCondition(idx, cIdx, { settings: { ...cond.settings, match_type: e.target.value } })}
-                                                                                                    className="w-full bg-card border border-border rounded-lg px-2 py-1.5 text-[10px]"
-                                                                                                >
-                                                                                                    <option value="exists">Exists</option>
-                                                                                                    <option value="equals">=</option>
-                                                                                                    <option value="not_equals">!=</option>
-                                                                                                    <option value="contains">Contains</option>
-                                                                                                    <option value="is_null">Is Empty</option>
-                                                                                                </select>
+                                                                                                {(() => {
+                                                                                                    const col = columns.find(c => c.id === cond.settings.target_col || c.name === cond.settings.target_col);
+                                                                                                    return (
+                                                                                                        <select 
+                                                                                                            value={cond.settings.match_type}
+                                                                                                            onChange={e => updateCondition(idx, cIdx, { settings: { ...cond.settings, match_type: e.target.value } })}
+                                                                                                            className="w-full bg-card border border-border rounded-lg px-2 py-1.5 text-[10px]"
+                                                                                                        >
+                                                                                                            <option value="exists">Exists</option>
+                                                                                                            <option value="equals">=</option>
+                                                                                                            <option value="not_equals">!=</option>
+                                                                                                            <option value="contains">Contains</option>
+                                                                                                            <option value="is_null">Is Empty</option>
+                                                                                                            {((col?.checkboxes && col.checkboxes.length > 0) || col?.type === 'checkboxes') && (
+                                                                                                                <option value="contains_checkbox">Contains Checkbox</option>
+                                                                                                            )}
+                                                                                                            {((col?.tags && col.tags.length > 0) || col?.type === 'tags') && (
+                                                                                                                <option value="contains_tag">Contains Tag</option>
+                                                                                                            )}
+                                                                                                        </select>
+                                                                                                    );
+                                                                                                })()}
                                                                                             </div>
-                                                                                            {['equals', 'not_equals', 'contains'].includes(cond.settings.match_type) && (
-                                                                                                <div>
-                                                                                                    <label className="block text-[8px] font-black uppercase tracking-widest text-muted mb-1.5">Value</label>
-                                                                                                    <input 
-                                                                                                        value={cond.settings.match_value}
-                                                                                                        onChange={e => updateCondition(idx, cIdx, { settings: { ...cond.settings, match_value: e.target.value } })}
-                                                                                                        className="w-full bg-card border border-border rounded-lg px-2 py-1.5 text-[10px] outline-none focus:border-accent"
-                                                                                                        placeholder="..."
-                                                                                                    />
-                                                                                                </div>
-                                                                                            )}
+                                                                                            {(() => {
+                                                                                                const col = columns.find(c => c.id === cond.settings.target_col || c.name === cond.settings.target_col);
+                                                                                                if (['contains_checkbox', 'contains_tag'].includes(cond.settings.match_type)) {
+                                                                                                    const labels = cond.settings.match_type === 'contains_checkbox'
+                                                                                                        ? (col?.checkboxes || []).filter(Boolean).map((cb: any) => typeof cb === 'string' ? cb : cb.label)
+                                                                                                        : (col?.tags || []).filter(Boolean).map((t: any) => typeof t === 'string' ? t : t.label);
+                                                                                                    const uniqueLabels = Array.from(new Set(labels));
+                                                                                                    return (
+                                                                                                        <div>
+                                                                                                            <label className="block text-[8px] font-black uppercase tracking-widest text-muted mb-1.5">Select Option</label>
+                                                                                                            <select
+                                                                                                                value={cond.settings.match_value || ''}
+                                                                                                                onChange={e => updateCondition(idx, cIdx, { settings: { ...cond.settings, match_value: e.target.value } })}
+                                                                                                                className="w-full bg-card border border-border rounded-lg px-2 py-1.5 text-[10px] font-bold"
+                                                                                                            >
+                                                                                                                <option value="">Select Option...</option>
+                                                                                                                {uniqueLabels.map(l => (
+                                                                                                                    <option key={String(l)} value={String(l)}>{String(l)}</option>
+                                                                                                                ))}
+                                                                                                            </select>
+                                                                                                        </div>
+                                                                                                    );
+                                                                                                }
+                                                                                                return ['equals', 'not_equals', 'contains'].includes(cond.settings.match_type) ? (
+                                                                                                    <div>
+                                                                                                        <label className="block text-[8px] font-black uppercase tracking-widest text-muted mb-1.5">Value</label>
+                                                                                                        <input 
+                                                                                                            value={cond.settings.match_value}
+                                                                                                            onChange={e => updateCondition(idx, cIdx, { settings: { ...cond.settings, match_value: e.target.value } })}
+                                                                                                            className="w-full bg-card border border-border rounded-lg px-2 py-1.5 text-[10px] outline-none focus:border-accent"
+                                                                                                            placeholder="..."
+                                                                                                        />
+                                                                                                    </div>
+                                                                                                ) : null;
+                                                                                            })()}
                                                                                         </div>
                                                                                     )}
                                                                                 </>
