@@ -13,15 +13,47 @@ class RosterSection extends Model
 
     protected static function booted()
     {
-        $clear = function ($section) {
+        static::saved(function ($section) {
             $roster = $section->roster;
             if ($roster) {
                 Faction::invalidateRosterCache($roster->faction_id);
                 RosterUpdated::dispatch($roster);
             }
-        };
-        static::saved($clear);
-        static::deleted($clear);
+        });
+
+        static::deleted(function ($section) {
+            $roster = $section->roster;
+            if ($roster) {
+                Faction::invalidateRosterCache($roster->faction_id);
+                RosterUpdated::dispatch($roster);
+            }
+
+            // Clean up any dynamic slot configurations referencing this section
+            $nodes = HierarchyNode::all()->filter(function ($node) use ($section) {
+                return isset($node->roster_sync_config['section_id']) && $node->roster_sync_config['section_id'] == $section->id;
+            });
+
+            foreach ($nodes as $node) {
+                $config = $node->roster_sync_config;
+                $config['enabled'] = false;
+                $config['section_id'] = null;
+                $node->roster_sync_config = $config;
+                $node->slots = [];
+                $node->save();
+
+                $hierarchy = $node->hierarchy;
+                if ($hierarchy) {
+                    Faction::invalidateDiagramsCache($hierarchy->faction_id);
+                }
+            }
+
+            // Also delete all roster contents belonging to this section.
+            // Loop delete ensures model events (static::deleted) fire on each content row
+            // to unlink any manual card slot links referencing them.
+            foreach ($section->contents()->get() as $content) {
+                $content->delete();
+            }
+        });
     }
 
     protected $fillable = [

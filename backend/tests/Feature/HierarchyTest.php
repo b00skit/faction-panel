@@ -1,6 +1,8 @@
 <?php
 
+use App\Events\HierarchyUpdated;
 use App\Models\Faction;
+use App\Models\FactionRecordDatabase;
 use App\Models\Hierarchy;
 use App\Models\HierarchyNode;
 use App\Models\Roster;
@@ -81,7 +83,7 @@ test('can delete a hierarchy', function () {
     $this->assertSoftDeleted('hierarchies', ['id' => $hierarchy->id]);
 });
 
-test('can manage hierarchy nodes and test two-way sync with roster', function () {
+test('can manage hierarchy nodes and test that linked slots are read-only', function () {
     // 1. Create a roster, section, and roster content row
     $roster = Roster::create([
         'faction_id' => $this->faction->id,
@@ -134,7 +136,7 @@ test('can manage hierarchy nodes and test two-way sync with roster', function ()
                 'roster_content_id' => null,
                 'label' => 'Director',
                 'value' => 'VACANT',
-            ]
+            ],
         ],
         'order' => 0,
     ]);
@@ -146,24 +148,24 @@ test('can manage hierarchy nodes and test two-way sync with roster', function ()
                 [
                     'id' => 'slot_1',
                     'roster_content_id' => $rosterContent->id,
-                    'label' => 'Chief of Police', // New rank label
-                    'value' => 'Jane Doe',        // New name value
-                ]
-            ]
+                    'label' => 'Chief of Police', // Attempted new rank label (should be ignored)
+                    'value' => 'Jane Doe',        // Attempted new name value (should be ignored)
+                ],
+            ],
         ]);
 
     $response->assertStatus(200);
 
-    // Verify the hierarchy node slots data
+    // Verify the hierarchy node slots data gets resolved from the roster content
     $node->refresh();
     expect($node->slots[0]['roster_content_id'])->toBe($rosterContent->id);
-    expect($node->slots[0]['label'])->toBe('Chief of Police');
-    expect($node->slots[0]['value'])->toBe('Jane Doe');
+    expect($node->slots[0]['label'])->toBe('Lieutenant');
+    expect($node->slots[0]['value'])->toBe('John Doe');
 
-    // Verify two-way editing: the RosterContent row should be updated in the database
+    // Verify the RosterContent row was NOT updated in the database
     $rosterContent->refresh();
-    expect($rosterContent->content['name'])->toBe('Jane Doe');
-    expect($rosterContent->content['rank'])->toBe('Chief of Police');
+    expect($rosterContent->content['name'])->toBe('John Doe');
+    expect($rosterContent->content['rank'])->toBe('Lieutenant');
 });
 
 test('can auto-link a node to a roster section and fetch dynamic slots', function () {
@@ -242,7 +244,7 @@ test('can auto-link a node to a roster section and fetch dynamic slots', functio
         ->getJson("/api/factions/{$this->faction->shortname}/hierarchies");
 
     $response->assertStatus(200);
-    
+
     // Find the node in the tree and check its slots
     $data = $response->json();
     $fetchedHierarchy = collect($data)->firstWhere('id', $hierarchy->id);
@@ -313,11 +315,11 @@ test('can validate and store sync config overrides and default bolding to true i
                 'section_id' => $section->id,
                 'label_color' => '#aabbcc',
                 'label_bold' => false,
-            ]
+            ],
         ]);
 
     $response->assertStatus(200);
-    
+
     $data = $response->json();
     expect($data['slots'][0]['label_bold'])->toBeFalse();
     expect($data['slots'][0]['value_bold'])->toBeTrue();
@@ -326,7 +328,7 @@ test('can validate and store sync config overrides and default bolding to true i
 });
 
 test('hierarchy and node modifications invalidate cache and broadcast HierarchyUpdated event', function () {
-    Event::fake([App\Events\HierarchyUpdated::class]);
+    Event::fake([HierarchyUpdated::class]);
 
     // 1. Create hierarchy (should trigger event & invalidate cache)
     $hierarchy = Hierarchy::create([
@@ -337,12 +339,12 @@ test('hierarchy and node modifications invalidate cache and broadcast HierarchyU
         'created_by' => $this->user->id,
     ]);
 
-    Event::assertDispatched(App\Events\HierarchyUpdated::class, function ($event) use ($hierarchy) {
+    Event::assertDispatched(HierarchyUpdated::class, function ($event) use ($hierarchy) {
         return $event->factionId === $this->faction->id && $event->hierarchyId === $hierarchy->id;
     });
 
     // 2. Create node (should trigger event & invalidate cache)
-    Event::fake([App\Events\HierarchyUpdated::class]);
+    Event::fake([HierarchyUpdated::class]);
     $node = HierarchyNode::create([
         'hierarchy_id' => $hierarchy->id,
         'title' => 'Cache Test Node',
@@ -351,7 +353,7 @@ test('hierarchy and node modifications invalidate cache and broadcast HierarchyU
         'order' => 0,
     ]);
 
-    Event::assertDispatched(App\Events\HierarchyUpdated::class, function ($event) use ($hierarchy) {
+    Event::assertDispatched(HierarchyUpdated::class, function ($event) use ($hierarchy) {
         return $event->factionId === $this->faction->id && $event->hierarchyId === $hierarchy->id;
     });
 
@@ -390,7 +392,7 @@ test('hierarchy and node modifications invalidate cache and broadcast HierarchyU
 
 test('handles and resolves slots with cross-roster linked and database columns without failing validation or corrupting data', function () {
     // 1. Create a dynamic database and database entry
-    $db = App\Models\FactionRecordDatabase::create([
+    $db = FactionRecordDatabase::create([
         'faction_id' => $this->faction->id,
         'name' => 'Characters',
         'is_published' => true,
@@ -495,7 +497,7 @@ test('handles and resolves slots with cross-roster linked and database columns w
                 'roster_content_id' => $tgtRow->id,
                 'label' => 'Director', // resolved rank from linked column
                 'value' => 'Alice Source', // resolved name from linked column
-            ]
+            ],
         ],
         'order' => 0,
     ]);
@@ -512,8 +514,8 @@ test('handles and resolves slots with cross-roster linked and database columns w
                     'roster_content_id' => $tgtRow->id,
                     'label' => ['roster_id' => $sourceRoster->id, 'row_id' => $srcRow->id, 'col_id' => 'rank'], // Object instead of string
                     'value' => 'Alice Source',
-                ]
-            ]
+                ],
+            ],
         ]);
 
     $response->assertStatus(200);
@@ -530,4 +532,120 @@ test('handles and resolves slots with cross-roster linked and database columns w
     expect($tgtRow->content['db_rank'])->toBe(101);
 });
 
+test('ensures data integrity by cleaning up slots and dynamic configurations when sections or rows are deleted', function () {
+    $roster = Roster::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Data Integrity Roster',
+        'shortname' => 'INT',
+        'color' => '#3b82f6',
+        'order' => 0,
+        'columns' => [
+            ['id' => 'name', 'name' => 'Name', 'type' => 'text'],
+            ['id' => 'rank', 'name' => 'Rank', 'type' => 'text'],
+        ],
+        'created_by' => $this->user->id,
+    ]);
 
+    $section1 = RosterSection::create([
+        'roster_id' => $roster->id,
+        'name' => 'Section One',
+        'shortname' => 'SEC1',
+        'type' => 'section',
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $section2 = RosterSection::create([
+        'roster_id' => $roster->id,
+        'name' => 'Section Two',
+        'shortname' => 'SEC2',
+        'type' => 'section',
+        'order' => 1,
+        'created_by' => $this->user->id,
+    ]);
+
+    $row1 = RosterContent::create([
+        'section_id' => $section1->id,
+        'type' => 'predefined',
+        'content' => ['name' => 'Alice One', 'rank' => 'Supervisor'],
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $row2 = RosterContent::create([
+        'section_id' => $section2->id,
+        'type' => 'predefined',
+        'content' => ['name' => 'Bob Two', 'rank' => 'Agent'],
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $hierarchy = Hierarchy::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Integrity Check',
+        'color' => '#ffffff',
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    // Node 1 is dynamically synced to Section 2
+    $node1 = HierarchyNode::create([
+        'hierarchy_id' => $hierarchy->id,
+        'title' => 'Sync Node',
+        'color' => '#ffffff',
+        'roster_sync_config' => [
+            'enabled' => true,
+            'section_id' => $section2->id,
+        ],
+        'slots' => [],
+        'order' => 0,
+    ]);
+
+    // Node 2 has manual slots linked to row1 and row2
+    $node2 = HierarchyNode::create([
+        'hierarchy_id' => $hierarchy->id,
+        'title' => 'Manual Node',
+        'color' => '#ffffff',
+        'slots' => [
+            [
+                'id' => 'slot_a',
+                'roster_content_id' => $row1->id,
+                'label' => 'Supervisor',
+                'value' => 'Alice One',
+            ],
+            [
+                'id' => 'slot_b',
+                'roster_content_id' => $row2->id,
+                'label' => 'Agent',
+                'value' => 'Bob Two',
+            ],
+        ],
+        'order' => 1,
+    ]);
+
+    // 1. Delete row1
+    $row1->delete();
+
+    // Check Node 2 slot_a (linked to row1) should be unlinked and set to VACANT
+    $node2->refresh();
+    expect($node2->slots[0]['roster_content_id'])->toBeNull();
+    expect($node2->slots[0]['value'])->toBe('VACANT');
+    // slot_b (linked to row2) should remain intact
+    expect($node2->slots[1]['roster_content_id'])->toBe($row2->id);
+    expect($node2->slots[1]['value'])->toBe('Bob Two');
+
+    // 2. Delete Section Two
+    $section2->delete();
+
+    // Check Node 1 (synced to Section 2) should be disabled, section_id nullified, and slots cleared
+    $node1->refresh();
+    expect($node1->roster_sync_config['enabled'])->toBeFalse();
+    expect($node1->roster_sync_config['section_id'])->toBeNull();
+    expect($node1->slots)->toBeEmpty();
+
+    // Check Node 2 slot_b (linked to row2 inside Section Two) should also be unlinked and set to VACANT
+    // because row2 should have been cascade soft-deleted when Section Two was deleted
+    $node2->refresh();
+    expect($node2->slots[1]['roster_content_id'])->toBeNull();
+    expect($node2->slots[1]['value'])->toBe('VACANT');
+});

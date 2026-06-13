@@ -29,7 +29,6 @@ class Hierarchy extends Model
         });
     }
 
-
     protected $fillable = [
         'faction_id',
         'name',

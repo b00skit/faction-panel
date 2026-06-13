@@ -70,4 +70,3 @@ Broadcast::channel('faction.{factionId}.diagrams', function ($user, $factionId) 
 
     return User::hasFactionPermission($user, $faction, 'view_faction_hierarchy');
 });
-

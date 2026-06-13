@@ -7,18 +7,17 @@ use App\Models\Faction;
 use App\Models\Hierarchy;
 use App\Models\HierarchyNode;
 use App\Models\RosterContent;
-use App\Models\RosterRevision;
 use App\Models\User;
+use App\Services\RosterResolutionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class HierarchyNodeController extends Controller
 {
-
     public function store(Request $request, Hierarchy $hierarchy)
     {
         $user = Auth::user();
-        if (!User::hasHierarchyPermission($user, $hierarchy, 'manage_nodes')) {
+        if (! User::hasHierarchyPermission($user, $hierarchy, 'manage_nodes')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -68,7 +67,8 @@ class HierarchyNodeController extends Controller
 
         $this->audit('hierarchy_node.create', "Created node '{$node->title}' in hierarchy '{$hierarchy->name}'", $hierarchy->faction_id, $node, null, $node->getAttributes());
 
-        $node = \App\Services\RosterResolutionService::resolveNodeSlots($node);
+        $node = RosterResolutionService::resolveNodeSlots($node);
+
         return response()->json($node, 201);
     }
 
@@ -81,7 +81,7 @@ class HierarchyNodeController extends Controller
         $canEdit = User::hasHierarchyPermission($user, $hierarchy, 'edit_nodes');
         $canManage = User::hasHierarchyPermission($user, $hierarchy, 'manage_nodes');
 
-        if (!$canEdit && !$canManage) {
+        if (! $canEdit && ! $canManage) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -117,82 +117,38 @@ class HierarchyNodeController extends Controller
         ]);
 
         // If trying to change structure (parent_id, order, or modifying slots configuration) but only has edit_nodes, block it.
-        if (!$canManage && (isset($validated['parent_id']) || isset($validated['order']))) {
+        if (! $canManage && (isset($validated['parent_id']) || isset($validated['order']))) {
             return response()->json(['message' => 'Forbidden: Structure updates require Manage Nodes permission'], 403);
         }
 
         $oldValues = $node->getOriginal();
 
-        // Handle Two-way Roster updates
+        // Resolve roster links to actual display values (overwrite label/value from roster, do NOT write back to roster)
         if (isset($validated['slots']) && $hierarchy->roster_id) {
             $nameColId = 'name';
             $rankColId = 'rank';
-            
+
             foreach ($validated['slots'] as &$slot) {
-                if (!empty($slot['roster_content_id'])) {
+                if (! empty($slot['roster_content_id'])) {
                     $content = RosterContent::with('section.roster')->find($slot['roster_content_id']);
                     if ($content) {
-                        $oldContent = $content->content ?? [];
-                        $newContent = $oldContent;
-
                         // Identify column keys from Roster columns if possible, else defaults
                         $roster = $content->section->roster;
-                        $columns = [];
                         if ($roster && $roster->columns) {
                             $columns = $roster->columns;
-                            $nameCol = collect($columns)->first(fn($c) => ($c['id'] ?? '') === 'name' || str_contains(strtolower($c['name'] ?? ''), 'name'));
-                            $rankCol = collect($columns)->first(fn($c) => ($c['id'] ?? '') === 'rank' || str_contains(strtolower($c['name'] ?? ''), 'rank') || str_contains(strtolower($c['name'] ?? ''), 'role'));
-                            if ($nameCol) $nameColId = $nameCol['id'];
-                            if ($rankCol) $rankColId = $rankCol['id'];
-                        }
-
-                        $nameCol = collect($columns)->firstWhere('id', $nameColId);
-                        $rankCol = collect($columns)->firstWhere('id', $rankColId);
-
-                        // Check if these columns are read-only / dynamic (linked to database/other rosters)
-                        $isNameColDynamic = $nameCol && (
-                            str_contains($nameCol['type'] ?? '', 'linked_roster_data') ||
-                            !empty($nameCol['linked_database_id']) ||
-                            !empty($nameCol['dataset_id'])
-                        );
-
-                        $isRankColDynamic = $rankCol && (
-                            str_contains($rankCol['type'] ?? '', 'linked_roster_data') ||
-                            !empty($rankCol['linked_database_id']) ||
-                            !empty($rankCol['dataset_id'])
-                        );
-
-                        $wasDirty = false;
-                        
-                        // Resolve current values to compare with the text input from the slot
-                        $resolvedRankVal = \App\Services\RosterResolutionService::resolveCellValue($content, $rankColId);
-                        $resolvedNameVal = \App\Services\RosterResolutionService::resolveCellValue($content, $nameColId);
-
-                        // If user edited the text and the target column is NOT dynamic/read-only, update it
-                        if (array_key_exists('label', $slot) && $slot['label'] !== $resolvedRankVal) {
-                            if (!$isRankColDynamic) {
-                                $newContent[$rankColId] = $slot['label'];
-                                $wasDirty = true;
+                            $nameCol = collect($columns)->first(fn ($c) => ($c['id'] ?? '') === 'name' || str_contains(strtolower($c['name'] ?? ''), 'name'));
+                            $rankCol = collect($columns)->first(fn ($c) => ($c['id'] ?? '') === 'rank' || str_contains(strtolower($c['name'] ?? ''), 'rank') || str_contains(strtolower($c['name'] ?? ''), 'role'));
+                            if ($nameCol) {
+                                $nameColId = $nameCol['id'];
                             }
-                        }
-                        if (array_key_exists('value', $slot) && $slot['value'] !== $resolvedNameVal) {
-                            if (!$isNameColDynamic) {
-                                $newContent[$nameColId] = $slot['value'];
-                                $wasDirty = true;
+                            if ($rankCol) {
+                                $rankColId = $rankCol['id'];
                             }
-                        }
-
-                        if ($wasDirty) {
-                            $content->content = $newContent;
-                            $content->save();
-
-                            // Log Roster Revision
-                            RosterRevision::logRevision($roster->id, "Updated via Hierarchy diagram '{$hierarchy->name}' (Card: {$node->title})", Auth::id());
                         }
 
                         // Always set slot's label and value to the resolved string values to avoid storing objects or IDs in slots JSON
-                        $slot['label'] = \App\Services\RosterResolutionService::resolveCellValue($content, $rankColId);
-                        $slot['value'] = \App\Services\RosterResolutionService::resolveCellValue($content, $nameColId);
+                        $slot['label'] = RosterResolutionService::resolveCellValue($content, $rankColId);
+                        $slot['value'] = RosterResolutionService::resolveCellValue($content, $nameColId);
                     }
                 }
             }
@@ -203,7 +159,7 @@ class HierarchyNodeController extends Controller
         $this->audit('hierarchy_node.update', "Updated node '{$node->title}' in hierarchy '{$hierarchy->name}'", $hierarchy->faction_id, $node, $oldValues, $node->getDirty());
 
         $node->refresh();
-        $node = \App\Services\RosterResolutionService::resolveNodeSlots($node);
+        $node = RosterResolutionService::resolveNodeSlots($node);
 
         return response()->json($node);
     }
@@ -212,7 +168,7 @@ class HierarchyNodeController extends Controller
     {
         $hierarchy = $node->hierarchy;
         $user = Auth::user();
-        if (!User::hasHierarchyPermission($user, $hierarchy, 'manage_nodes')) {
+        if (! User::hasHierarchyPermission($user, $hierarchy, 'manage_nodes')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -226,7 +182,7 @@ class HierarchyNodeController extends Controller
     public function reorder(Request $request, Hierarchy $hierarchy)
     {
         $user = Auth::user();
-        if (!User::hasHierarchyPermission($user, $hierarchy, 'manage_nodes')) {
+        if (! User::hasHierarchyPermission($user, $hierarchy, 'manage_nodes')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -241,7 +197,7 @@ class HierarchyNodeController extends Controller
                 ->where('id', $id)
                 ->update([
                     'parent_id' => $validated['parent_id'],
-                    'order' => $index
+                    'order' => $index,
                 ]);
         }
 

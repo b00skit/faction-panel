@@ -14,6 +14,7 @@ class HierarchyUpdated implements ShouldBroadcast
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public $factionId;
+
     public $hierarchyId;
 
     /**

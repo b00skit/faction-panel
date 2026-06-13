@@ -35,7 +35,7 @@ test('non-superadmin cannot create system notification', function () {
 
 test('notifications index returns the link field', function () {
     $user = User::factory()->create(['is_superadmin' => false]);
-    
+
     Notification::create([
         'title' => 'System Update',
         'message' => 'Release notes here.',

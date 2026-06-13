@@ -295,4 +295,3 @@ test('matchCondition handles contains_checkbox and contains_tag conditions corre
     ];
     expect($method->invoke($service, $data5, $condTag))->toBeFalse();
 });
-

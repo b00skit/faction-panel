@@ -869,8 +869,8 @@ class StatisticsService
 
         switch ($matchType) {
             case 'contains_checkbox':
-                $cbKey = $targetCol . '_cb';
-                $tagsKey = $targetCol . '_tags';
+                $cbKey = $targetCol.'_cb';
+                $tagsKey = $targetCol.'_tags';
                 $rowCheckboxes = $data[$cbKey] ?? [];
                 $rowTags = $data[$tagsKey] ?? [];
                 if (! is_array($rowCheckboxes)) {
@@ -882,7 +882,7 @@ class StatisticsService
 
                 return in_array($matchVal, $rowCheckboxes, true) || in_array($matchVal, $rowTags, true);
             case 'contains_tag':
-                $tagsKey = $targetCol . '_tags';
+                $tagsKey = $targetCol.'_tags';
                 $rowTags = $data[$tagsKey] ?? [];
                 if (! is_array($rowTags)) {
                     $rowTags = [];

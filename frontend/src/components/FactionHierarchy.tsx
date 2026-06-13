@@ -605,7 +605,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                 ) : (
                                                     <div 
                                                         onClick={(e) => {
-                                                            if (isEditable) {
+                                                            if (isEditable && !slots[0]?.roster_content_id) {
                                                                 e.stopPropagation();
                                                                 setEditingSlotKey({ nodeId: node.id, slotId: slots[0].id, field: 'label' });
                                                                 setInlineEditValue(slots[0].label || '');
@@ -613,9 +613,9 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                         }}
                                                         className={`uppercase tracking-widest text-[9px] px-2.5 py-0.5 rounded-full ${
                                                             slots[0].label_bold !== false ? 'font-black' : 'font-medium'
-                                                        } ${!slots[0].label_color ? 'text-accent bg-accent/10 border border-accent/20' : ''} ${isEditable ? 'cursor-pointer hover:opacity-80 transition-all' : ''}`}
+                                                        } ${!slots[0].label_color ? 'text-accent bg-accent/10 border border-accent/20' : ''} ${isEditable && !slots[0]?.roster_content_id ? 'cursor-pointer hover:opacity-80 transition-all' : ''}`}
                                                         style={slots[0].label_color ? { color: slots[0].label_color, backgroundColor: `${slots[0].label_color}15`, borderColor: `${slots[0].label_color}30`, borderWidth: '1px' } : {}}
-                                                        title={isEditable ? 'Click to edit' : undefined}
+                                                        title={isEditable && !slots[0]?.roster_content_id ? 'Click to edit' : undefined}
                                                     >
                                                         {slots[0].label || 'Position'}
                                                     </div>
@@ -640,7 +640,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                 ) : (
                                                     <div 
                                                         onClick={(e) => {
-                                                            if (isEditable) {
+                                                            if (isEditable && !slots[0]?.roster_content_id) {
                                                                 e.stopPropagation();
                                                                 setEditingSlotKey({ nodeId: node.id, slotId: slots[0].id, field: 'value' });
                                                                 setInlineEditValue(slots[0].value || '');
@@ -648,9 +648,9 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                         }}
                                                         className={`text-xs uppercase tracking-widest flex items-center justify-center gap-1 ${
                                                             slots[0].value_bold !== false ? 'font-black' : 'font-semibold'
-                                                        } ${!slots[0].value_color ? (slots[0].value?.toLowerCase() === 'vacant' ? 'text-muted/60 italic' : 'text-text') : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-2 py-0.5 transition-colors' : ''}`}
+                                                        } ${!slots[0].value_color ? (slots[0].value?.toLowerCase() === 'vacant' ? 'text-muted/60 italic' : 'text-text') : ''} ${isEditable && !slots[0]?.roster_content_id ? 'cursor-pointer hover:bg-surface/60 rounded px-2 py-0.5 transition-colors' : ''}`}
                                                         style={slots[0].value_color ? { color: slots[0].value_color } : {}}
-                                                        title={isEditable ? 'Click to edit' : undefined}
+                                                        title={isEditable && !slots[0]?.roster_content_id ? 'Click to edit' : undefined}
                                                     >
                                                         <span>{slots[0].value || 'VACANT'}</span>
                                                     </div>
@@ -687,7 +687,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                             ) : (
                                                                 <div 
                                                                     onClick={(e) => {
-                                                                        if (isEditable) {
+                                                                        if (isEditable && !slot.roster_content_id) {
                                                                             e.stopPropagation();
                                                                             setEditingSlotKey({ nodeId: node.id, slotId: slot.id, field: 'label' });
                                                                             setInlineEditValue(slot.label || '');
@@ -695,9 +695,9 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                                     }}
                                                                     className={`uppercase tracking-wider max-w-[100px] truncate ${
                                                                         labelBold ? 'font-black' : 'font-medium'
-                                                                    } ${!slot.label_color ? 'text-muted' : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                                    } ${!slot.label_color ? 'text-muted' : ''} ${isEditable && !slot.roster_content_id ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
                                                                     style={slot.label_color ? { color: slot.label_color } : {}}
-                                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                                    title={isEditable && !slot.roster_content_id ? 'Click to edit' : undefined}
                                                                 >
                                                                     {slot.label || 'Position'}
                                                                 </div>
@@ -719,7 +719,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                             ) : (
                                                                 <div 
                                                                     onClick={(e) => {
-                                                                        if (isEditable) {
+                                                                        if (isEditable && !slot.roster_content_id) {
                                                                             e.stopPropagation();
                                                                             setEditingSlotKey({ nodeId: node.id, slotId: slot.id, field: 'value' });
                                                                             setInlineEditValue(slot.value || '');
@@ -727,9 +727,9 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                                     }}
                                                                     className={`flex items-center gap-1.5 uppercase tracking-widest ${
                                                                         valueBold ? 'font-bold' : 'font-medium'
-                                                                    } ${!slot.value_color ? (isVacant ? 'text-muted/60 italic' : 'text-text') : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                                    } ${!slot.value_color ? (isVacant ? 'text-muted/60 italic' : 'text-text') : ''} ${isEditable && !slot.roster_content_id ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
                                                                     style={slot.value_color ? { color: slot.value_color } : {}}
-                                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                                    title={isEditable && !slot.roster_content_id ? 'Click to edit' : undefined}
                                                                 >
                                                                     <span>{slot.value || 'VACANT'}</span>
                                                                 </div>
@@ -769,7 +769,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                             ) : (
                                                 <div 
                                                     onClick={(e) => {
-                                                        if (isEditable) {
+                                                        if (isEditable && !slots[0]?.roster_content_id) {
                                                             e.stopPropagation();
                                                             setEditingSlotKey({ nodeId: node.id, slotId: slots[0].id, field: 'label' });
                                                             setInlineEditValue(slots[0].label || '');
@@ -777,9 +777,9 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                     }}
                                                     className={`uppercase tracking-wider max-w-[100px] truncate ${
                                                         slots[0].label_bold !== false ? 'font-black' : 'font-bold'
-                                                    } ${!slots[0].label_color ? 'text-accent' : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                    } ${!slots[0].label_color ? 'text-accent' : ''} ${isEditable && !slots[0]?.roster_content_id ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
                                                     style={slots[0].label_color ? { color: slots[0].label_color } : {}}
-                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                    title={isEditable && !slots[0]?.roster_content_id ? 'Click to edit' : undefined}
                                                 >
                                                     {slots[0].label || 'Supervisor'}
                                                 </div>
@@ -801,7 +801,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                             ) : (
                                                 <div 
                                                     onClick={(e) => {
-                                                        if (isEditable) {
+                                                        if (isEditable && !slots[0]?.roster_content_id) {
                                                             e.stopPropagation();
                                                             setEditingSlotKey({ nodeId: node.id, slotId: slots[0].id, field: 'value' });
                                                             setInlineEditValue(slots[0].value || '');
@@ -809,9 +809,9 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                     }}
                                                     className={`flex items-center gap-1.5 uppercase tracking-widest text-[11px] ${
                                                         slots[0].value_bold !== false ? 'font-black' : 'font-bold'
-                                                    } ${!slots[0].value_color ? (slots[0].value?.toLowerCase() === 'vacant' ? 'text-muted/60 italic' : 'text-text') : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                    } ${!slots[0].value_color ? (slots[0].value?.toLowerCase() === 'vacant' ? 'text-muted/60 italic' : 'text-text') : ''} ${isEditable && !slots[0]?.roster_content_id ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
                                                     style={slots[0].value_color ? { color: slots[0].value_color } : {}}
-                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                    title={isEditable && !slots[0]?.roster_content_id ? 'Click to edit' : undefined}
                                                 >
                                                     <span>{slots[0].value || 'VACANT'}</span>
                                                 </div>
@@ -847,7 +847,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                             ) : (
                                                                 <div 
                                                                     onClick={(e) => {
-                                                                        if (isEditable) {
+                                                                        if (isEditable && !slot.roster_content_id) {
                                                                             e.stopPropagation();
                                                                             setEditingSlotKey({ nodeId: node.id, slotId: slot.id, field: 'label' });
                                                                             setInlineEditValue(slot.label || '');
@@ -855,9 +855,9 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                                     }}
                                                                     className={`uppercase tracking-wider max-w-[100px] truncate text-[9px] ${
                                                                         labelBold ? 'font-bold' : 'font-normal'
-                                                                    } ${!slot.label_color ? 'text-muted/80' : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                                    } ${!slot.label_color ? 'text-muted/80' : ''} ${isEditable && !slot.roster_content_id ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
                                                                     style={slot.label_color ? { color: slot.label_color } : {}}
-                                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                                    title={isEditable && !slot.roster_content_id ? 'Click to edit' : undefined}
                                                                 >
                                                                     {slot.label || 'Position'}
                                                                 </div>
@@ -879,7 +879,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                             ) : (
                                                                 <div 
                                                                     onClick={(e) => {
-                                                                        if (isEditable) {
+                                                                        if (isEditable && !slot.roster_content_id) {
                                                                             e.stopPropagation();
                                                                             setEditingSlotKey({ nodeId: node.id, slotId: slot.id, field: 'value' });
                                                                             setInlineEditValue(slot.value || '');
@@ -887,9 +887,9 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                                     }}
                                                                     className={`flex items-center gap-1 uppercase tracking-widest text-[9.5px] ${
                                                                         valueBold ? 'font-bold' : 'font-medium'
-                                                                    } ${!slot.value_color ? (isVacant ? 'text-muted/50 italic' : 'text-text/90') : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                                    } ${!slot.value_color ? (isVacant ? 'text-muted/50 italic' : 'text-text/90') : ''} ${isEditable && !slot.roster_content_id ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
                                                                     style={slot.value_color ? { color: slot.value_color } : {}}
-                                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                                    title={isEditable && !slot.roster_content_id ? 'Click to edit' : undefined}
                                                                 >
                                                                     <span>{slot.value || 'VACANT'}</span>
                                                                 </div>
@@ -935,7 +935,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                             ) : (
                                                 <div 
                                                     onClick={(e) => {
-                                                        if (isEditable) {
+                                                        if (isEditable && !slot.roster_content_id) {
                                                             e.stopPropagation();
                                                             setEditingSlotKey({ nodeId: node.id, slotId: slot.id, field: 'label' });
                                                             setInlineEditValue(slot.label || '');
@@ -943,9 +943,9 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                     }}
                                                     className={`uppercase tracking-wider max-w-[100px] truncate ${
                                                         labelBold ? 'font-black' : 'font-medium'
-                                                    } ${!slot.label_color ? 'text-muted' : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                    } ${!slot.label_color ? 'text-muted' : ''} ${isEditable && !slot.roster_content_id ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
                                                     style={slot.label_color ? { color: slot.label_color } : {}}
-                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                    title={isEditable && !slot.roster_content_id ? 'Click to edit' : undefined}
                                                 >
                                                     {slot.label || 'Position'}
                                                 </div>
@@ -967,7 +967,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                             ) : (
                                                 <div 
                                                     onClick={(e) => {
-                                                        if (isEditable) {
+                                                        if (isEditable && !slot.roster_content_id) {
                                                             e.stopPropagation();
                                                             setEditingSlotKey({ nodeId: node.id, slotId: slot.id, field: 'value' });
                                                             setInlineEditValue(slot.value || '');
@@ -975,9 +975,9 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                     }}
                                                     className={`flex items-center gap-1.5 uppercase tracking-widest ${
                                                         valueBold ? 'font-bold' : 'font-medium'
-                                                    } ${!slot.value_color ? (isVacant ? 'text-muted/60 italic' : 'text-text') : ''} ${isEditable ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
+                                                    } ${!slot.value_color ? (isVacant ? 'text-muted/60 italic' : 'text-text') : ''} ${isEditable && !slot.roster_content_id ? 'cursor-pointer hover:bg-surface/60 rounded px-1 -mx-1 transition-colors' : ''}`}
                                                     style={slot.value_color ? { color: slot.value_color } : {}}
-                                                    title={isEditable ? 'Click to edit' : undefined}
+                                                    title={isEditable && !slot.roster_content_id ? 'Click to edit' : undefined}
                                                 >
                                                     <span>{slot.value || 'VACANT'}</span>
                                                 </div>
@@ -1637,8 +1637,10 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                                 type="text"
                                                                 value={slot.label || ''}
                                                                 onChange={e => setNodeSlots(nodeSlots.map(s => s.id === slot.id ? { ...s, label: e.target.value } : s))}
-                                                                placeholder="e.g. Captain"
-                                                                className="w-full bg-card border border-border rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-wider outline-none focus:border-accent transition-colors"
+                                                                placeholder={isConnected ? "Linked to Roster Member" : "e.g. Captain"}
+                                                                disabled={isConnected}
+                                                                title={isConnected ? "Linked to roster. Edit via roster page." : undefined}
+                                                                className="w-full bg-card border border-border rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-wider outline-none focus:border-accent transition-colors disabled:opacity-50 disabled:bg-surface/50 disabled:cursor-not-allowed"
                                                             />
                                                             {/* Styling for Label */}
                                                             <div className="flex gap-2 items-center mt-2">
@@ -1672,8 +1674,10 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                                 type="text"
                                                                 value={slot.value || ''}
                                                                 onChange={e => setNodeSlots(nodeSlots.map(s => s.id === slot.id ? { ...s, value: e.target.value } : s))}
-                                                                placeholder="e.g. Chase Delgado or VACANT"
-                                                                className="w-full bg-card border border-border rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-wider outline-none focus:border-accent transition-colors"
+                                                                placeholder={isConnected ? "Linked to Roster Member" : "e.g. Chase Delgado or VACANT"}
+                                                                disabled={isConnected}
+                                                                title={isConnected ? "Linked to roster. Edit via roster page." : undefined}
+                                                                className="w-full bg-card border border-border rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-wider outline-none focus:border-accent transition-colors disabled:opacity-50 disabled:bg-surface/50 disabled:cursor-not-allowed"
                                                             />
                                                             {/* Styling for Value */}
                                                             <div className="flex gap-2 items-center mt-2">

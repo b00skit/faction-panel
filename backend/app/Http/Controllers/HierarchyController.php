@@ -7,6 +7,7 @@ use App\Models\Faction;
 use App\Models\Hierarchy;
 use App\Models\RosterContent;
 use App\Models\User;
+use App\Services\RosterResolutionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -36,33 +37,34 @@ class HierarchyController extends Controller
                 if ($hasExplicitPerms) {
                     return User::hasHierarchyPermission($user, $hierarchy, 'view_hierarchy');
                 }
+
                 return $isGlobalViewer || User::hasHierarchyPermission($user, $hierarchy, 'view_hierarchy');
             });
 
             return $filteredHierarchies->map(function ($hierarchy) use ($user) {
                 // Fetch root nodes recursively
                 $rootNodes = $hierarchy->rootNodes()->get();
-                
+
                 // Resolve roster contents for slots
                 $allNodes = $hierarchy->nodes()->get();
                 $rosterContentIds = [];
                 foreach ($allNodes as $node) {
                     // If auto-link is enabled, fetch the relevant rows in the section and add their IDs
-                    if (!empty($node->roster_sync_config['enabled']) && !empty($node->roster_sync_config['section_id'])) {
-                        $secId = (int)$node->roster_sync_config['section_id'];
+                    if (! empty($node->roster_sync_config['enabled']) && ! empty($node->roster_sync_config['section_id'])) {
+                        $secId = (int) $node->roster_sync_config['section_id'];
                         $rows = RosterContent::where('section_id', $secId)->orderBy('order')->orderBy('id')->get();
-                        $start = isset($node->roster_sync_config['row_start']) ? (int)$node->roster_sync_config['row_start'] : 1;
-                        $end = isset($node->roster_sync_config['row_end']) ? (int)$node->roster_sync_config['row_end'] : null;
-                        
+                        $start = isset($node->roster_sync_config['row_start']) ? (int) $node->roster_sync_config['row_start'] : 1;
+                        $end = isset($node->roster_sync_config['row_end']) ? (int) $node->roster_sync_config['row_end'] : null;
+
                         $offset = max(0, $start - 1);
                         $limit = $end ? ($end - $start + 1) : null;
-                        
+
                         if ($limit !== null) {
                             $rows = $rows->slice($offset, $limit);
                         } else {
                             $rows = $rows->slice($offset);
                         }
-                        
+
                         foreach ($rows as $row) {
                             $rosterContentIds[] = $row->id;
                         }
@@ -71,14 +73,14 @@ class HierarchyController extends Controller
                     // Also fetch manually linked slots
                     $slots = $node->slots ?? [];
                     foreach ($slots as $slot) {
-                        if (!empty($slot['roster_content_id'])) {
+                        if (! empty($slot['roster_content_id'])) {
                             $rosterContentIds[] = $slot['roster_content_id'];
                         }
                     }
                 }
 
                 $rosterContents = null;
-                if (!empty($rosterContentIds)) {
+                if (! empty($rosterContentIds)) {
                     $rosterContents = RosterContent::whereIn('id', array_unique($rosterContentIds))
                         ->with('section.roster')
                         ->get()
@@ -87,11 +89,12 @@ class HierarchyController extends Controller
 
                 // Recursive function to attach children and resolve slots
                 $resolveNode = function ($node) use (&$resolveNode, $rosterContents) {
-                    $node = \App\Services\RosterResolutionService::resolveNodeSlots($node, $rosterContents);
+                    $node = RosterResolutionService::resolveNodeSlots($node, $rosterContents);
 
                     $node->children = $node->children()->get()->map(function ($child) use (&$resolveNode) {
                         return $resolveNode($child);
                     });
+
                     return $node;
                 };
 
@@ -114,7 +117,7 @@ class HierarchyController extends Controller
             })->values();
         });
 
-        if ($resolvedHierarchies->isEmpty() && !$isGlobalViewer) {
+        if ($resolvedHierarchies->isEmpty() && ! $isGlobalViewer) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -126,8 +129,8 @@ class HierarchyController extends Controller
     public function store(Request $request, $shortname)
     {
         $faction = Faction::where('shortname', $shortname)->firstOrFail();
-        
-        if (!User::hasFactionPermission(Auth::user(), $faction, 'create_hierarchy')) {
+
+        if (! User::hasFactionPermission(Auth::user(), $faction, 'create_hierarchy')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -156,8 +159,8 @@ class HierarchyController extends Controller
                     'roster_content_id' => null,
                     'label' => 'Director',
                     'value' => 'VACANT',
-                ]
-            ]
+                ],
+            ],
         ]);
 
         $this->audit('hierarchy.create', "Created hierarchy '{$hierarchy->name}' for faction '{$faction->name}'", null, $hierarchy, null, $hierarchy->getAttributes());
@@ -170,7 +173,7 @@ class HierarchyController extends Controller
         $user = Auth::user();
         $canModify = User::hasHierarchyPermission($user, $hierarchy, 'modify_hierarchy');
 
-        if (!$canModify) {
+        if (! $canModify) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -192,7 +195,7 @@ class HierarchyController extends Controller
     public function destroy(Hierarchy $hierarchy)
     {
         $user = Auth::user();
-        if (!User::hasHierarchyPermission($user, $hierarchy, 'modify_hierarchy')) {
+        if (! User::hasHierarchyPermission($user, $hierarchy, 'modify_hierarchy')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -206,8 +209,8 @@ class HierarchyController extends Controller
     public function reorder(Request $request, $shortname)
     {
         $faction = Faction::where('shortname', $shortname)->firstOrFail();
-        
-        if (!User::hasFactionPermission(Auth::user(), $faction, 'global_hierarchy_moderation')) {
+
+        if (! User::hasFactionPermission(Auth::user(), $faction, 'global_hierarchy_moderation')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

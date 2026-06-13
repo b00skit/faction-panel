@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Hierarchy;
-use App\Models\HierarchyPermission;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -13,7 +12,7 @@ class HierarchyPermissionController extends Controller
     public function index(Hierarchy $hierarchy)
     {
         $faction = $hierarchy->faction;
-        if (!User::hasFactionPermission(Auth::user(), $faction, 'global_hierarchy_moderation') && $hierarchy->created_by !== Auth::id()) {
+        if (! User::hasFactionPermission(Auth::user(), $faction, 'global_hierarchy_moderation') && $hierarchy->created_by !== Auth::id()) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -25,7 +24,7 @@ class HierarchyPermissionController extends Controller
     public function update(Request $request, Hierarchy $hierarchy)
     {
         $faction = $hierarchy->faction;
-        if (!User::hasFactionPermission(Auth::user(), $faction, 'global_hierarchy_moderation') && $hierarchy->created_by !== Auth::id()) {
+        if (! User::hasFactionPermission(Auth::user(), $faction, 'global_hierarchy_moderation') && $hierarchy->created_by !== Auth::id()) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -64,7 +63,7 @@ class HierarchyPermissionController extends Controller
     public function destroy(Hierarchy $hierarchy, $permissionId)
     {
         $faction = $hierarchy->faction;
-        if (!User::hasFactionPermission(Auth::user(), $faction, 'global_hierarchy_moderation') && $hierarchy->created_by !== Auth::id()) {
+        if (! User::hasFactionPermission(Auth::user(), $faction, 'global_hierarchy_moderation') && $hierarchy->created_by !== Auth::id()) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
