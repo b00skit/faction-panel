@@ -81,3 +81,29 @@ test('superadmin can logout', function () {
     $response->assertRedirect('/admin/login');
     $this->assertGuest('web');
 });
+
+test('guest is redirected from telescope to login', function () {
+    $response = $this->get('/telescope');
+
+    $response->assertRedirect('/admin/login');
+});
+
+test('regular logged in user cannot access telescope', function () {
+    $user = User::factory()->create([
+        'is_superadmin' => false,
+    ]);
+
+    $response = $this->actingAs($user, 'web')->get('/telescope');
+
+    $response->assertStatus(403);
+});
+
+test('superadmin user can access telescope', function () {
+    $superadmin = User::factory()->create([
+        'is_superadmin' => true,
+    ]);
+
+    $response = $this->actingAs($superadmin, 'web')->get('/telescope');
+
+    $response->assertStatus(200);
+});

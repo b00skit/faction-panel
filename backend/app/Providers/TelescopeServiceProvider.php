@@ -60,4 +60,16 @@ class TelescopeServiceProvider extends TelescopeApplicationServiceProvider
             return (bool) $user->is_superadmin;
         });
     }
+
+    /**
+     * Configure the Telescope authorization services.
+     */
+    protected function authorization(): void
+    {
+        $this->gate();
+
+        Telescope::auth(function ($request) {
+            return Gate::allows('viewTelescope', [$request->user()]);
+        });
+    }
 }
