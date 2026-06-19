@@ -96,6 +96,23 @@ class StatisticsController extends Controller
 
         $model->load(['creator', 'widgets']);
 
+        // Lazy background refresh if any widgets are stale (older than 24 hours or never calculated)
+        $needsRefresh = $model->widgets->contains(function ($widget) {
+            return is_null($widget->last_calculated_at) || $widget->last_calculated_at->lt(now()->subDay());
+        });
+
+        if ($needsRefresh) {
+            dispatch(function () use ($model) {
+                // Fetch fresh widgets list to avoid using stale memory instances
+                $widgets = \App\Models\StatisticsWidget::where('statistics_model_id', $model->id)->get();
+                foreach ($widgets as $widget) {
+                    if (is_null($widget->last_calculated_at) || $widget->last_calculated_at->lt(now()->subDay())) {
+                        app(\App\Services\StatisticsService::class)->calculate($widget, true);
+                    }
+                }
+            })->afterResponse();
+        }
+
         $this->appendPermissions($model, $user, $isGlobalMod);
 
         return response()->json($model);
