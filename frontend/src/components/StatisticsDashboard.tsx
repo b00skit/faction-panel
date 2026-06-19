@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Plus, BarChart3, PieChart, LineChart, Table as TableIcon, RefreshCw, MoreVertical, Settings2, Trash2, Shield, AlertTriangle, Clock, ChevronLeft, Layout, Hash, Target } from 'lucide-react';
+import { Plus, Minus, BarChart3, PieChart, LineChart, Table as TableIcon, RefreshCw, MoreVertical, Settings2, Trash2, Shield, AlertTriangle, Clock, ChevronLeft, Layout, Hash, Target, Pin } from 'lucide-react';
 import api from '../api';
 import { StatisticsModel, StatisticsWidget } from '../types';
 import toast from 'react-hot-toast';
 import { StatisticsWidgetModal } from './StatisticsWidgetModal';
 import { StatisticsPermissionsModal } from './StatisticsPermissionsModal';
-import { motion, AnimatePresence, Reorder } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 
 const getChartColor = (idx: number, totalCount: number, customColor?: string) => {
     if (customColor) return customColor;
@@ -48,12 +48,45 @@ export const StatisticsWidgetCard: React.FC<StatisticsWidgetCardProps> = ({
   onConfigure,
   onDelete,
 }) => {
-  const [hiddenSeries, setHiddenSeries] = useState<string[]>([]);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem(`widget_collapsed_${widget.id}`) === 'true';
+  });
+
+  const toggleCollapsed = () => {
+    const nextState = !collapsed;
+    setCollapsed(nextState);
+    localStorage.setItem(`widget_collapsed_${widget.id}`, String(nextState));
+  };
 
   const rawData = Array.isArray(widget.cache_result)
     ? widget.cache_result
     : (widget.cache_result ? Object.values(widget.cache_result) : []);
+
+  const [hiddenSeries, setHiddenSeries] = useState<string[]>(() => {
+    return rawData
+      .filter((item: any) => item.default_hidden)
+      .map((item: any) => item.name);
+  });
+
+  const [hoveredSeries, setHoveredSeries] = useState<string | null>(null);
+  const [pinnedSeries, setPinnedSeries] = useState<string | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    setHiddenSeries(
+      rawData
+        .filter((item: any) => item.default_hidden)
+        .map((item: any) => item.name)
+    );
+    setHoveredSeries(null);
+    setPinnedSeries(null);
+  }, [widget.cache_result]);
+
+  const activeSeriesName = pinnedSeries || hoveredSeries;
+  const activeItem = rawData.find((item: any) => item.name === activeSeriesName);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+
   const visibleData = rawData.filter((item: any) => !hiddenSeries.includes(item.name));
 
   const getNumericValue = (val: any): number => {
@@ -292,128 +325,310 @@ export const StatisticsWidgetCard: React.FC<StatisticsWidgetCardProps> = ({
     }
 
     if (widget.type === 'pie') {
-      const isLargeDataset = visibleData.length > 20;
-      const gap = (visibleData.length > 1 && !isLargeDataset) ? Math.max(0.5, 3 - visibleData.length * 0.1) : 0;
-      const totalGap = gap * visibleData.length;
-      const availablePercent = 100 - totalGap;
-      let cumulativePercent = 0;
+      const r = 10;
+      const C = 2 * Math.PI * r;
+      const C_outer = 2 * Math.PI * 20;
+      const chartData = visibleData.filter((item: any) => getNumericValue(item.value) > 0);
 
       return (
-        <div className="flex flex-col items-center gap-8 py-4">
-          <div className="relative w-48 h-48 shrink-0 group">
-            <motion.svg 
-                initial={{ scale: 0.8, opacity: 0, rotate: -45 }}
-                animate={{ scale: 1, opacity: 1, rotate: -90 }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
-                viewBox="0 0 40 40" 
-                className="w-full h-full overflow-visible"
-            >
-              {/* Background Track */}
-              <circle
-                r="16"
-                cx="20"
-                cy="20"
-                fill="transparent"
-                stroke="var(--border)"
-                strokeWidth="4"
-                strokeOpacity="0.2"
-              />
-              <AnimatePresence>
-                {visibleData.map((item: any, idx: number) => {
-                    const val = getNumericValue(item.value);
-                    const itemPercent = (val / (total || 1)) * 100;
-                    const percent = (itemPercent / 100) * availablePercent;
-                    
-                    const displayPercent = (percent < 0.5 && val > 0) ? 0.5 : percent;
-                    const strokeDashoffset = -cumulativePercent;
-                    cumulativePercent += displayPercent + gap;
-
-                    const rawIdx = rawData.findIndex((i: any) => i.name === item.name);
-                    const color = getChartColor(rawIdx, rawData.length, item.color);
-
-                    return (
-                      <motion.circle
-                        key={`${item.name || ''}-${idx}`}
-                        initial={{ opacity: 0, strokeWidth: 3 }}
-                        animate={{ opacity: 1, strokeWidth: 5 }}
-                        exit={{ opacity: 0, strokeWidth: 3 }}
-                        transition={{ duration: 0.3 }}
-                        r="16"
-                        cx="20"
-                        cy="20"
-                        fill="transparent"
-                        stroke={color}
-                        strokeDasharray={`${displayPercent} 100`}
-                        strokeDashoffset={strokeDashoffset}
-                        strokeLinecap={isLargeDataset ? "butt" : "round"}
-                        className="cursor-pointer transition-all duration-300 hover:stroke-[7]"
-                        style={{
-                            filter: isLargeDataset ? undefined : `drop-shadow(0 0 4px ${color}44)`
-                        }}
-                      />
-                    );
-                })}
-              </AnimatePresence>
-            </motion.svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <motion.span 
-                    key={total}
-                    initial={{ scale: 0.5, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="text-3xl font-black text-text tracking-tighter"
-                >
-                    {total}
-                </motion.span>
-                <span className="text-[10px] font-black text-muted uppercase tracking-[0.2em] -mt-1">Active Total</span>
-            </div>
-          </div>
-          <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-8 py-4 px-2 w-full">
+          {/* Left Side: Legend */}
+          <div className="flex-1 flex flex-col gap-3 max-h-64 overflow-y-auto pl-1.5 pr-2 custom-scrollbar w-full">
             {rawData.map((item: any, idx: number) => {
               const isHidden = hiddenSeries.includes(item.name);
               const color = getChartColor(idx, rawData.length, item.color);
               const val = getNumericValue(item.value);
+              const isHovered = activeSeriesName === item.name;
+              const isPinned = pinnedSeries === item.name;
+
               return (
-                <button 
+                <div 
                   key={`${item.name || ''}-${idx}`}
-                  type="button"
-                  onClick={() => {
-                    if (isHidden) {
-                      setHiddenSeries(hiddenSeries.filter(h => h !== item.name));
-                    } else {
-                      if (hiddenSeries.length < rawData.length - 1) {
-                        setHiddenSeries([...hiddenSeries, item.name]);
-                      } else {
-                        toast.error("At least one series must remain visible");
-                      }
-                    }
-                  }}
-                  className={`flex items-center justify-between p-3 bg-surface/40 rounded-2xl border transition-all text-left group ${
-                    isHidden 
-                      ? 'border-border/30 opacity-40 hover:opacity-60 bg-surface/10 line-through' 
-                      : 'border-border/50 hover:border-accent/30 hover:bg-surface/60'
-                  }`}
+                  onMouseEnter={() => setHoveredSeries(item.name)}
+                  onMouseLeave={() => setHoveredSeries(null)}
+                  className={`flex items-center justify-between text-left group/legend transition-all duration-300 w-full p-1.5 rounded-lg border ${
+                    isHidden ? 'opacity-30 line-through' : 'hover:opacity-85'
+                  } ${isHovered ? 'bg-surface/80 border-accent/40 shadow-sm' : 'border-transparent'}`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div 
-                        className="w-2.5 h-2.5 rounded-full shrink-0 shadow-lg transition-all" 
-                        style={{ 
-                            backgroundColor: isHidden ? '#6b7280' : color, 
-                            boxShadow: isHidden ? 'none' : `0 0 10px ${color}44` 
-                        }} 
-                    />
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-[10px] font-black text-text uppercase truncate tracking-tight">{item.name}</span>
-                      <span className="text-[8px] font-bold text-muted uppercase tracking-widest">
-                        {!isHidden && total > 0 ? ((val / total) * 100).toFixed(1) : 0}% Distribution
-                      </span>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPinnedSeries(prev => prev === item.name ? null : item.name);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.stopPropagation();
+                          setPinnedSeries(prev => prev === item.name ? null : item.name);
+                        }
+                      }}
+                      className="text-muted hover:text-accent transition-colors shrink-0 p-0.5 cursor-pointer focus:outline-none"
+                      title={isPinned ? 'Unpin label' : 'Pin label'}
+                    >
+                      <Pin size={10} className={isPinned ? 'text-accent fill-accent' : 'opacity-0 group-hover/legend:opacity-100'} />
                     </div>
+                    <div 
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        if (isHidden) {
+                          setHiddenSeries(hiddenSeries.filter(h => h !== item.name));
+                        } else {
+                          if (hiddenSeries.length < rawData.length - 1) {
+                            setHiddenSeries([...hiddenSeries, item.name]);
+                          } else {
+                            toast.error("At least one series must remain visible");
+                          }
+                        }
+                      }}
+                      className="w-4 h-3 rounded-sm border shrink-0 transition-colors cursor-pointer"
+                      style={{ 
+                        borderColor: isHidden ? '#6b7280' : color, 
+                        backgroundColor: isHidden ? 'transparent' : `${color}1a`
+                      }}
+                    />
+                    <span 
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        if (isHidden) {
+                          setHiddenSeries(hiddenSeries.filter(h => h !== item.name));
+                        } else {
+                          if (hiddenSeries.length < rawData.length - 1) {
+                            setHiddenSeries([...hiddenSeries, item.name]);
+                          } else {
+                            toast.error("At least one series must remain visible");
+                          }
+                        }
+                      }}
+                      className="text-xs font-bold text-text uppercase tracking-tight truncate leading-none cursor-pointer hover:text-accent transition-colors"
+                    >
+                      {item.name}
+                    </span>
                   </div>
-                  <div className="flex flex-col items-end shrink-0 ml-4">
-                    <span className="text-sm font-black text-text tabular-nums leading-none">{displayValue(item.value)}</span>
-                  </div>
-                </button>
+                  {!isHidden && (
+                    <span className="text-[10px] font-black text-muted ml-2 shrink-0 select-none">
+                      {displayValue(item.value)} ({total > 0 ? ((val / total) * 100).toFixed(0) : 0}%)
+                    </span>
+                  )}
+                </div>
               );
             })}
+          </div>
+
+          {/* Right Side: Pie Chart & Total */}
+          <div className="flex flex-col items-center shrink-0">
+            <div 
+              onMouseMove={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setMousePos({
+                  x: e.clientX - rect.left,
+                  y: e.clientY - rect.top,
+                });
+              }}
+              onMouseLeave={() => setHoveredSeries(null)}
+              className="relative w-64 h-64 md:w-72 md:h-72 group flex items-center justify-center"
+            >
+              <motion.svg 
+                  initial={{ scale: 0.8, opacity: 0, rotate: -45 }}
+                  animate={{ scale: 1, opacity: 1, rotate: -90 }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
+                  viewBox="0 0 40 40" 
+                  className="w-full h-full overflow-visible"
+              >
+                {/* Background Track */}
+                <circle
+                  r={10}
+                  cx="20"
+                  cy="20"
+                  fill="transparent"
+                  stroke="var(--border)"
+                  strokeWidth={20}
+                  strokeOpacity="0.1"
+                />
+                
+                {/* Visual Slices (Render Layer - Semi-transparent wedges) */}
+                <AnimatePresence>
+                  {(() => {
+                    let cumulativePercent = 0;
+                    return chartData.map((item: any, idx: number) => {
+                      const val = getNumericValue(item.value);
+                      const percent = val / (total || 1);
+                      const dashLength = percent * C;
+                      const strokeDashoffset = -cumulativePercent * C;
+                      cumulativePercent += percent;
+
+                      const rawIdx = rawData.findIndex((i: any) => i.name === item.name);
+                      const color = getChartColor(rawIdx, rawData.length, item.color);
+                      const isHovered = activeSeriesName === item.name;
+
+                      return (
+                        <motion.circle
+                          key={`wedge-visual-${item.name || ''}-${idx}`}
+                          initial={{ opacity: 0 }}
+                          animate={{ 
+                            opacity: 1, 
+                            scale: isHovered ? 1.05 : 1,
+                            strokeOpacity: isHovered ? 0.95 : 0.6 
+                          }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          r={10}
+                          cx="20"
+                          cy="20"
+                          fill="transparent"
+                          stroke={color}
+                          strokeWidth={20}
+                          strokeDasharray={`${dashLength} ${C}`}
+                          strokeDashoffset={strokeDashoffset}
+                          style={{ transformOrigin: "20px 20px" }}
+                          className="pointer-events-none"
+                        />
+                      );
+                    });
+                  })()}
+                </AnimatePresence>
+
+                {/* Slices Outer Borders & Radial Borders (Solid / Less transparent) */}
+                {(() => {
+                  let cumulativePercent = 0;
+                  return chartData.map((item: any, idx: number) => {
+                    const val = getNumericValue(item.value);
+                    const percent = val / (total || 1);
+                    const dashLengthOuter = percent * C_outer;
+                    const strokeDashoffsetOuter = -cumulativePercent * C_outer;
+
+                    const rawIdx = rawData.findIndex((i: any) => i.name === item.name);
+                    const color = getChartColor(rawIdx, rawData.length, item.color);
+                    const isHovered = activeSeriesName === item.name;
+
+                    // Radial divider line coordinates
+                    const radialAngle = cumulativePercent * 2 * Math.PI;
+                    const radialX = 20 + 20 * Math.cos(radialAngle);
+                    const radialY = 20 + 20 * Math.sin(radialAngle);
+
+                    cumulativePercent += percent;
+
+                     return (
+                      <g key={`border-group-${item.name || ''}-${idx}`} className="pointer-events-none">
+                        {/* Outer Edge border arc */}
+                        <motion.circle
+                          initial={{ opacity: 0 }}
+                          animate={{ 
+                            opacity: 1,
+                            scale: isHovered ? 1.05 : 1,
+                            strokeWidth: isHovered ? 0.35 : 0.15,
+                            strokeOpacity: isHovered ? 1.0 : 0.7
+                          }}
+                          style={{ transformOrigin: "20px 20px" }}
+                          transition={{ duration: 0.2 }}
+                          r={20}
+                          cx="20"
+                          cy="20"
+                          fill="transparent"
+                          stroke={color}
+                          strokeWidth={0.15}
+                          strokeOpacity={1.0}
+                          strokeDasharray={`${dashLengthOuter} ${C_outer}`}
+                          strokeDashoffset={strokeDashoffsetOuter}
+                        />
+                        {/* Radial divider line */}
+                        {chartData.length > 1 && (
+                          <motion.line
+                            x1={20}
+                            y1={20}
+                            x2={radialX}
+                            y2={radialY}
+                            stroke={color}
+                            animate={{
+                              scale: isHovered ? 1.05 : 1,
+                              strokeWidth: isHovered ? 0.35 : 0.15,
+                              strokeOpacity: isHovered ? 1.0 : 0.7
+                            }}
+                            style={{ transformOrigin: "20px 20px" }}
+                            transition={{ duration: 0.2 }}
+                            strokeWidth={0.15}
+                            strokeOpacity={1.0}
+                          />
+                        )}
+                      </g>
+                    );
+                  });
+                })()}
+
+                {/* Interactive Slices (Hit-Test Layer - Invisible but captures precise pointer events) */}
+                {(() => {
+                  let cumulativePercent = 0;
+                  return chartData.map((item: any, idx: number) => {
+                    const val = getNumericValue(item.value);
+                    const percent = val / (total || 1);
+                    const dashLength = percent * C;
+                    const strokeDashoffset = -cumulativePercent * C;
+                    cumulativePercent += percent;
+
+                    return (
+                      <circle
+                        key={`wedge-interactive-${item.name || ''}-${idx}`}
+                        r={10}
+                        cx="20"
+                        cy="20"
+                        fill="transparent"
+                        stroke="red"
+                        strokeWidth={20}
+                        strokeOpacity={0}
+                        strokeDasharray={`${dashLength} ${C}`}
+                        strokeDashoffset={strokeDashoffset}
+                        pointerEvents="stroke"
+                        onMouseEnter={() => setHoveredSeries(item.name)}
+                        onMouseLeave={() => setHoveredSeries(null)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPinnedSeries(prev => prev === item.name ? null : item.name);
+                        }}
+                        className="cursor-pointer focus:outline-none"
+                      />
+                    );
+                  });
+                })()}
+              </motion.svg>
+
+              {activeSeriesName && activeItem && (
+                <div 
+                  className="absolute z-30 pointer-events-none bg-card/95 backdrop-blur-md border border-border/80 px-3 py-2 rounded-xl shadow-xl flex flex-col gap-0.5 min-w-[120px] transition-all duration-75 text-left"
+                  style={{
+                    left: mousePos.x > 140 ? mousePos.x - 132 : mousePos.x + 12,
+                    top: mousePos.y > 140 ? mousePos.y - 62 : mousePos.y + 12,
+                  }}
+                >
+                  <span className="text-[8px] font-black uppercase text-muted tracking-widest truncate max-w-[140px]">
+                    {activeSeriesName}
+                  </span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xs font-black text-text">
+                      {displayValue(activeItem.value)}
+                    </span>
+                    {total > 0 && (
+                      <span className="text-[9px] font-bold text-accent">
+                        {((getNumericValue(activeItem.value) / total) * 100).toFixed(0)}%
+                      </span>
+                    )}
+                  </div>
+                  {pinnedSeries === activeSeriesName && (
+                    <span className="text-[6px] font-bold uppercase tracking-wide text-accent/80 mt-0.5">
+                      📌 Pinned
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* Active Total Outside Pie */}
+            <div className="text-center mt-4 bg-surface/30 px-4 py-1.5 rounded-full border border-border/50 shadow-sm flex items-center gap-2">
+              <span className="text-sm font-black text-text tracking-tighter leading-none">{displayValue(total)}</span>
+              <span className="text-[8px] font-black text-muted uppercase tracking-widest">Active Total</span>
+            </div>
           </div>
         </div>
       );
@@ -554,48 +769,190 @@ export const StatisticsWidgetCard: React.FC<StatisticsWidgetCardProps> = ({
     if (widget.type === 'bar') {
       const max = Math.max(...visibleData.map((i: any) => getNumericValue(i.value))) || 1;
       return (
-        <div className="space-y-3 py-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar animate-in fade-in duration-300">
+        <div 
+          onMouseMove={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            setMousePos({
+              x: e.clientX - rect.left,
+              y: e.clientY - rect.top,
+            });
+          }}
+          onMouseLeave={() => setHoveredSeries(null)}
+          className="relative space-y-3 py-2 max-h-64 overflow-y-auto pl-1.5 pr-2 custom-scrollbar animate-in fade-in duration-300"
+        >
           {rawData.map((item: any, idx: number) => {
             const isHidden = hiddenSeries.includes(item.name);
             const color = getChartColor(idx, rawData.length, item.color);
             const val = getNumericValue(item.value);
             const pct = max > 0 ? (val / max) * 100 : 0;
+            const isHovered = activeSeriesName === item.name;
+            const isPinned = pinnedSeries === item.name;
+
             return (
-              <button 
+              <div 
                 key={`${item.name || ''}-${idx}`}
-                type="button"
-                onClick={() => {
-                  if (isHidden) {
-                    setHiddenSeries(hiddenSeries.filter(h => h !== item.name));
-                  } else {
-                    if (hiddenSeries.length < rawData.length - 1) {
-                      setHiddenSeries([...hiddenSeries, item.name]);
-                    } else {
-                      toast.error("At least one series must remain visible");
-                    }
-                  }
-                }}
-                className={`w-full space-y-1 text-left group transition-all duration-300 ${isHidden ? 'opacity-35 line-through' : 'hover:opacity-90'}`}
+                onMouseEnter={() => setHoveredSeries(item.name)}
+                onMouseLeave={() => setHoveredSeries(null)}
+                className={`w-full space-y-1 text-left group/bar transition-all duration-300 border rounded-lg p-1.5 ${
+                  isHidden ? 'opacity-35 line-through border-transparent' : 'border-transparent'
+                } ${isHovered ? 'bg-surface/50 border-accent/30 shadow-sm' : ''}`}
               >
                 <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest">
-                  <span className="text-muted flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isHidden ? '#6b7280' : color }} />
-                    {item.name}
+                  <span className="text-muted flex items-center gap-1.5 min-w-0">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPinnedSeries(prev => prev === item.name ? null : item.name);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.stopPropagation();
+                          setPinnedSeries(prev => prev === item.name ? null : item.name);
+                        }
+                      }}
+                      className="text-muted hover:text-accent transition-colors shrink-0 p-0.5 cursor-pointer focus:outline-none"
+                      title={isPinned ? 'Unpin label' : 'Pin label'}
+                    >
+                      <Pin size={8} className={isPinned ? 'text-accent fill-accent' : 'opacity-0 group-hover/bar:opacity-100'} />
+                    </div>
+                    <div 
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        if (isHidden) {
+                          setHiddenSeries(hiddenSeries.filter(h => h !== item.name));
+                        } else {
+                          if (hiddenSeries.length < rawData.length - 1) {
+                            setHiddenSeries([...hiddenSeries, item.name]);
+                          } else {
+                            toast.error("At least one series must remain visible");
+                          }
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          if (isHidden) {
+                            setHiddenSeries(hiddenSeries.filter(h => h !== item.name));
+                          } else {
+                            if (hiddenSeries.length < rawData.length - 1) {
+                              setHiddenSeries([...hiddenSeries, item.name]);
+                            } else {
+                              toast.error("At least one series must remain visible");
+                            }
+                          }
+                        }
+                      }}
+                      className="w-1.5 h-1.5 rounded-full shrink-0 cursor-pointer" 
+                      style={{ backgroundColor: isHidden ? '#6b7280' : color }} 
+                    />
+                    <span 
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        if (isHidden) {
+                          setHiddenSeries(hiddenSeries.filter(h => h !== item.name));
+                        } else {
+                          if (hiddenSeries.length < rawData.length - 1) {
+                            setHiddenSeries([...hiddenSeries, item.name]);
+                          } else {
+                            toast.error("At least one series must remain visible");
+                          }
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          if (isHidden) {
+                            setHiddenSeries(hiddenSeries.filter(h => h !== item.name));
+                          } else {
+                            if (hiddenSeries.length < rawData.length - 1) {
+                              setHiddenSeries([...hiddenSeries, item.name]);
+                            } else {
+                              toast.error("At least one series must remain visible");
+                            }
+                          }
+                        }
+                      }}
+                      className="truncate cursor-pointer hover:text-text transition-colors"
+                    >
+                      {item.name}
+                    </span>
                   </span>
-                  <span className="text-text">{displayValue(item.value)}</span>
+                  <span className="text-text font-black select-none">{displayValue(item.value)}</span>
                 </div>
-                <div className="h-2 bg-surface rounded-full overflow-hidden border border-border/50">
+                <div 
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    if (isHidden) {
+                      setHiddenSeries(hiddenSeries.filter(h => h !== item.name));
+                    } else {
+                      if (hiddenSeries.length < rawData.length - 1) {
+                        setHiddenSeries([...hiddenSeries, item.name]);
+                      } else {
+                        toast.error("At least one series must remain visible");
+                      }
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      if (isHidden) {
+                        setHiddenSeries(hiddenSeries.filter(h => h !== item.name));
+                      } else {
+                        if (hiddenSeries.length < rawData.length - 1) {
+                          setHiddenSeries([...hiddenSeries, item.name]);
+                        } else {
+                          toast.error("At least one series must remain visible");
+                        }
+                      }
+                    }
+                  }}
+                  className="h-2 bg-surface rounded-full overflow-hidden border border-border/50 cursor-pointer"
+                >
                   <motion.div 
                     initial={{ width: 0 }}
                     animate={{ width: isHidden ? '0%' : `${pct}%` }}
                     transition={{ duration: 0.5, ease: "easeOut" }}
                     className="h-full rounded-full"
-                    style={{ backgroundColor: isHidden ? '#374151' : color }}
+                    style={{ 
+                      backgroundColor: isHidden ? '#374151' : color,
+                      opacity: isHovered ? 1 : 0.8
+                    }}
                   />
                 </div>
-              </button>
+              </div>
             );
           })}
+
+          {activeSeriesName && activeItem && (
+            <div 
+              className="absolute z-30 pointer-events-none bg-card/95 backdrop-blur-md border border-border/80 px-3 py-2 rounded-xl shadow-xl flex flex-col gap-0.5 min-w-[120px] transition-all duration-75 text-left"
+              style={{
+                left: mousePos.x > 150 ? mousePos.x - 132 : mousePos.x + 12,
+                top: mousePos.y > 100 ? mousePos.y - 62 : mousePos.y + 12,
+              }}
+            >
+              <span className="text-[8px] font-black uppercase text-muted tracking-widest truncate max-w-[150px]">
+                {activeSeriesName}
+              </span>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xs font-black text-text">
+                  {displayValue(activeItem.value)}
+                </span>
+                {total > 0 && (
+                  <span className="text-[8px] font-bold text-accent">
+                    {((getNumericValue(activeItem.value) / total) * 100).toFixed(0)}%
+                  </span>
+                )}
+              </div>
+              {pinnedSeries === activeSeriesName && (
+                <span className="text-[6px] font-bold uppercase tracking-wide text-accent/80 mt-0.5">
+                  📌 Pinned
+                </span>
+              )}
+            </div>
+          )}
         </div>
       );
     }
@@ -650,31 +1007,43 @@ export const StatisticsWidgetCard: React.FC<StatisticsWidgetCardProps> = ({
   };
 
   return (
-    <Reorder.Item 
-      value={widget}
+    <div 
       className="bg-card border border-border rounded-lg overflow-hidden flex flex-col shadow-sm group relative"
       style={{ gridColumn: `span ${widget.width || 6}` }}
     >
-      <div className="px-4 py-3 border-b border-border bg-surface/50 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <div className="p-1.5 bg-accent/10 rounded text-accent cursor-grab active:cursor-grabbing">
-              {widget.type === 'pie' && <PieChart size={14} />}
-              {widget.type === 'bar' && <BarChart3 size={14} />}
-              {widget.type === 'line' && <LineChart size={14} />}
-              {widget.type === 'table' && <TableIcon size={14} />}
-              {widget.type === 'stat' && <Hash size={14} />}
-              {widget.type === 'radar' && <Target size={14} />}
-          </div>
-          <div>
-            <h3 className="text-xs font-black uppercase tracking-widest text-text">{widget.name}</h3>
-            <div className="flex items-center gap-2 text-[8px] font-bold text-muted uppercase">
-              <Clock size={8} />
-              <span>Updated: {widget.last_calculated_at ? new Date(widget.last_calculated_at).toLocaleTimeString() : 'Never'}</span>
-            </div>
+      <div className="relative px-4 py-3 border-b border-border bg-surface/50 flex justify-between items-center min-h-[48px]">
+        {/* Left Side: Collapse */}
+        <div className="flex items-center gap-1.5 z-10">
+          <button 
+            type="button"
+            onClick={toggleCollapsed}
+            className="w-6 h-6 bg-accent hover:bg-accent/90 text-white rounded flex items-center justify-center transition-colors shrink-0 shadow-sm"
+          >
+            {collapsed ? <Plus size={12} /> : <Minus size={12} />}
+          </button>
+        </div>
+
+        {/* Center: Title & Icon */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="flex items-center gap-2 px-16 text-center">
+            {widget.type === 'pie' && <PieChart size={14} className="text-text shrink-0" />}
+            {widget.type === 'bar' && <BarChart3 size={14} className="text-text shrink-0" />}
+            {widget.type === 'line' && <LineChart size={14} className="text-text shrink-0" />}
+            {widget.type === 'table' && <TableIcon size={14} className="text-text shrink-0" />}
+            {widget.type === 'stat' && <Hash size={14} className="text-text shrink-0" />}
+            {widget.type === 'radar' && <Target size={14} className="text-text shrink-0" />}
+            <h3 className="text-xs font-black uppercase tracking-widest text-text truncate max-w-[200px] sm:max-w-xs select-none">
+              {widget.name}
+            </h3>
           </div>
         </div>
-        
-        <div className="flex items-center gap-1">
+
+        {/* Right Side: Options & Status */}
+        <div className="flex items-center gap-2 z-10">
+          <div className="hidden lg:flex flex-col items-end leading-none text-[8px] font-bold text-muted uppercase tracking-wider">
+            <span>Updated</span>
+            <span className="text-[7px] mt-0.5">{widget.last_calculated_at ? new Date(widget.last_calculated_at).toLocaleTimeString() : 'Never'}</span>
+          </div>
           {widget.is_intensive && (
               <div className="px-1.5 py-0.5 bg-warning/10 text-warning border border-warning/20 rounded text-[7px] font-black uppercase tracking-widest">
                   Intensive
@@ -706,7 +1075,7 @@ export const StatisticsWidgetCard: React.FC<StatisticsWidgetCardProps> = ({
                           </button>
                           <button 
                               onClick={() => { onDelete(widget.id); setMenuOpen(false); }}
-                              className="w-full flex items-center gap-2 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-danger/70 hover:text-danger hover:bg-danger/5 rounded"
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-danger hover:text-white hover:bg-danger rounded"
                           >
                               <Trash2 size={12} /> Delete
                           </button>
@@ -718,10 +1087,12 @@ export const StatisticsWidgetCard: React.FC<StatisticsWidgetCardProps> = ({
         </div>
       </div>
 
-      <div className="p-5 flex-1 flex flex-col justify-center">
-        {renderWidgetContent()}
-      </div>
-    </Reorder.Item>
+      {!collapsed && (
+        <div className="p-5 flex-1 flex flex-col justify-center animate-in fade-in duration-300">
+          {renderWidgetContent()}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -785,16 +1156,6 @@ export const StatisticsDashboard: React.FC<StatisticsDashboardProps> = ({ shortn
     }
   };
 
-  const handleReorder = async (newWidgets: StatisticsWidget[]) => {
-      setModel(prev => prev ? { ...prev, widgets: newWidgets } : null);
-      try {
-          await api.put(`/statistics/${modelId}/widgets/reorder`, {
-              widget_ids: newWidgets.map(w => w.id)
-          });
-      } catch (err) {
-          toast.error('Failed to save order');
-      }
-  };
 
   if (loading) return <div className="flex items-center justify-center h-64"><RefreshCw className="animate-spin text-accent" /></div>;
   if (!model) return <div>Dashboard not found</div>;
@@ -831,12 +1192,7 @@ export const StatisticsDashboard: React.FC<StatisticsDashboardProps> = ({ shortn
         </div>
       </div>
 
-      <Reorder.Group 
-        axis="y" 
-        values={model.widgets || []} 
-        onReorder={handleReorder}
-        className="grid grid-cols-12 gap-6"
-      >
+      <div className="grid grid-cols-12 gap-6">
         {model.widgets?.map(widget => (
           <StatisticsWidgetCard 
             key={widget.id}
@@ -863,7 +1219,7 @@ export const StatisticsDashboard: React.FC<StatisticsDashboardProps> = ({ shortn
             )}
           </div>
         )}
-      </Reorder.Group>
+      </div>
 
       {showWidgetModal && (
         <StatisticsWidgetModal 

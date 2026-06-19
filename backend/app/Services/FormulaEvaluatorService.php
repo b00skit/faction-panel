@@ -33,4 +33,29 @@ class FormulaEvaluatorService
         $context = new EvaluationContext($factionId, $variables);
         return $ast->evaluate($context);
     }
+
+    /**
+     * Helper to resolve property value on an item using EvaluationContext.
+     */
+    public function getPropertyVal(mixed $item, string $property): mixed
+    {
+        $factionId = 0;
+        if (is_object($item) && isset($item->faction_id)) {
+            $factionId = $item->faction_id;
+        } elseif (is_object($item) && method_exists($item, 'faction')) {
+            $factionId = $item->faction()->first()?->id ?? 0;
+        }
+
+        $context = new EvaluationContext($factionId);
+        return $context->getPropertyVal($item, $property);
+    }
+
+    /**
+     * Convert data to a Collection using EvaluationContext.
+     */
+    public function toCollection(mixed $data): \Illuminate\Support\Collection
+    {
+        $context = new EvaluationContext(0);
+        return $context->toCollection($data);
+    }
 }

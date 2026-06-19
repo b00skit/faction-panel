@@ -127,7 +127,82 @@ test('statistics service calculates pie chart widget series correctly', function
     $result = $statisticsService->calculate($widget, true);
 
     expect($result['data'])->toBe([
-        ['name' => 'Active', 'value' => 1.0, 'color' => '#00ff00'],
-        ['name' => 'LOA', 'value' => 0.0, 'color' => '#ff0000'],
+        ['name' => 'Active', 'value' => 1.0, 'color' => '#00ff00', 'default_hidden' => false],
+        ['name' => 'LOA', 'value' => 0.0, 'color' => '#ff0000', 'default_hidden' => false],
+    ]);
+});
+
+test('statistics service calculates series with default_hidden flag correctly', function () {
+    $faction = Faction::factory()->create();
+    $model = StatisticsModel::create(['faction_id' => $faction->id, 'name' => 'Dashboard']);
+    $widget = StatisticsWidget::create([
+        'statistics_model_id' => $model->id,
+        'name' => 'Active Officers',
+        'type' => 'pie',
+        'configuration' => [
+            'mode' => 'series',
+            'series' => [
+                ['name' => 'Active', 'color' => '#00ff00', 'formula' => '5', 'default_hidden' => false],
+                ['name' => 'LOA', 'color' => '#ff0000', 'formula' => '2', 'default_hidden' => true],
+            ],
+        ],
+    ]);
+
+    $statisticsService = new StatisticsService(new FormulaEvaluatorService());
+    $result = $statisticsService->calculate($widget, true);
+
+    expect($result['data'])->toBe([
+        ['name' => 'Active', 'value' => 5.0, 'color' => '#00ff00', 'default_hidden' => false],
+        ['name' => 'LOA', 'value' => 2.0, 'color' => '#ff0000', 'default_hidden' => true],
+    ]);
+});
+
+test('statistics service calculates grouped widgets with custom label settings correctly', function () {
+    $faction = Faction::factory()->create();
+    $roster = Roster::create([
+        'faction_id' => $faction->id,
+        'name' => 'LSPD Patrol',
+        'shortname' => 'patrol',
+        'columns' => [['id' => 'col_status', 'name' => 'Status', 'type' => 'select']],
+        'color' => '#ffffff',
+    ]);
+    $section = RosterSection::create(['roster_id' => $roster->id, 'name' => 'A', 'type' => 'section', 'shortname' => 'a']);
+    RosterContent::create(['section_id' => $section->id, 'content' => ['col_status' => 'Active']]);
+    RosterContent::create(['section_id' => $section->id, 'content' => ['col_status' => 'LOA']]);
+
+    $model = StatisticsModel::create(['faction_id' => $faction->id, 'name' => 'Dashboard']);
+    $widget = StatisticsWidget::create([
+        'statistics_model_id' => $model->id,
+        'name' => 'Grouped Patrol',
+        'type' => 'pie',
+        'configuration' => [
+            'mode' => 'grouped',
+            'formula' => "roster_rows('patrol')",
+            'group_by_column' => 'Status',
+            'label_settings' => [
+                'Active' => ['color' => '#00ff00', 'default_hidden' => false],
+                'LOA' => ['color' => '#ff0000', 'default_hidden' => true],
+            ],
+        ],
+    ]);
+
+    $statisticsService = new StatisticsService(new FormulaEvaluatorService());
+    $result = $statisticsService->calculate($widget, true);
+
+    // Collect data to avoid order issues
+    $data = collect($result['data'])->keyBy('name');
+
+    expect($data->get('Active'))->toBe([
+        'name' => 'Active',
+        'value' => 1.0,
+        'color' => '#00ff00',
+        'default_hidden' => false,
+    ]);
+
+    expect($data->get('LOA'))->toBe([
+        'name' => 'LOA',
+        'value' => 1.0,
+        'color' => '#ff0000',
+        'default_hidden' => true,
     ]);
 });

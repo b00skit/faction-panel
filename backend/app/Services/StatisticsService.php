@@ -34,6 +34,7 @@ class StatisticsService
         if ($mode === 'grouped') {
             $formula = $config['formula'] ?? '';
             $groupByCol = $config['group_by_column'] ?? '';
+            $labelSettings = $config['label_settings'] ?? [];
             try {
                 $rows = $this->evaluator->evaluate($formula, $factionId);
                 $grouped = $this->evaluator->toCollection($rows)->groupBy(function ($item) use ($groupByCol) {
@@ -42,10 +43,12 @@ class StatisticsService
                 });
 
                 foreach ($grouped as $key => $items) {
+                    $labelSetting = $labelSettings[$key] ?? [];
                     $data[] = [
                         'name' => $key,
                         'value' => (float)$items->count(),
-                        'color' => null,
+                        'color' => $labelSetting['color'] ?? null,
+                        'default_hidden' => $labelSetting['default_hidden'] ?? false,
                     ];
                 }
             } catch (\Throwable $e) {
@@ -62,12 +65,14 @@ class StatisticsService
                         'name' => $s['name'] ?? 'Data',
                         'value' => (float)$val,
                         'color' => $s['color'] ?? null,
+                        'default_hidden' => $s['default_hidden'] ?? false,
                     ];
                 } catch (\Throwable $e) {
                     $data[] = [
                         'name' => $s['name'] ?? 'Data',
                         'value' => 0.0,
                         'color' => $s['color'] ?? null,
+                        'default_hidden' => $s['default_hidden'] ?? false,
                     ];
                 }
             }

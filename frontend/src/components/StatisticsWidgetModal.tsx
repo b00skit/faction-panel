@@ -37,6 +37,7 @@ export const StatisticsWidgetModal: React.FC<StatisticsWidgetModalProps> = ({
     const [isSaving, setIsSaving] = useState(false);
     const [testResults, setTestResults] = useState<Record<string, any>>({});
     const [testingFormula, setTestingFormula] = useState<string | null>(null);
+    const [newLabelInput, setNewLabelInput] = useState('');
 
     const testFormula = async (formulaKey: string, formulaStr: string) => {
         if (!formulaStr) {
@@ -109,7 +110,8 @@ export const StatisticsWidgetModal: React.FC<StatisticsWidgetModalProps> = ({
             id: `series_${Date.now()}`,
             name: 'New Data Point',
             color: '#3b82f6',
-            formula: ''
+            formula: '',
+            default_hidden: false
         };
         setConfig({ ...config, series: [...(config.series || []), newSeries] });
     };
@@ -286,6 +288,146 @@ export const StatisticsWidgetModal: React.FC<StatisticsWidgetModalProps> = ({
                                             />
                                             <span className="text-[8px] text-muted font-bold uppercase tracking-wider mt-1 block">Specify the column name (e.g. Rank, Status) to split slices by.</span>
                                         </div>
+
+                                        {/* Label Customization Section */}
+                                        <div className="border-t border-border pt-6 space-y-4">
+                                            <div>
+                                                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted">Group Customization (Colors & Visibility)</h4>
+                                                <p className="text-[8px] text-muted font-bold uppercase tracking-widest mt-0.5">Customize specific labels. Unconfigured labels will use default colors and start as shown.</p>
+                                            </div>
+
+                                            <div className="space-y-3">
+                                                {Object.entries(config.label_settings || {}).map(([lbl, settings]: [string, any]) => (
+                                                    <div key={lbl} className="flex items-center gap-4 bg-card p-3 rounded-xl border border-border">
+                                                        <div className="text-[10px] font-black uppercase text-text flex-1 truncate">{lbl}</div>
+                                                        
+                                                        <input 
+                                                            type="color"
+                                                            value={settings.color || '#3b82f6'}
+                                                            onChange={e => {
+                                                                setConfig({
+                                                                    ...config,
+                                                                    label_settings: {
+                                                                        ...(config.label_settings || {}),
+                                                                        [lbl]: {
+                                                                            ...(config.label_settings?.[lbl] || {}),
+                                                                            color: e.target.value
+                                                                        }
+                                                                    }
+                                                                });
+                                                            }}
+                                                            className="h-8 w-10 bg-surface border border-border rounded-lg p-1 cursor-pointer shrink-0"
+                                                        />
+
+                                                        <label className="flex items-center gap-2 cursor-pointer text-[10px] font-black uppercase text-muted select-none shrink-0">
+                                                            <input 
+                                                                type="checkbox"
+                                                                checked={settings.default_hidden || false}
+                                                                onChange={e => {
+                                                                    setConfig({
+                                                                        ...config,
+                                                                        label_settings: {
+                                                                            ...(config.label_settings || {}),
+                                                                            [lbl]: {
+                                                                                ...(config.label_settings?.[lbl] || {}),
+                                                                                default_hidden: e.target.checked
+                                                                            }
+                                                                        }
+                                                                    });
+                                                                }}
+                                                                className="rounded border-border text-accent focus:ring-accent bg-surface w-4 h-4"
+                                                            />
+                                                            <span>Default Hidden</span>
+                                                        </label>
+
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const nextSettings = { ...(config.label_settings || {}) };
+                                                                delete nextSettings[lbl];
+                                                                setConfig({
+                                                                    ...config,
+                                                                    label_settings: nextSettings
+                                                                });
+                                                            }}
+                                                            className="p-1.5 text-muted hover:text-danger rounded-lg transition-colors hover:bg-surface/50 shrink-0"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {/* Add label helper */}
+                                            <div className="flex gap-2 pt-2">
+                                                <input 
+                                                    value={newLabelInput}
+                                                    onChange={e => setNewLabelInput(e.target.value)}
+                                                    className="flex-1 bg-surface border border-border rounded-xl px-3 py-2 text-xs text-text font-bold focus:border-accent outline-none"
+                                                    placeholder="Enter group label (e.g. Active, LOA)"
+                                                />
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (!newLabelInput.trim()) return;
+                                                        setConfig({
+                                                            ...config,
+                                                            label_settings: {
+                                                                ...(config.label_settings || {}),
+                                                                [newLabelInput.trim()]: {
+                                                                    color: '#3b82f6',
+                                                                    default_hidden: false
+                                                                }
+                                                            }
+                                                        });
+                                                        setNewLabelInput('');
+                                                    }}
+                                                    className="px-4 py-2 bg-accent/10 hover:bg-accent/20 text-accent border border-accent/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition"
+                                                >
+                                                    Add Label
+                                                </button>
+                                            </div>
+
+                                            {/* Discovered Labels from cache results */}
+                                            {(() => {
+                                                const discovered = new Set<string>();
+                                                if (Array.isArray(widget?.cache_result)) {
+                                                    widget.cache_result.forEach((item: any) => {
+                                                        if (item.name) discovered.add(item.name);
+                                                    });
+                                                }
+                                                const unconfigured = Array.from(discovered).filter(l => !config.label_settings?.[l]);
+                                                if (unconfigured.length === 0) return null;
+                                                return (
+                                                    <div className="pt-2">
+                                                        <span className="text-[8px] text-muted font-bold uppercase tracking-widest block mb-1">Discovered dynamic labels:</span>
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {unconfigured.map(l => (
+                                                                <button
+                                                                    type="button"
+                                                                    key={l}
+                                                                    onClick={() => {
+                                                                        setConfig({
+                                                                            ...config,
+                                                                            label_settings: {
+                                                                                ...(config.label_settings || {}),
+                                                                                [l]: {
+                                                                                    color: '#3b82f6',
+                                                                                    default_hidden: false
+                                                                                }
+                                                                            }
+                                                                        });
+                                                                    }}
+                                                                    className="px-2 py-1 bg-surface hover:bg-border/30 border border-border text-muted text-[8px] font-black uppercase tracking-tight rounded-md transition-colors"
+                                                                >
+                                                                    + {l}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
                                     </div>
                                 </div>
                             ) : (
@@ -322,6 +464,15 @@ export const StatisticsWidgetModal: React.FC<StatisticsWidgetModalProps> = ({
                                                             placeholder="Series Label"
                                                         />
                                                     </div>
+                                                    <label className="flex items-center gap-2 cursor-pointer text-[10px] font-black uppercase text-muted select-none">
+                                                        <input 
+                                                            type="checkbox"
+                                                            checked={series.default_hidden || false}
+                                                            onChange={e => updateSeries(idx, { default_hidden: e.target.checked })}
+                                                            className="rounded border-border text-accent focus:ring-accent bg-surface w-4 h-4"
+                                                        />
+                                                        <span>Default Hidden</span>
+                                                    </label>
                                                     <button 
                                                         type="button"
                                                         onClick={() => removeSeries(idx)}
