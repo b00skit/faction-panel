@@ -85,8 +85,6 @@ test('superadmin can delete a user and clear references and free credentials', f
     $stat = StatisticsModel::create([
         'faction_id' => $faction->id,
         'name' => 'Test Stat',
-        'type' => 'pie',
-        'configuration' => [],
         'created_by' => $target->id,
     ]);
 

@@ -40,6 +40,7 @@ use App\Http\Controllers\SetupController;
 use App\Http\Controllers\StatisticsController;
 use App\Http\Controllers\StatisticsPermissionController;
 use App\Http\Controllers\StatisticsWidgetController;
+use App\Http\Controllers\FormulaController;
 use App\Http\Controllers\SuperadminController;
 use App\Http\Controllers\UploadController;
 use Illuminate\Support\Facades\Route;
@@ -230,6 +231,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/statistics/{model}', [StatisticsController::class, 'update']);
     Route::delete('/statistics/{model}', [StatisticsController::class, 'destroy']);
     Route::post('/statistics/{model}/recalculate', [StatisticsController::class, 'recalculate']);
+    Route::post('/factions/{shortname}/formulas/evaluate', [FormulaController::class, 'evaluate']);
 
     // Statistics Widgets
     Route::post('/statistics/{model}/widgets', [StatisticsWidgetController::class, 'store']);

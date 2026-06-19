@@ -150,7 +150,12 @@ test('can capture snapshot and restore it 1:1 with complex relations and ID mapp
         'statistics_model_id' => $statModel->id,
         'name' => 'Active Counts',
         'type' => 'bar',
-        'configuration' => ['source' => 'roster'],
+        'configuration' => [
+            'mode' => 'series',
+            'series' => [
+                ['name' => 'Active', 'color' => '#3b82f6', 'formula' => 'roster_count(' . $roster->id . ')']
+            ]
+        ],
         'order' => 1,
         'width' => 6,
     ]);

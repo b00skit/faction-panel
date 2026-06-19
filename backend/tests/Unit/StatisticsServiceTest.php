@@ -1,297 +1,133 @@
 <?php
 
-namespace Tests\Unit;
-
+use App\Models\Roster;
 use App\Models\RosterContent;
+use App\Models\RosterSection;
+use App\Models\StatisticsModel;
+use App\Models\StatisticsWidget;
+use App\Models\Faction;
+use App\Services\FormulaEvaluatorService;
 use App\Services\StatisticsService;
-use Illuminate\Support\Collection;
-use ReflectionClass;
+use App\Formula\Lexer;
+use App\Formula\Parser;
+use App\Formula\EvaluationContext;
 
-test('evaluateCount applies subtraction correctly', function () {
-    $service = new StatisticsService;
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('evaluateCount');
-    $method->setAccessible(true);
+test('lexer tokenizes formulas correctly', function () {
+    $lexer = new Lexer("sum(roster_rows(1, 'Status', 'Active'), 'col_hours') + 10.5");
+    $tokens = $lexer->tokenize();
 
-    // Test: 12 - 1 = 11
-    $count = [
-        'conditions' => [
-            [
-                'type' => 'value',
-                'settings' => ['value' => 12],
-                'operator' => '+',
-            ],
-            [
-                'type' => 'value',
-                'settings' => ['value' => 1],
-                'operator' => '-',
-            ],
-        ],
-    ];
-
-    $totalRowsProcessed = 0;
-    $result = $method->invokeArgs($service, [$count, 'roster', 1, &$totalRowsProcessed]);
-
-    expect($result)->toBe(11.0);
+    expect($tokens)->not->toBeEmpty();
+    expect($tokens[0]->type)->toBe('IDENTIFIER');
+    expect($tokens[0]->value)->toBe('sum');
 });
 
-test('evaluateCount handles brackets and operators correctly', function () {
-    $service = new StatisticsService;
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('evaluateCount');
-    $method->setAccessible(true);
+test('parser parses simple expressions correctly', function () {
+    $lexer = new Lexer("12 - (1 + 2)");
+    $tokens = $lexer->tokenize();
+    
+    $parser = new Parser($tokens);
+    $ast = $parser->parse();
 
-    // Test: 12 - (1 + 2) = 9
-    $count = [
-        'conditions' => [
-            [
-                'type' => 'value',
-                'settings' => ['value' => 12],
-                'operator' => '+',
-            ],
-            [
-                'type' => 'value',
-                'brackets_open' => 1,
-                'settings' => ['value' => 1],
-                'operator' => '-',
-            ],
-            [
-                'type' => 'value',
-                'brackets_close' => 1,
-                'settings' => ['value' => 2],
-                'operator' => '+',
-            ],
-        ],
-    ];
-
-    $totalRowsProcessed = 0;
-    $result = $method->invokeArgs($service, [$count, 'roster', 1, &$totalRowsProcessed]);
+    $context = new EvaluationContext(1);
+    $result = $ast->evaluate($context);
 
     expect($result)->toBe(9.0);
 });
 
-test('evaluateCount handles multiple operations correctly', function () {
-    $service = new StatisticsService;
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('evaluateCount');
-    $method->setAccessible(true);
-
-    // Test: 10 * 2 + 5 = 25
-    $count = [
-        'conditions' => [
-            [
-                'type' => 'value',
-                'settings' => ['value' => 10],
-            ],
-            [
-                'type' => 'value',
-                'settings' => ['value' => 2],
-                'operator' => '*',
-            ],
-            [
-                'type' => 'value',
-                'settings' => ['value' => 5],
-                'operator' => '+',
-            ],
-        ],
-    ];
-
-    $totalRowsProcessed = 0;
-    $result = $method->invokeArgs($service, [$count, 'roster', 1, &$totalRowsProcessed]);
-
-    expect($result)->toBe(25.0);
+test('evaluator executes math formulas correctly', function () {
+    $evaluator = new FormulaEvaluatorService();
+    $result = $evaluator->evaluate("10 * 2.5 + 5", 1);
+    expect($result)->toBe(30.0);
 });
 
-test('matchCondition handles in_roster condition correctly', function () {
-    $service = new StatisticsService;
-
-    // Set up roster pool cache using reflection
-    $reflection = new ReflectionClass($service);
-    $cacheProp = $reflection->getProperty('rosterPoolsCache');
-    $cacheProp->setAccessible(true);
-
-    // Roster content items
-    $row1 = (object) ['content' => ['col_join' => 'john_doe', 'col_status' => 'Active']];
-    $row2 = (object) ['content' => ['col_join' => 'jane_smith', 'col_status' => 'On Leave']];
-
-    $cacheProp->setValue($service, [
-        123 => collect([$row1, $row2]),
+test('evaluator resolves roster counts and rows correctly', function () {
+    $faction = Faction::factory()->create();
+    $roster = Roster::create([
+        'faction_id' => $faction->id,
+        'name' => 'LSPD Patrol',
+        'shortname' => 'patrol',
+        'columns' => [
+            ['id' => 'col_status', 'name' => 'Status', 'type' => 'select'],
+            ['id' => 'col_hours', 'name' => 'Hours', 'type' => 'number'],
+        ],
+        'created_by' => null,
+        'color' => '#ffffff',
     ]);
 
-    $method = $reflection->getMethod('matchCondition');
-    $method->setAccessible(true);
+    $section = RosterSection::create([
+        'roster_id' => $roster->id,
+        'name' => 'Section A',
+        'type' => 'section',
+        'shortname' => 'section-a',
+    ]);
 
-    // Case 1: Match exists in roster
-    $cond1 = [
-        'target_col' => 'db_user',
-        'match_type' => 'in_roster',
-        'relation_roster_id' => 123,
-        'relation_roster_col' => 'col_join',
-    ];
-    $data1 = ['db_user' => 'john_doe'];
-    $result1 = $method->invoke($service, $data1, $cond1);
-    expect($result1)->toBeTrue();
+    RosterContent::create([
+        'section_id' => $section->id,
+        'content' => ['col_status' => 'Active', 'col_hours' => 12],
+    ]);
 
-    // Case 2: Match does not exist in roster
-    $data2 = ['db_user' => 'someone_else'];
-    $result2 = $method->invoke($service, $data2, $cond1);
-    expect($result2)->toBeFalse();
+    RosterContent::create([
+        'section_id' => $section->id,
+        'content' => ['col_status' => 'LOA', 'col_hours' => 5],
+    ]);
 
-    // Case 3: Match exists but does not meet extra roster column criteria
-    $cond2 = [
-        'target_col' => 'db_user',
-        'match_type' => 'in_roster',
-        'relation_roster_id' => 123,
-        'relation_roster_col' => 'col_join',
-        'relation_column' => 'col_status',
-        'relation_match_type' => 'equals',
-        'relation_value' => 'Active',
-    ];
-    // john_doe is Active
-    $result3 = $method->invoke($service, ['db_user' => 'john_doe'], $cond2);
-    expect($result3)->toBeTrue();
+    RosterContent::create([
+        'section_id' => $section->id,
+        'content' => ['col_status' => 'Active', 'col_hours' => 8],
+    ]);
 
-    // jane_smith is On Leave, so relation_value => Active should fail
-    $result4 = $method->invoke($service, ['db_user' => 'jane_smith'], $cond2);
-    expect($result4)->toBeFalse();
+    $evaluator = new FormulaEvaluatorService();
+
+    // 1. roster_count
+    $count = $evaluator->evaluate("roster_count('patrol', 'Status', 'Active')", $faction->id);
+    expect($count)->toBe(2.0);
+
+    // 2. sum of hours for active members
+    $sum = $evaluator->evaluate("sum(roster_rows('patrol', 'Status', 'Active'), 'Hours')", $faction->id);
+    expect($sum)->toBe(20.0);
+
+    // 3. average of hours for all members
+    $avg = $evaluator->evaluate("avg(roster_rows('patrol'), 'Hours')", $faction->id);
+    expect($avg)->toBe(8.33);
 });
 
-test('evaluateCount applies count_unique correctly', function () {
-    $service = new class extends StatisticsService
-    {
-        public $mockPool;
+test('statistics service calculates pie chart widget series correctly', function () {
+    $faction = Faction::factory()->create();
+    $roster = Roster::create([
+        'faction_id' => $faction->id,
+        'name' => 'LSPD Patrol',
+        'shortname' => 'patrol',
+        'columns' => [
+            ['id' => 'col_status', 'name' => 'Status', 'type' => 'select'],
+        ],
+        'color' => '#ffffff',
+    ]);
+    $section = RosterSection::create(['roster_id' => $roster->id, 'name' => 'A', 'type' => 'section', 'shortname' => 'a']);
+    RosterContent::create(['section_id' => $section->id, 'content' => ['col_status' => 'Active']]);
 
-        protected function getSourcePool(string $type, $id, &$totalRowsProcessed, array $config = []): Collection
-        {
-            $totalRowsProcessed += $this->mockPool->count();
+    $model = StatisticsModel::create([
+        'faction_id' => $faction->id,
+        'name' => 'Dashboard',
+    ]);
 
-            return $this->mockPool;
-        }
-
-        protected function getRealColumnId($sectionId, $targetColName)
-        {
-            return $targetColName === 'Badge' ? 'col_badge' : $targetColName;
-        }
-    };
-
-    $row1 = new RosterContent(['section_id' => 1]);
-    $row1->content = ['col_badge' => '101', 'col_status' => 'Active'];
-
-    $row2 = new RosterContent(['section_id' => 1]);
-    $row2->content = ['col_badge' => '102', 'col_status' => 'Active'];
-
-    $row3 = new RosterContent(['section_id' => 1]);
-    $row3->content = ['col_badge' => '101', 'col_status' => 'Active'];
-
-    $service->mockPool = collect([$row1, $row2, $row3]);
-
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('evaluateCount');
-    $method->setAccessible(true);
-
-    $count = [
-        'conditions' => [
-            [
-                'type' => 'rows',
-                'scope' => 'roster',
-                'roster_id' => 1,
-                'settings' => [
-                    'target_col' => 'Badge',
-                    'count_unique' => true,
-                ],
-                'filters' => [],
+    $widget = StatisticsWidget::create([
+        'statistics_model_id' => $model->id,
+        'name' => 'Active Officer Pie',
+        'type' => 'pie',
+        'configuration' => [
+            'mode' => 'series',
+            'series' => [
+                ['name' => 'Active', 'color' => '#00ff00', 'formula' => "roster_count('patrol', 'Status', 'Active')"],
+                ['name' => 'LOA', 'color' => '#ff0000', 'formula' => "roster_count('patrol', 'Status', 'LOA')"],
             ],
         ],
-    ];
+    ]);
 
-    $totalRowsProcessed = 0;
-    $result = $method->invokeArgs($service, [$count, 'roster', 1, &$totalRowsProcessed]);
+    $statisticsService = new StatisticsService(new FormulaEvaluatorService());
+    $result = $statisticsService->calculate($widget, true);
 
-    expect($result)->toBe(2.0);
-});
-
-test('aggregatePool applies count_unique correctly', function () {
-    $service = new class extends StatisticsService
-    {
-        protected function getRealColumnId($sectionId, $targetColName)
-        {
-            return $targetColName === 'Badge' ? 'col_badge' : $targetColName;
-        }
-    };
-
-    $row1 = new RosterContent(['section_id' => 1]);
-    $row1->content = ['col_badge' => '101'];
-
-    $row2 = new RosterContent(['section_id' => 1]);
-    $row2->content = ['col_badge' => '102'];
-
-    $row3 = new RosterContent(['section_id' => 1]);
-    $row3->content = ['col_badge' => '101'];
-
-    $row4 = new RosterContent(['section_id' => 1]);
-    $row4->content = ['col_badge' => ''];
-
-    $pool = collect([$row1, $row2, $row3, $row4]);
-
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('aggregatePool');
-    $method->setAccessible(true);
-
-    $result = $method->invokeArgs($service, [$pool, 'count_unique', 'Badge', 'roster']);
-
-    expect($result)->toBe(2);
-});
-
-test('matchCondition handles contains_checkbox and contains_tag conditions correctly', function () {
-    $service = new StatisticsService;
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('matchCondition');
-    $method->setAccessible(true);
-
-    $condCheckbox = [
-        'target_col' => 'col_status',
-        'match_type' => 'contains_checkbox',
-        'match_value' => 'LOA',
-    ];
-
-    $condTag = [
-        'target_col' => 'col_status',
-        'match_type' => 'contains_tag',
-        'match_value' => 'Special',
-    ];
-
-    // Case 1: contains_checkbox finds value in _cb array
-    $data1 = [
-        'col_status_cb' => ['LOA', 'Active'],
-        'col_status_tags' => [],
-    ];
-    expect($method->invoke($service, $data1, $condCheckbox))->toBeTrue();
-
-    // Case 2: contains_checkbox finds value in _tags array (fallback)
-    $data2 = [
-        'col_status_cb' => [],
-        'col_status_tags' => ['LOA'],
-    ];
-    expect($method->invoke($service, $data2, $condCheckbox))->toBeTrue();
-
-    // Case 3: contains_checkbox fails if value is not present
-    $data3 = [
-        'col_status_cb' => ['Active'],
-        'col_status_tags' => ['Special'],
-    ];
-    expect($method->invoke($service, $data3, $condCheckbox))->toBeFalse();
-
-    // Case 4: contains_tag finds value in _tags array
-    $data4 = [
-        'col_status_cb' => [],
-        'col_status_tags' => ['Special', 'Active'],
-    ];
-    expect($method->invoke($service, $data4, $condTag))->toBeTrue();
-
-    // Case 5: contains_tag fails if value is only in _cb array
-    $data5 = [
-        'col_status_cb' => ['Special'],
-        'col_status_tags' => ['LOA'],
-    ];
-    expect($method->invoke($service, $data5, $condTag))->toBeFalse();
+    expect($result['data'])->toBe([
+        ['name' => 'Active', 'value' => 1.0, 'color' => '#00ff00'],
+        ['name' => 'LOA', 'value' => 0.0, 'color' => '#ff0000'],
+    ]);
 });

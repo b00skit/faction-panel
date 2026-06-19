@@ -789,13 +789,15 @@ class FactionSeeder extends Seeder
             'name' => 'Officer Status Overview',
             'type' => 'pie',
             'configuration' => [
-                'source' => 'roster',
-                'roster_id' => $lspdMainRoster->id,
-                'target_column' => 'status',
+                'mode' => 'grouped',
+                'formula' => 'roster_rows(' . $lspdMainRoster->id . ')',
+                'group_by_column' => 'status',
             ],
             'cache_result' => [
-                'labels' => ['On Duty', 'Off Duty', 'LOA', 'Suspended'],
-                'data' => [3, 1, 1, 0],
+                ['name' => 'On Duty', 'value' => 3.0, 'color' => null],
+                ['name' => 'Off Duty', 'value' => 1.0, 'color' => null],
+                ['name' => 'LOA', 'value' => 1.0, 'color' => null],
+                ['name' => 'Suspended', 'value' => 0.0, 'color' => null],
             ],
             'last_calculated_at' => now(),
             'is_intensive' => false,
@@ -808,16 +810,13 @@ class FactionSeeder extends Seeder
             'name' => 'Active Warrant Counts',
             'type' => 'stat',
             'configuration' => [
-                'source' => 'record_database',
-                'database_id' => $warrantsDb->id,
-                'aggregate' => 'count',
-                'filters' => [
-                    ['column' => 'status', 'operator' => 'equals', 'value' => 'Active'],
+                'mode' => 'series',
+                'series' => [
+                    ['name' => 'Active Warrants', 'color' => '#ef4444', 'formula' => 'database_count(' . $warrantsDb->id . ', "status", "Active")'],
                 ],
             ],
             'cache_result' => [
-                'value' => '1',
-                'label' => 'Active Warrants',
+                ['name' => 'Active Warrants', 'value' => 1.0, 'color' => '#ef4444'],
             ],
             'last_calculated_at' => now(),
             'is_intensive' => false,
