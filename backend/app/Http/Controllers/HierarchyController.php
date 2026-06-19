@@ -27,7 +27,7 @@ class HierarchyController extends Controller
 
         $resolvedHierarchies = Cache::remember($cacheKey, 3600, function () use ($faction, $user, $isGlobalViewer) {
             $hierarchies = $faction->hierarchies()
-                ->with(['hierarchyPermissions'])
+                ->with(['hierarchyPermissions', 'rosters'])
                 ->orderBy('order')
                 ->orderBy('id')
                 ->get();
@@ -42,11 +42,10 @@ class HierarchyController extends Controller
             });
 
             return $filteredHierarchies->map(function ($hierarchy) use ($user) {
-                // Fetch root nodes recursively
-                $rootNodes = $hierarchy->rootNodes()->get();
+                // Eager load all nodes for this hierarchy in one query
+                $allNodes = $hierarchy->nodes()->orderBy('order')->orderBy('id')->get();
+                $nodesByParent = $allNodes->groupBy('parent_id');
 
-                // Resolve roster contents for slots
-                $allNodes = $hierarchy->nodes()->get();
                 $rosterContentIds = [];
                 foreach ($allNodes as $node) {
                     // If auto-link is enabled, fetch the relevant rows in the section and add their IDs
@@ -87,17 +86,20 @@ class HierarchyController extends Controller
                         ->keyBy('id');
                 }
 
-                // Recursive function to attach children and resolve slots
-                $resolveNode = function ($node) use (&$resolveNode, $rosterContents) {
+                // Recursive function to attach children (in-memory) and resolve slots
+                $resolveNode = function ($node) use (&$resolveNode, $nodesByParent, $rosterContents) {
                     $node = RosterResolutionService::resolveNodeSlots($node, $rosterContents);
 
-                    $node->children = $node->children()->get()->map(function ($child) use (&$resolveNode) {
+                    $children = $nodesByParent->get($node->id, collect());
+                    $node->setRelation('children', $children);
+                    $node->children = $children->map(function ($child) use (&$resolveNode) {
                         return $resolveNode($child);
                     });
 
                     return $node;
                 };
 
+                $rootNodes = $allNodes->whereNull('parent_id')->values();
                 $resolvedRootNodes = $rootNodes->map(function ($node) use (&$resolveNode) {
                     return $resolveNode($node);
                 });
@@ -138,7 +140,18 @@ class HierarchyController extends Controller
             'name' => 'required|string|max:255',
             'color' => ['required', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'roster_id' => 'nullable|exists:rosters,id',
+            'roster_ids' => 'nullable|array',
+            'roster_ids.*' => 'integer|exists:rosters,id',
         ]);
+
+        $rosterIds = [];
+        if ($request->has('roster_ids')) {
+            $rosterIds = $request->input('roster_ids') ?? [];
+        } elseif ($request->has('roster_id') && $request->input('roster_id')) {
+            $rosterIds = [$request->input('roster_id')];
+        }
+
+        unset($validated['roster_id'], $validated['roster_ids']);
 
         $maxOrder = $faction->hierarchies()->max('order') ?? -1;
 
@@ -146,6 +159,7 @@ class HierarchyController extends Controller
             ...$validated,
             'order' => $maxOrder + 1,
             'created_by' => Auth::id(),
+            'roster_ids' => $rosterIds,
         ]);
 
         // Automatically create a root node
@@ -165,7 +179,7 @@ class HierarchyController extends Controller
 
         $this->audit('hierarchy.create', "Created hierarchy '{$hierarchy->name}' for faction '{$faction->name}'", null, $hierarchy, null, $hierarchy->getAttributes());
 
-        return response()->json($hierarchy, 201);
+        return response()->json($hierarchy->load('rosters'), 201);
     }
 
     public function update(Request $request, Hierarchy $hierarchy)
@@ -181,15 +195,31 @@ class HierarchyController extends Controller
             'name' => 'sometimes|string|max:255',
             'color' => ['sometimes', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'roster_id' => 'nullable|exists:rosters,id',
+            'roster_ids' => 'nullable|array',
+            'roster_ids.*' => 'integer|exists:rosters,id',
             'created_by' => 'nullable|integer|exists:users,id',
         ]);
+
+        $rosterIds = null;
+        if ($request->has('roster_ids')) {
+            $rosterIds = $request->input('roster_ids') ?? [];
+        } elseif ($request->has('roster_id')) {
+            $val = $request->input('roster_id');
+            $rosterIds = $val ? [$val] : [];
+        }
+
+        unset($validated['roster_id'], $validated['roster_ids']);
+
+        if ($rosterIds !== null) {
+            $validated['roster_ids'] = $rosterIds;
+        }
 
         $oldValues = $hierarchy->getOriginal();
         $hierarchy->update($validated);
 
         $this->audit('hierarchy.update', "Updated hierarchy '{$hierarchy->name}'", null, $hierarchy, $oldValues, $hierarchy->getDirty());
 
-        return response()->json($hierarchy);
+        return response()->json($hierarchy->load('rosters'));
     }
 
     public function destroy(Hierarchy $hierarchy)

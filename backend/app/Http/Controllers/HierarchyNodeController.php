@@ -124,7 +124,7 @@ class HierarchyNodeController extends Controller
         $oldValues = $node->getOriginal();
 
         // Resolve roster links to actual display values (overwrite label/value from roster, do NOT write back to roster)
-        if (isset($validated['slots']) && $hierarchy->roster_id) {
+        if (isset($validated['slots']) && $hierarchy->rosters()->exists()) {
             $nameColId = 'name';
             $rankColId = 'rank';
 

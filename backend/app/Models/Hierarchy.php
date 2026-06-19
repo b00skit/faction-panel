@@ -11,6 +11,8 @@ class Hierarchy extends Model
 {
     use Auditable, SoftDeletes;
 
+    public $tempRosterIds = null;
+
     protected static function booted()
     {
         static::created(function ($hierarchy) {
@@ -27,6 +29,13 @@ class Hierarchy extends Model
             Faction::invalidateDiagramsCache($hierarchy->faction_id);
             HierarchyUpdated::dispatch($hierarchy->faction_id, $hierarchy->id);
         });
+
+        static::saved(function ($hierarchy) {
+            if ($hierarchy->tempRosterIds !== null) {
+                $hierarchy->rosters()->sync($hierarchy->tempRosterIds);
+                $hierarchy->tempRosterIds = null;
+            }
+        });
     }
 
     protected $fillable = [
@@ -35,8 +44,34 @@ class Hierarchy extends Model
         'color',
         'order',
         'roster_id',
+        'roster_ids',
         'created_by',
     ];
+
+    protected $appends = [
+        'roster_ids',
+        'roster_id',
+    ];
+
+    public function getRosterIdsAttribute()
+    {
+        return $this->rosters->pluck('id')->toArray();
+    }
+
+    public function getRosterIdAttribute()
+    {
+        return $this->roster_ids[0] ?? null;
+    }
+
+    public function setRosterIdAttribute($value)
+    {
+        $this->tempRosterIds = $value ? [$value] : [];
+    }
+
+    public function setRosterIdsAttribute($value)
+    {
+        $this->tempRosterIds = $value ?: [];
+    }
 
     public function faction()
     {
@@ -48,9 +83,9 @@ class Hierarchy extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function roster()
+    public function rosters()
     {
-        return $this->belongsTo(Roster::class);
+        return $this->belongsToMany(Roster::class, 'hierarchy_roster');
     }
 
     public function nodes()

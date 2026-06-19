@@ -3,20 +3,23 @@ import echo from '../echo';
 
 interface UseDiagramRealtimeProps {
     factionId?: number;
-    rosterId?: number | null;
+    rosterIds?: number[];
     onDiagramUpdated: () => void;
 }
 
 export const useDiagramRealtime = ({
     factionId,
-    rosterId,
+    rosterIds = [],
     onDiagramUpdated,
 }: UseDiagramRealtimeProps) => {
+    const rosterIdsStr = JSON.stringify(rosterIds);
+
     useEffect(() => {
         if (!factionId) return;
 
         const diagramsChannel = `faction.${factionId}.diagrams`;
         const updatesChannel = `faction.${factionId}.updates`;
+        const ids = JSON.parse(rosterIdsStr) as number[];
 
         // Listen to diagram updates
         echo.private(diagramsChannel)
@@ -27,7 +30,7 @@ export const useDiagramRealtime = ({
         // Listen to global roster updates
         echo.private(updatesChannel)
             .listen('.roster.updated', (e: { roster_id: number }) => {
-                if (rosterId && e.roster_id === rosterId) {
+                if (ids.length > 0 && ids.includes(e.roster_id)) {
                     onDiagramUpdated();
                 }
             });
@@ -36,29 +39,37 @@ export const useDiagramRealtime = ({
             echo.leave(diagramsChannel);
             echo.leave(updatesChannel);
         };
-    }, [factionId, rosterId, onDiagramUpdated]);
+    }, [factionId, rosterIdsStr, onDiagramUpdated]);
 
     useEffect(() => {
-        if (!factionId || !rosterId) return;
+        const ids = JSON.parse(rosterIdsStr) as number[];
+        if (!factionId || ids.length === 0) return;
 
-        const rosterChannel = `faction.${factionId}.roster.${rosterId}`;
+        const activeChannels: string[] = [];
 
-        echo.join(rosterChannel)
-            .listen('.roster.row_updated', () => {
-                onDiagramUpdated();
-            })
-            .listen('.roster.row_added', () => {
-                onDiagramUpdated();
-            })
-            .listen('.roster.row_deleted', () => {
-                onDiagramUpdated();
-            })
-            .listen('.roster.updated', () => {
-                onDiagramUpdated();
-            });
+        ids.forEach(id => {
+            const rosterChannel = `faction.${factionId}.roster.${id}`;
+            activeChannels.push(rosterChannel);
+
+            echo.join(rosterChannel)
+                .listen('.roster.row_updated', () => {
+                    onDiagramUpdated();
+                })
+                .listen('.roster.row_added', () => {
+                    onDiagramUpdated();
+                })
+                .listen('.roster.row_deleted', () => {
+                    onDiagramUpdated();
+                })
+                .listen('.roster.updated', () => {
+                    onDiagramUpdated();
+                });
+        });
 
         return () => {
-            echo.leave(rosterChannel);
+            activeChannels.forEach(channel => {
+                echo.leave(channel);
+            });
         };
-    }, [factionId, rosterId, onDiagramUpdated]);
+    }, [factionId, rosterIdsStr, onDiagramUpdated]);
 };

@@ -62,7 +62,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
     // Edit tab/hierarchy states
     const [tabName, setTabName] = useState('');
     const [tabColor, setTabColor] = useState('#2563eb');
-    const [tabRosterId, setTabRosterId] = useState<number | null>(null);
+    const [tabRosterIds, setTabRosterIds] = useState<number[]>([]);
     
     // Edit node/card states
     const [selectedNode, setSelectedNode] = useState<any>(null);
@@ -122,11 +122,11 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
     }, [shortname, fetchHierarchies]);
 
     const activeHierarchy = hierarchies.find(h => h.id === activeTabId) || null;
-    const rosterId = activeHierarchy?.roster_id || null;
+    const rosterIds = activeHierarchy?.roster_ids || [];
 
     useDiagramRealtime({
         factionId,
-        rosterId,
+        rosterIds,
         onDiagramUpdated: useCallback(() => {
             fetchHierarchies(false);
         }, [fetchHierarchies]),
@@ -201,8 +201,24 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
         return members;
     };
 
-    const rosterMembers = activeHierarchy?.roster_id ? getRosterMembers(activeHierarchy.roster_id) : [];
-    const activeRoster = activeHierarchy?.roster_id ? rosters.find(r => r.id === activeHierarchy.roster_id) : null;
+    const getRosterBySectionId = (sectionId: number) => {
+        for (const roster of rosters) {
+            const findSection = (section: any): boolean => {
+                if (section.id === sectionId) return true;
+                if (section.children) {
+                    for (const child of section.children) {
+                        if (findSection(child)) return true;
+                    }
+                }
+                return false;
+            };
+            const rootSecs = roster.root_sections || roster.rootSections || [];
+            for (const sec of rootSecs) {
+                if (findSection(sec)) return roster;
+            }
+        }
+        return null;
+    };
 
     const getRosterSectionsList = (roster: any) => {
         if (!roster) return [];
@@ -217,8 +233,23 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
         return list;
     };
 
-    const sectionsList = activeRoster ? getRosterSectionsList(activeRoster) : [];
-    const columnsList = activeRoster ? (activeRoster.columns || []) : [];
+    const rosterMembers = activeHierarchy?.roster_ids && activeHierarchy.roster_ids.length > 0
+        ? activeHierarchy.roster_ids.flatMap((id: number) => getRosterMembers(id))
+        : [];
+
+    const sectionsList = activeHierarchy?.roster_ids && activeHierarchy.roster_ids.length > 0
+        ? activeHierarchy.roster_ids.flatMap((id: number) => {
+            const roster = rosters.find(r => r.id === id);
+            return roster ? getRosterSectionsList(roster).map((s: any) => ({ ...s, name: `${roster.name} - ${s.name}` })) : [];
+        })
+        : [];
+
+    const selectedSectionRoster = nodeRosterSyncSectionId ? getRosterBySectionId(nodeRosterSyncSectionId) : null;
+    const columnsList = selectedSectionRoster
+        ? (selectedSectionRoster.columns || [])
+        : (activeHierarchy?.roster_ids && activeHierarchy.roster_ids.length > 0
+            ? (rosters.find(r => r.id === activeHierarchy.roster_ids[0])?.columns || [])
+            : []);
 
     // Create a new tab
     const handleCreateTab = async (e: React.FormEvent) => {
@@ -228,7 +259,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
             const res = await api.post(`/factions/${shortname}/hierarchies`, {
                 name: tabName,
                 color: tabColor,
-                roster_id: tabRosterId,
+                roster_ids: tabRosterIds,
             });
             toast.success('Diagram created', { id: loadToast });
             await fetchHierarchies();
@@ -236,7 +267,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
             setShowCreateTabModal(false);
             setTabName('');
             setTabColor('#2563eb');
-            setTabRosterId(null);
+            setTabRosterIds([]);
         } catch (err: any) {
             toast.error(err.response?.data?.message || 'Failed to create diagram', { id: loadToast });
         }
@@ -252,7 +283,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
             const res = await api.put(`/hierarchies/${activeHierarchy.id}`, {
                 name: tabName,
                 color: tabColor,
-                roster_id: tabRosterId,
+                roster_ids: tabRosterIds,
             });
             toast.success('Diagram updated', { id: loadToast });
             await fetchHierarchies();
@@ -267,7 +298,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
         if (!activeHierarchy) return;
         setTabName(activeHierarchy.name);
         setTabColor(activeHierarchy.color);
-        setTabRosterId(activeHierarchy.roster_id);
+        setTabRosterIds(activeHierarchy.roster_ids || []);
         setShowTabSettingsModal(true);
     };
 
@@ -1214,7 +1245,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                             onClick={() => {
                                 setTabName('');
                                 setTabColor('#2563eb');
-                                setTabRosterId(null);
+                                setTabRosterIds([]);
                                 setShowCreateTabModal(true);
                             }}
                             className="p-2 text-muted hover:text-accent transition-colors"
@@ -1288,17 +1319,33 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                 </div>
                             </div>
                             <div>
-                                <label className="text-[9px] font-black text-muted uppercase tracking-[0.2em] block mb-2 px-1">Link to Personnel Roster (Optional)</label>
-                                <select
-                                    value={tabRosterId || ''}
-                                    onChange={e => setTabRosterId(e.target.value ? parseInt(e.target.value) : null)}
-                                    className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-[10px] font-bold uppercase tracking-widest outline-none focus:border-accent transition-colors"
-                                >
-                                    <option value="">Standalone / Unlinked</option>
-                                    {rosters.filter(r => !r.is_sandbox).map(r => (
-                                        <option key={r.id} value={r.id}>{r.name}</option>
-                                    ))}
-                                </select>
+                                <label className="text-[9px] font-black text-muted uppercase tracking-[0.2em] block mb-2 px-1">Link to Personnel Rosters (Optional)</label>
+                                <div className="space-y-2 max-h-40 overflow-y-auto border border-border rounded-xl p-3 bg-surface">
+                                    {rosters.filter(r => !r.is_sandbox).length === 0 ? (
+                                        <span className="text-[10px] text-muted font-bold uppercase tracking-wider block py-2 px-1">No rosters available</span>
+                                    ) : (
+                                        rosters.filter(r => !r.is_sandbox).map(r => {
+                                            const isChecked = tabRosterIds.includes(r.id);
+                                            return (
+                                                <label key={r.id} className="flex items-center gap-2.5 text-[10px] font-bold uppercase tracking-wider text-text cursor-pointer select-none py-1 hover:text-accent transition-colors">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isChecked}
+                                                        onChange={() => {
+                                                            if (isChecked) {
+                                                                setTabRosterIds(tabRosterIds.filter(id => id !== r.id));
+                                                            } else {
+                                                                setTabRosterIds([...tabRosterIds, r.id]);
+                                                            }
+                                                        }}
+                                                        className="rounded border-border text-accent focus:ring-0 bg-card cursor-pointer"
+                                                    />
+                                                    {r.name}
+                                                </label>
+                                            );
+                                        })
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <div className="p-6 border-t border-border bg-surface/30 flex justify-end gap-3">
@@ -1362,17 +1409,33 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                 </div>
                             </div>
                             <div>
-                                <label className="text-[9px] font-black text-muted uppercase tracking-[0.2em] block mb-2 px-1">Link to Personnel Roster</label>
-                                <select
-                                    value={tabRosterId || ''}
-                                    onChange={e => setTabRosterId(e.target.value ? parseInt(e.target.value) : null)}
-                                    className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-[10px] font-bold uppercase tracking-widest outline-none focus:border-accent transition-colors"
-                                >
-                                    <option value="">Standalone / Unlinked</option>
-                                    {rosters.filter(r => !r.is_sandbox).map(r => (
-                                        <option key={r.id} value={r.id}>{r.name}</option>
-                                    ))}
-                                </select>
+                                <label className="text-[9px] font-black text-muted uppercase tracking-[0.2em] block mb-2 px-1">Link to Personnel Rosters</label>
+                                <div className="space-y-2 max-h-40 overflow-y-auto border border-border rounded-xl p-3 bg-surface">
+                                    {rosters.filter(r => !r.is_sandbox).length === 0 ? (
+                                        <span className="text-[10px] text-muted font-bold uppercase tracking-wider block py-2 px-1">No rosters available</span>
+                                    ) : (
+                                        rosters.filter(r => !r.is_sandbox).map(r => {
+                                            const isChecked = tabRosterIds.includes(r.id);
+                                            return (
+                                                <label key={r.id} className="flex items-center gap-2.5 text-[10px] font-bold uppercase tracking-wider text-text cursor-pointer select-none py-1 hover:text-accent transition-colors">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isChecked}
+                                                        onChange={() => {
+                                                            if (isChecked) {
+                                                                setTabRosterIds(tabRosterIds.filter(id => id !== r.id));
+                                                            } else {
+                                                                setTabRosterIds([...tabRosterIds, r.id]);
+                                                            }
+                                                        }}
+                                                        className="rounded border-border text-accent focus:ring-0 bg-card cursor-pointer"
+                                                    />
+                                                    {r.name}
+                                                </label>
+                                            );
+                                        })
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <div className="p-6 border-t border-border bg-surface/30 flex justify-between items-center">
@@ -1571,7 +1634,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                             )}
 
                             {/* Card Slots / Auto-Link toggle */}
-                            {activeHierarchy?.roster_id && (
+                            {activeHierarchy?.roster_ids && activeHierarchy.roster_ids.length > 0 && (
                                 <div className="flex bg-surface border border-border rounded-xl p-1 mb-6">
                                     <button
                                         type="button"
@@ -1708,7 +1771,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                     </div>
 
                                                     {/* Linking with Personnel Roster */}
-                                                    {activeHierarchy?.roster_id && (
+                                                    {activeHierarchy?.roster_ids && activeHierarchy.roster_ids.length > 0 && (
                                                         <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-4">
                                                             <div className="flex items-center gap-1.5 text-[8px] font-black text-muted uppercase tracking-widest">
                                                                 {isConnected ? (
