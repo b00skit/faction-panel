@@ -473,6 +473,39 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
   };
 
   const calculateCount = (count: any, scope: 'roster' | 'section', targetSection?: any): string => {
+    // Helper to check if a column is hidden and restricted
+    const checkIfColumnIsRestricted = (targetColName: string): boolean => {
+        if (!targetColName) return false;
+        const roster = rosters.find((r: any) => r.id === activeDivId);
+        if (!roster) return false;
+        
+        const rosterCols = roster.columns || [];
+        let col = rosterCols.find((c: any) => c.name === targetColName || c.id === targetColName);
+        
+        if (!col) {
+            const findColInSection = (sections: any[]): any => {
+                for (const s of sections) {
+                    if (s.columns) {
+                        const found = s.columns.find((c: any) => c.name === targetColName || c.id === targetColName);
+                        if (found) return found;
+                    }
+                    if (s.children) {
+                        const found = findColInSection(s.children);
+                        if (found) return found;
+                    }
+                }
+                return null;
+            };
+            col = findColInSection(roster.root_sections || []);
+        }
+        
+        if (!col) return false;
+        
+        const isHiddenType = col.type?.includes('hidden');
+        const canViewHidden = isGlobalMod || rosterPerms.view_hidden_data;
+        return !!(isHiddenType && !canViewHidden);
+    };
+
     // Helper to get all contents for a section recursively
     const getSectionContents = (sec: any): any[] => {
         let items = [...(sec.contents || [])];
@@ -484,12 +517,13 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
         return items;
     };
 
-    const getSingleValue = (c: any): number => {
+    const getSingleValue = (c: any): number | '??' => {
         // New Formula Evaluation Logic with Bracket Support
         if (c.conditions && Array.isArray(c.conditions)) {
             let result = 0;
             const stack: { result: number; operator: string }[] = [];
             let isFirst = true;
+            let hasQuestionMark = false;
 
             const applyOp = (base: number, next: number, op: string): number => {
                 if (op === '+') return base + next;
@@ -519,10 +553,40 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                     const otherCounts = scope === 'roster' ? (activeDivision.counts || []) : (targetSection?.counts || []);
                     const targetCount = otherCounts.find((item: any) => String(item.id) === String(cond.settings?.count_id));
                     if (targetCount) {
-                        condMatchedValue = Number(calculateCount(targetCount, scope, targetSection));
+                        const calculated = calculateCount(targetCount, scope, targetSection);
+                        if (calculated === '??') {
+                            hasQuestionMark = true;
+                        } else {
+                            condMatchedValue = Number(calculated);
+                        }
                     }
                 } else {
-                    // ... (rest of the pool determination and filtering logic)
+                    const targetColName = cond.settings?.target_col;
+                    if (cond.type === 'rows') {
+                        const isSpecific = cond.settings?.match_type && !['exists', 'is_null'].includes(cond.settings.match_type);
+                        if (isSpecific && checkIfColumnIsRestricted(targetColName)) {
+                            hasQuestionMark = true;
+                        }
+                    } else if (cond.type === 'checkboxes' || cond.type === 'tags') {
+                        if (checkIfColumnIsRestricted(targetColName)) {
+                            hasQuestionMark = true;
+                        }
+                    } else if (cond.type === 'flags' && cond.settings?.flag_id) {
+                        const roster = rosters.find((r: any) => r.id === activeDivId);
+                        if (roster) {
+                            const rosterCols = roster.columns || [];
+                            const hasRestrictedColWithFlag = rosterCols.some((col: any) => {
+                                if (!(col.flags || []).includes(cond.settings.flag_id)) return false;
+                                const isHiddenType = col.type?.includes('hidden');
+                                const canViewHidden = isGlobalMod || rosterPerms.view_hidden_data;
+                                return isHiddenType && !canViewHidden;
+                            });
+                            if (hasRestrictedColWithFlag) {
+                                hasQuestionMark = true;
+                            }
+                        }
+                    }
+
                     let condPool: any[] = [];
                     const condScope = cond.scope || 'default';
 
@@ -735,6 +799,7 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                 }
             });
 
+            if (hasQuestionMark) return '??';
             return Math.max(0, result);
         }
 
@@ -749,7 +814,39 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
         if (c.type === 'sum') {
             const otherCounts = scope === 'roster' ? (activeDivision.counts || []) : (targetSection.counts || []);
             const toSum = otherCounts.filter((item: any) => c.settings.sum_ids?.includes(item.id));
-            return toSum.reduce((acc: number, cur: any) => acc + Number(calculateCount(cur, scope, targetSection)), 0);
+            let hasQuestionMark = false;
+            const sumVal = toSum.reduce((acc: number, cur: any) => {
+                const valStr = calculateCount(cur, scope, targetSection);
+                if (valStr === '??') {
+                    hasQuestionMark = true;
+                    return acc;
+                }
+                return acc + Number(valStr);
+            }, 0);
+            return hasQuestionMark ? '??' : sumVal;
+        }
+
+        // Check if legacy count targets restricted columns in a specific way
+        if (c.type === 'rows' && checkIfColumnIsRestricted(c.settings?.target_col) && c.settings?.match_type && !['exists', 'is_null'].includes(c.settings.match_type)) {
+            return '??';
+        }
+        if ((c.type === 'checkboxes' || c.type === 'tags') && checkIfColumnIsRestricted(c.settings?.target_col)) {
+            return '??';
+        }
+        if (c.type === 'flags' && c.settings?.flag_id) {
+            const roster = rosters.find((r: any) => r.id === activeDivId);
+            if (roster) {
+                const rosterCols = roster.columns || [];
+                const hasRestrictedColWithFlag = rosterCols.some((col: any) => {
+                    if (!(col.flags || []).includes(c.settings.flag_id)) return false;
+                    const isHiddenType = col.type?.includes('hidden');
+                    const canViewHidden = isGlobalMod || rosterPerms.view_hidden_data;
+                    return isHiddenType && !canViewHidden;
+                });
+                if (hasRestrictedColWithFlag) {
+                    return '??';
+                }
+            }
         }
 
         return pool.filter(row => {
@@ -845,10 +942,12 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
     };
 
     const primaryValue = getSingleValue(count);
+    if (primaryValue === '??') return '??';
     if (count.secondary_count_id) {
         const secondaryCount = (scope === 'roster' ? activeDivision.counts : targetSection?.counts)?.find((item: any) => String(item.id) === String(count.secondary_count_id));
         if (secondaryCount) {
             const secondaryValue = getSingleValue(secondaryCount);
+            if (secondaryValue === '??') return '??';
             if (count.show_percentage) {
                 const percentage = secondaryValue === 0 ? 0 : (primaryValue / secondaryValue) * 100;
                 return `${formatValue(primaryValue, count.should_round)} (${formatValue(percentage, count.should_round)}%)`;

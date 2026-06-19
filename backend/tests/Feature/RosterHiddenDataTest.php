@@ -122,7 +122,7 @@ test('FactionController show masks hidden columns for unauthorized users', funct
     $data = $response->json();
 
     $rosters = $data['rosters'];
-    expect(isset($rosters[0]['root_sections'][0]['contents'][0]['content']['secret_info']))->toBeFalse();
+    expect($rosters[0]['root_sections'][0]['contents'][0]['content']['secret_info'])->toBe('????');
 });
 
 test('faction payload does not leak rosters relation', function () {
@@ -232,7 +232,7 @@ test('FactionRecordEntryController show masks hidden columns in roster integrati
     $response->assertStatus(200);
     $data = $response->json();
 
-    expect(isset($data['roster_integrations'][0]['contents'][0]['content']['secret_info']))->toBeFalse();
+    expect($data['roster_integrations'][0]['contents'][0]['content']['secret_info'])->toBe('????');
 });
 
 test('FactionController show masks hidden columns based on section-specific overrides', function () {
@@ -276,7 +276,7 @@ test('FactionController show masks hidden columns based on section-specific over
 
     $c = $data['rosters'][0]['root_sections'][0]['contents'][0]['content'];
     expect($c['secret_info'])->toBe('Not a secret anymore');
-    expect(isset($c['another_secret']))->toBeFalse();
+    expect($c['another_secret'])->toBe('????');
 });
 
 test('FactionController show restricts record_data entries for view-only users', function () {

@@ -1022,6 +1022,12 @@ export const RosterTable: React.FC<RosterTableProps> = ({
     const showValue = !isHiddenType || canViewHidden;
 
     if (!showValue) {
+        if (!value || value === '') {
+            return (
+              <div className="flex flex-col items-center justify-center h-full gap-0.5 py-1 transition-all whitespace-nowrap overflow-visible relative group/cell rt-cell-content">
+              </div>
+            );
+        }
         return (
           <div className="flex flex-col items-center justify-center h-full gap-0.5 py-1 transition-all whitespace-nowrap overflow-visible relative group/cell rt-cell-content">
             <span className="text-[10px] uppercase font-black tracking-widest blur-[3px] select-none opacity-50 rt-cell-hidden-value">
@@ -1856,7 +1862,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
             {activeCols.map((col) => {
               const isHiddenType = col.type?.includes('hidden');
               const canViewHidden = canModerate || permissions?.view_hidden_data;
-              const isHeaderBlurred = isHiddenType && !canViewHidden;
+              const isHeaderBlurred = false; // Column names should never be hidden/blurred
               return (
                 <th 
                   key={col.id} 

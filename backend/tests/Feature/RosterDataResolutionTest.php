@@ -156,8 +156,8 @@ test('view-only users should see masked resolved data for hidden_database_data t
     // 'abas' (database_data) should be visible
     expect($content['abas'])->toBe('Top Secret ABAS');
 
-    // 'secret_abas' (hidden_database_data) should be omitted (unset)
-    expect(isset($content['secret_abas']))->toBeFalse();
+    // 'secret_abas' (hidden_database_data) should be masked
+    expect($content['secret_abas'])->toBe('????');
 });
 
 test('editors should see unmasked resolved data', function () {

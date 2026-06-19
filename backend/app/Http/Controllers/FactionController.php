@@ -704,7 +704,7 @@ class FactionController extends Controller
                             // Apply Masking
                             if (! $canViewHidden && in_array($colId, $hiddenColIds)) {
                                 if (isset($data[$colId]) && $data[$colId] !== '') {
-                                    unset($data[$colId]);
+                                    $data[$colId] = '????';
                                     $changed = true;
                                 }
                             }

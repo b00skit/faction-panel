@@ -554,11 +554,7 @@ class RosterController extends Controller
                 if (is_array($data)) {
                     foreach ($hiddenColIds as $colId) {
                         if (isset($data[$colId]) && $data[$colId] !== '') {
-                            if ($omit) {
-                                unset($data[$colId]);
-                            } else {
-                                $data[$colId] = '????';
-                            }
+                            $data[$colId] = '????';
                         }
                     }
                     $content->content = $data;

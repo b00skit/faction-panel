@@ -214,7 +214,7 @@ class FactionRecordEntryController extends Controller
                                 if (is_array($data)) {
                                     foreach ($hiddenColIds as $colId) {
                                         if (isset($data[$colId]) && $data[$colId] !== '') {
-                                            unset($data[$colId]);
+                                            $data[$colId] = '????';
                                         }
                                     }
                                     $content->content = $data;
