@@ -78,6 +78,7 @@ class RosterContent extends Model
         'type',
         'color',
         'content',
+        'notes',
         'created_by',
         'editing_by',
         'editing_at',
@@ -86,6 +87,7 @@ class RosterContent extends Model
 
     protected $casts = [
         'content' => 'array',
+        'notes' => 'array',
         'editing_at' => 'datetime',
     ];
 

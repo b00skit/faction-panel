@@ -390,6 +390,7 @@ export const SectionCard: React.FC<SectionCardProps> = ({
                 onAddRow={isDynamic ? undefined : () => handleAddRow(section.id)}
                 onAddSpacer={isDynamic ? undefined : () => handleAddSpacer(section.id)}
                 onUpdateRow={isDynamic ? undefined : handleUpdateRow}
+                onUpdateRowLocal={onUpdateRowLocal}
                 onDeleteRow={isDynamic ? undefined : handleDeleteRow}
                 onBulkDeleteRow={isDynamic ? undefined : handleBulkDeleteRows}
                 onRefresh={onRefresh}
@@ -496,6 +497,7 @@ export const SectionCard: React.FC<SectionCardProps> = ({
           onAddRow={isDynamic ? undefined : () => handleAddRow(section.id)}
           onAddSpacer={isDynamic ? undefined : () => handleAddSpacer(section.id)}
           onUpdateRow={isDynamic ? undefined : handleUpdateRow}
+          onUpdateRowLocal={onUpdateRowLocal}
           onDeleteRow={isDynamic ? undefined : handleDeleteRow}
           onBulkDeleteRow={isDynamic ? undefined : handleBulkDeleteRows}
           onRefresh={onRefresh}

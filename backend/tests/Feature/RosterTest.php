@@ -257,3 +257,48 @@ test('updating roster permissions dispatches RosterUpdated event', function () {
         return $event->roster->id === $roster->id;
     });
 });
+
+test('can fetch cell history with resolved array values', function () {
+    $roster = Roster::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Roster',
+        'shortname' => 'ROST',
+        'color' => '#ffffff',
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $section = RosterSection::create([
+        'roster_id' => $roster->id,
+        'name' => 'Section',
+        'shortname' => 'SEC',
+        'type' => 'section',
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $content = RosterContent::create([
+        'section_id' => $section->id,
+        'type' => 'predefined',
+        'content' => ['name' => 'Initial Name'],
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+    
+    // Update content via API to create audit log
+    $this->actingAs($this->user)
+        ->putJson("/api/contents/{$content->id}", [
+            'content' => ['name' => 'Updated Name'],
+        ])
+        ->assertStatus(200);
+
+    // Fetch cell history
+    $response = $this->actingAs($this->user)
+        ->getJson("/api/contents/{$content->id}/cell-history?col_id=name");
+
+    $response->assertStatus(200);
+    $data = $response->json();
+
+    expect(count($data))->toBeGreaterThanOrEqual(1);
+    expect($data[0]['value'])->toBe('Updated Name');
+});

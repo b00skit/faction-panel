@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useParams } from 'react-router-dom';
 import { RosterContent, RosterColumn } from '../types';
 import { motion, Reorder } from 'motion/react';
-import { Plus, Trash2, Check, X, Pencil, Tag, ExternalLink, GripVertical, SeparatorHorizontal, Settings2 } from 'lucide-react';
+import { Plus, Trash2, Check, X, Pencil, Tag, ExternalLink, GripVertical, SeparatorHorizontal, Settings2, History, StickyNote, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import * as LucideIcons from '../icons';
 import api from '../api';
 import toast from 'react-hot-toast';
@@ -147,6 +147,7 @@ interface RosterTableProps {
   flags?: any[];
   allColumns?: Map<string, any>;
   onUpdateRow?: (id: number, data: any, force?: boolean, lastUpdatedAt?: string | null) => void;
+  onUpdateRowLocal?: (id: number, data: any) => void;
   onDeleteRow?: (id: number) => void;
   onBulkDeleteRow?: (ids: number[]) => void;
   onAddRow?: () => void;
@@ -224,6 +225,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
   flags = [],
   allColumns,
   onUpdateRow,
+  onUpdateRowLocal,
   onDeleteRow,
   onBulkDeleteRow,
   onAddRow,
@@ -260,6 +262,164 @@ export const RosterTable: React.FC<RosterTableProps> = ({
   const [activeTagMenu, setActiveTagMenu] = useState<{ rowId: number, colId: string } | null>(null);
   const [linkedDataModal, setLinkedDataModal] = useState<{ rowId: number, colId: string, initialData?: any } | null>(null);
   const [resolvedLinks, setResolvedLinks] = useState<Map<string, any>>(new Map());
+
+  // Context Menu state
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    type: 'cell' | 'roster';
+    row?: RosterContent;
+    col?: RosterColumn;
+  } | null>(null);
+
+  // Note Modal state
+  const [noteModal, setNoteModal] = useState<{
+    row: RosterContent;
+    col: RosterColumn;
+    value: string;
+  } | null>(null);
+
+  // History Modal state
+  const [historyModal, setHistoryModal] = useState<{
+    row: RosterContent;
+    col: RosterColumn;
+  } | null>(null);
+  const [historyRevisions, setHistoryRevisions] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [currentRevisionIdx, setCurrentRevisionIdx] = useState(0);
+
+  // Close context menu on global click/contextmenu
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setContextMenu(null);
+    };
+    if (contextMenu) {
+      window.addEventListener('click', handleGlobalClick);
+      window.addEventListener('contextmenu', handleGlobalClick);
+      return () => {
+        window.removeEventListener('click', handleGlobalClick);
+        window.removeEventListener('contextmenu', handleGlobalClick);
+      };
+    }
+  }, [contextMenu]);
+
+  // Load cell history when historyModal is set
+  useEffect(() => {
+    if (historyModal) {
+      const fetchHistory = async () => {
+        setHistoryLoading(true);
+        try {
+          const res = await api.get(`/contents/${historyModal.row.id}/cell-history`, {
+            params: { col_id: historyModal.col.id }
+          });
+          
+          if (res.data.length === 0) {
+            const currentValue = historyModal.row.content?.[historyModal.col.id] ?? '';
+            const fallbackRevision = {
+              user: historyModal.row.editor ? {
+                username: historyModal.row.editor.username,
+                avatar_url: null
+              } : {
+                username: 'System',
+                avatar_url: null
+              },
+              value: currentValue,
+              updated_at: historyModal.row.updated_at || new Date().toISOString()
+            };
+            setHistoryRevisions([fallbackRevision]);
+          } else {
+            setHistoryRevisions(res.data);
+          }
+          setCurrentRevisionIdx(0);
+        } catch (err) {
+          console.error('Failed to load cell history', err);
+          toast.error('Failed to load cell history');
+          setHistoryModal(null);
+        } finally {
+          setHistoryLoading(false);
+        }
+      };
+      fetchHistory();
+    } else {
+      setHistoryRevisions([]);
+      setCurrentRevisionIdx(0);
+    }
+  }, [historyModal]);
+
+  // Navigate history revisions via left/right arrow keys
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!historyModal || historyRevisions.length <= 1) return;
+      if (e.key === 'ArrowLeft') {
+        // Go to older revision (next index in the reversed array)
+        if (currentRevisionIdx < historyRevisions.length - 1) {
+          setCurrentRevisionIdx(prev => prev + 1);
+        }
+      } else if (e.key === 'ArrowRight') {
+        // Go to newer revision (previous index)
+        if (currentRevisionIdx > 0) {
+          setCurrentRevisionIdx(prev => prev - 1);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [historyModal, historyRevisions, currentRevisionIdx]);
+
+  const handleSaveNote = async () => {
+    if (!noteModal) return;
+    const { row, col, value } = noteModal;
+    const loadToast = toast.loading('Saving note...');
+    try {
+      const res = await api.put(`/contents/${row.id}/notes`, {
+        col_id: col.id,
+        note: value
+      });
+      
+      onUpdateRowLocal?.(row.id, {
+        notes: res.data.notes
+      });
+      
+      toast.success('Note saved', { id: loadToast });
+      setNoteModal(null);
+      onRefresh?.();
+    } catch (err) {
+      toast.error('Failed to save note', { id: loadToast });
+      console.error(err);
+    }
+  };
+
+  const handleCellContextMenu = (e: React.MouseEvent, row: RosterContent, col: RosterColumn) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Close other pickers
+    setShowColorPicker(null);
+    setActiveTagMenu(null);
+    
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      type: 'cell',
+      row,
+      col
+    });
+  };
+
+  const handleRosterContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    const target = e.target as HTMLElement;
+    if (target.closest('.rt-td') && !target.closest('.rt-td')?.classList.contains('rt-td-spacer')) {
+      return;
+    }
+
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      type: 'roster'
+    });
+  };
 
   useEffect(() => {
     // Resolve links when contents or editData change
@@ -1020,6 +1180,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
     const canViewHidden = canModerate || permissions?.view_hidden_data;
     
     const showValue = !isHiddenType || canViewHidden;
+    const noteText = showValue ? row.notes?.[col.id] : null;
 
     if (!showValue) {
         if (!value || value === '') {
@@ -1182,6 +1343,8 @@ export const RosterTable: React.FC<RosterTableProps> = ({
         });
     }
 
+    const forceShowTooltip = showValue && (legendItems.length > 0 || !!noteText);
+
     // Suppress the tooltip entirely for hidden cells — never expose any value via hover
     const tooltipContent = showValue ? (
         <div className="p-3 bg-card border border-border rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex flex-col gap-2 min-w-[150px] text-left">
@@ -1203,6 +1366,12 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                             <span className="tracking-tight">{item.label}</span>
                         </div>
                     ))}
+                </div>
+            )}
+            {noteText && (
+                <div className="mt-1 pt-1.5 border-t border-border/30 text-[9px] text-amber-500 font-bold uppercase tracking-tight">
+                    <span className="text-muted/50 font-normal block lowercase normal-case text-[9px] italic mb-0.5">Note:</span>
+                    <span className="normal-case font-medium text-text/90 block leading-relaxed whitespace-pre-wrap">{noteText}</span>
                 </div>
             )}
         </div>
@@ -1272,7 +1441,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
 
                     return (
                         <div className="flex flex-col items-center justify-center h-full gap-0.5 py-1 transition-all whitespace-nowrap opacity-60 italic relative group/cell rt-cell-content">
-                            <CellScaler tooltipContent={tooltipContent} forceShowTooltip={legendItems.length > 0} disabled={isEditing}>
+                            <CellScaler tooltipContent={tooltipContent} forceShowTooltip={forceShowTooltip} disabled={isEditing}>
                                 <span className="text-[10px] uppercase font-bold text-accent">
                                     {displayValue}
                                 </span>
@@ -1293,7 +1462,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
         if (!canEditAny && row.content?.[col.id]) {
             return (
                 <div className="flex flex-col items-center justify-center h-full gap-0.5 py-1 transition-all whitespace-nowrap opacity-60 italic relative group/cell rt-cell-content">
-                    <CellScaler tooltipContent={tooltipContent} forceShowTooltip={legendItems.length > 0} disabled={isEditing}>
+                    <CellScaler tooltipContent={tooltipContent} forceShowTooltip={forceShowTooltip} disabled={isEditing}>
                         <span className="text-[10px] uppercase font-bold text-accent">
                             {String(row.content[col.id])}
                         </span>
@@ -1304,7 +1473,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
 
         return (
             <div className="flex flex-col items-center justify-center h-full gap-0.5 py-1 transition-all whitespace-nowrap opacity-20 rt-cell-content">
-                <CellScaler tooltipContent={tooltipContent} forceShowTooltip={legendItems.length > 0} disabled={isEditing}>
+                <CellScaler tooltipContent={tooltipContent} forceShowTooltip={forceShowTooltip} disabled={isEditing}>
                     <span className="text-[10px] uppercase font-bold">-</span>
                 </CellScaler>
             </div>
@@ -1336,7 +1505,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
         }
         return (
             <div className="flex flex-col items-center justify-center h-full w-full rt-cell-content">
-                <CellScaler tooltipContent={tooltipContent} forceShowTooltip={legendItems.length > 0} disabled={isEditing}>
+                <CellScaler tooltipContent={tooltipContent} forceShowTooltip={forceShowTooltip} disabled={isEditing}>
                     <span className="text-[10px] uppercase font-medium">{resolvedValue}</span>
                 </CellScaler>
             </div>
@@ -1367,7 +1536,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                 <option key={opt.id} value={opt.id} style={{ color: opt.color || 'inherit' }}>{opt.label}</option>
               ))}
             </select>
-            <CellScaler tooltipContent={tooltipContent} forceShowTooltip={legendItems.length > 0} className="relative z-20 pointer-events-none" disabled={isEditing}>
+            <CellScaler tooltipContent={tooltipContent} forceShowTooltip={forceShowTooltip} className="relative z-20 pointer-events-none" disabled={isEditing}>
                 <div className="flex items-center gap-1 overflow-visible">
                     <div className="text-[10px] uppercase font-medium transition-colors" style={textStyle}>
                     {selectedOpt?.label || value || <span className="opacity-20 italic">Select...</span>}
@@ -1516,7 +1685,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
             onClick={() => inputRef.current?.focus()}
             title={hasOrphanedFlag ? 'Linked database record no longer exists' : undefined}
         >
-          <CellScaler tooltipContent={tooltipContent} forceShowTooltip={legendItems.length > 0} disabled={isEditing}>
+          <CellScaler tooltipContent={tooltipContent} forceShowTooltip={forceShowTooltip} disabled={isEditing}>
             <div className="relative w-full flex flex-row items-center justify-center px-1 overflow-visible">
                 <input 
                 ref={col.id === editingColId ? inputRef : null}
@@ -1718,7 +1887,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
         title={hasOrphanedFlag ? 'Linked database record no longer exists' : undefined}
         onClick={() => canEditAny && col.type !== 'autofill' && handleStartEdit(row, col.id)}
       >
-        <CellScaler tooltipContent={tooltipContent} forceShowTooltip={showValue && legendItems.length > 0} disabled={isEditing}>
+        <CellScaler tooltipContent={tooltipContent} forceShowTooltip={forceShowTooltip} disabled={isEditing}>
             <div className="flex items-center gap-1.5 px-1 overflow-visible">
                 <span 
                     className={`text-[10px] uppercase font-medium transition-all ${!showValue ? 'blur-[3px] select-none opacity-50 font-black tracking-widest rt-cell-hidden-value' : ''}`} 
@@ -1836,6 +2005,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
         '--accent': accentColor,
         '--accent-rgb': accentColor?.startsWith('#') ? hexToRgb(accentColor) : undefined
       } as React.CSSProperties}
+      onContextMenu={handleRosterContextMenu}
     >
       <table ref={tableRef} className={`rt-table ${isLeadership ? 'bg-border/5' : ''}`}>
         <colgroup>
@@ -1994,19 +2164,33 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                     </td>
                 ) : (
                     <>
-                        {activeCols.map((col) => (
-                        <td 
-                            key={col.id} 
-                            className={`rt-td p-0 h-[34px] relative hover:z-[100] transition-colors ${isEditing && editingColId === col.id ? 'bg-accent/5 ring-1 ring-inset ring-accent/30 z-[5001]' : 'hover:bg-surface/50'}`}
-                            style={{ 
-                                zIndex: isEditing && editingColId === col.id ? 5001 : 0,
-                                ...cellStyle
-                            }}
-                            onClick={() => isColEditable(col) && (editingRowId !== row.id || editingColId !== col.id) && handleStartEdit(row, col.id)}
-                        >
-                            {renderCell(row, col)}
-                        </td>
-                        ))}
+                        {activeCols.map((col) => {
+                          const isHiddenType = col.type?.includes('hidden');
+                          const canViewHidden = canModerate || permissions?.view_hidden_data;
+                          const showValue = !isHiddenType || canViewHidden;
+                          const noteText = showValue ? row.notes?.[col.id] : null;
+
+                          return (
+                            <td 
+                                key={col.id} 
+                                className={`rt-td p-0 h-[34px] relative hover:z-[100] transition-colors ${isEditing && editingColId === col.id ? 'bg-accent/5 ring-1 ring-inset ring-accent/30 z-[5001]' : 'hover:bg-surface/50'}`}
+                                style={{ 
+                                    zIndex: isEditing && editingColId === col.id ? 5001 : 0,
+                                    ...cellStyle
+                                }}
+                                onClick={() => isColEditable(col) && (editingRowId !== row.id || editingColId !== col.id) && handleStartEdit(row, col.id)}
+                                onContextMenu={(e) => handleCellContextMenu(e, row, col)}
+                            >
+                                {renderCell(row, col)}
+                                {noteText && (
+                                    <div 
+                                        className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-l-[6px] border-t-amber-500 border-l-transparent pointer-events-none z-30" 
+                                        title="Has note"
+                                    />
+                                )}
+                            </td>
+                          );
+                        })}
                     </>
                 )}
                 <td className="rt-td p-0" style={cellStyle}>
@@ -2219,6 +2403,312 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                 setLinkedDataModal(null);
             }}
           />
+      )}
+
+      {/* Context Menu */}
+      {contextMenu && createPortal(
+        <div 
+          className="fixed bg-card/95 backdrop-blur-md border border-border/80 rounded-xl shadow-[0_10px_35px_rgba(0,0,0,0.4)] z-[99999] py-1.5 min-w-[170px] animate-in fade-in zoom-in-95 duration-100 cursor-default select-none"
+          style={{ 
+            top: contextMenu.y, 
+            left: contextMenu.x 
+          }}
+        >
+          {contextMenu.type === 'cell' && contextMenu.row && contextMenu.col ? (
+            <>
+              <div className="px-3 py-1 bg-surface/50 text-[7.5px] font-black text-muted/60 uppercase tracking-wider mb-1 border-b border-border/20">
+                Cell Actions
+              </div>
+              <button 
+                onClick={() => {
+                  setHistoryModal({ row: contextMenu.row!, col: contextMenu.col! });
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-accent/10 text-[10px] font-bold uppercase tracking-tight text-text hover:text-accent flex items-center gap-2 transition-colors group"
+              >
+                <History size={11} className="text-muted shrink-0 group-hover:text-accent" />
+                Show Cell History
+              </button>
+              <button 
+                onClick={() => {
+                  setNoteModal({ 
+                    row: contextMenu.row!, 
+                    col: contextMenu.col!, 
+                    value: contextMenu.row!.notes?.[contextMenu.col!.id] ?? '' 
+                  });
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-accent/10 text-[10px] font-bold uppercase tracking-tight text-text hover:text-accent flex items-center gap-2 transition-colors group"
+              >
+                <StickyNote size={11} className="text-muted shrink-0 group-hover:text-accent" />
+                {contextMenu.row!.notes?.[contextMenu.col!.id] ? 'Edit Note' : 'Add Note'}
+              </button>
+              {contextMenu.row!.notes?.[contextMenu.col!.id] && (
+                <button 
+                  onClick={async () => {
+                    const { row, col } = contextMenu;
+                    const loadToast = toast.loading('Deleting note...');
+                    try {
+                      const res = await api.put(`/contents/${row!.id}/notes`, {
+                        col_id: col!.id,
+                        note: null
+                      });
+                      onUpdateRowLocal?.(row!.id, { notes: res.data.notes });
+                      toast.success('Note deleted', { id: loadToast });
+                      onRefresh?.();
+                    } catch (err) {
+                      toast.error('Failed to delete note', { id: loadToast });
+                    }
+                    setContextMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-danger/10 text-[10px] font-bold uppercase tracking-tight text-danger flex items-center gap-2 transition-colors group"
+                >
+                  <Trash2 size={11} className="shrink-0" />
+                  Delete Note
+                </button>
+              )}
+              {isColEditable(contextMenu.col) && (
+                <>
+                  <div className="border-t border-border/20 my-1" />
+                  <button 
+                    onClick={() => {
+                      handleStartEdit(contextMenu.row!, contextMenu.col!.id);
+                      setContextMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-accent/10 text-[10px] font-bold uppercase tracking-tight text-text flex items-center gap-2 transition-colors group"
+                  >
+                    <Pencil size={11} className="text-muted shrink-0" />
+                    Edit Row
+                  </button>
+                  <button 
+                    onClick={() => {
+                      updateField(contextMenu.col!.id, '');
+                      handleSaveEdit(contextMenu.row!.id);
+                      setContextMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-danger/10 text-[10px] font-bold uppercase tracking-tight text-danger flex items-center gap-2 transition-colors group"
+                  >
+                    <X size={11} className="shrink-0" />
+                    Clear Cell
+                  </button>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="px-3 py-1 bg-surface/50 text-[7.5px] font-black text-muted/60 uppercase tracking-wider mb-1 border-b border-border/20">
+                Roster Actions
+              </div>
+              <button 
+                onClick={() => {
+                  onRefresh?.();
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-accent/10 text-[10px] font-bold uppercase tracking-tight text-text hover:text-accent flex items-center gap-2 transition-colors group"
+              >
+                <RefreshCw size={11} className="text-muted shrink-0 group-hover:text-accent" />
+                Refresh Roster
+              </button>
+              {canEditAny && (
+                <>
+                  <button 
+                    onClick={() => {
+                      onAddRow?.();
+                      setContextMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-accent/10 text-[10px] font-bold uppercase tracking-tight text-text hover:text-accent flex items-center gap-2 transition-colors group"
+                  >
+                    <Plus size={11} className="text-muted shrink-0" />
+                    Add Row
+                  </button>
+                  <button 
+                    onClick={() => {
+                      onAddSpacer?.();
+                      setContextMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-accent/10 text-[10px] font-bold uppercase tracking-tight text-text hover:text-accent flex items-center gap-2 transition-colors group"
+                  >
+                    <SeparatorHorizontal size={11} className="text-muted shrink-0" />
+                    Add Spacer
+                  </button>
+                </>
+              )}
+            </>
+          )}
+        </div>,
+        document.body
+      )}
+
+      {/* Note Modal */}
+      {noteModal && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
+          <div className="bg-card border border-border/80 rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="text-sm font-black uppercase tracking-wider text-text mb-1">
+              {noteModal.row.content?.name || 'Cell Note'}
+            </h3>
+            <p className="text-[10px] text-muted font-bold uppercase tracking-tight mb-4">
+              Edit Note for column: <span className="text-accent">{noteModal.col.name}</span>
+            </p>
+            <textarea
+              value={noteModal.value}
+              onChange={(e) => setNoteModal({ ...noteModal, value: e.target.value })}
+              className="w-full h-32 bg-surface border border-border rounded-xl p-3 text-[11px] text-text placeholder:opacity-20 outline-none focus:border-accent resize-none mb-4 uppercase"
+              placeholder="Type note content..."
+            />
+            <div className="flex justify-end gap-2 text-[10px] font-black uppercase">
+              <button
+                onClick={() => setNoteModal(null)}
+                className="px-3 py-1.5 bg-surface hover:bg-bg border border-border rounded-lg text-muted hover:text-text transition-colors"
+              >
+                Cancel
+              </button>
+              {noteModal.row.notes?.[noteModal.col.id] && (
+                <button
+                  onClick={async () => {
+                    const loadToast = toast.loading('Deleting note...');
+                    try {
+                      const res = await api.put(`/contents/${noteModal.row.id}/notes`, {
+                        col_id: noteModal.col.id,
+                        note: null
+                      });
+                      onUpdateRowLocal?.(noteModal.row.id, { notes: res.data.notes });
+                      toast.success('Note deleted', { id: loadToast });
+                      setNoteModal(null);
+                      onRefresh?.();
+                    } catch (err) {
+                      toast.error('Failed to delete note', { id: loadToast });
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-danger/10 hover:bg-danger/20 border border-danger/20 rounded-lg text-danger transition-colors mr-auto"
+                >
+                  Delete
+                </button>
+              )}
+              <button
+                onClick={handleSaveNote}
+                className="px-4 py-1.5 bg-accent hover:bg-accent/90 text-white rounded-lg transition-colors shadow-lg shadow-accent/20"
+              >
+                Save Note
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Cell History Modal */}
+      {historyModal && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
+          <div className="bg-card border border-border/80 rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-in fade-in zoom-in-95 duration-150 relative">
+            <button
+              onClick={() => setHistoryModal(null)}
+              className="absolute top-4 right-4 p-1 hover:bg-surface rounded-lg text-muted hover:text-text transition-colors"
+            >
+              <X size={14} />
+            </button>
+
+            <h3 className="text-sm font-black uppercase tracking-wider text-text mb-1">
+              Cell History
+            </h3>
+            <p className="text-[10px] text-muted font-bold uppercase tracking-tight mb-4">
+              {historyModal.row.content?.name || 'Member'} &gt; <span className="text-accent">{historyModal.col.name}</span>
+            </p>
+
+            <div className="min-h-[160px] flex flex-col justify-between">
+              {historyLoading ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-6 gap-2">
+                  <div className="w-5 h-5 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+                  <span className="text-[9px] font-black text-muted uppercase tracking-widest">Loading history</span>
+                </div>
+              ) : historyRevisions.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center py-8 text-[10px] text-muted uppercase italic">
+                  No revisions found
+                </div>
+              ) : (
+                <>
+                  {/* Revision Card */}
+                  <div className="flex-1 py-4 flex flex-col justify-center items-center text-center">
+                    <div className="w-full bg-surface/50 border border-border/50 rounded-xl p-4 flex flex-col items-center justify-center min-h-[90px] relative overflow-hidden group">
+                      <div className="absolute top-1.5 left-2 px-1.5 py-0.5 bg-accent/10 border border-accent/20 rounded text-[7px] font-black text-accent uppercase tracking-widest">
+                        Value
+                      </div>
+                      <span className="text-xs font-black uppercase text-text break-words max-w-full">
+                        {(() => {
+                          const rev = historyRevisions[currentRevisionIdx];
+                          const resolved = getResolvedDisplayValue(
+                            historyModal.row.id,
+                            historyModal.col.id,
+                            rev.value,
+                            historyModal.col,
+                            datasets,
+                            recordData,
+                            resolvedLinks
+                          );
+                          return resolved || <span className="opacity-20 italic">Empty</span>;
+                        })()}
+                      </span>
+                    </div>
+
+                    {/* Editor info */}
+                    <div className="flex items-center gap-2 mt-4 text-left w-full px-2">
+                      <div className="w-8 h-8 rounded-full bg-accent/10 border border-border flex items-center justify-center text-[10px] font-black text-accent uppercase shrink-0 overflow-hidden">
+                        {historyRevisions[currentRevisionIdx].user.avatar_url ? (
+                          <img 
+                            src={historyRevisions[currentRevisionIdx].user.avatar_url} 
+                            alt={historyRevisions[currentRevisionIdx].user.username} 
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          historyRevisions[currentRevisionIdx].user.username.slice(0, 2)
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-black uppercase text-text leading-none">
+                          {historyRevisions[currentRevisionIdx].user.username}
+                        </span>
+                        <span className="text-[8px] text-muted font-bold uppercase tracking-tight leading-none">
+                          {new Date(historyRevisions[currentRevisionIdx].updated_at).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Revision Navigator */}
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-border/45">
+                    <button
+                      onClick={() => {
+                        if (currentRevisionIdx < historyRevisions.length - 1) {
+                          setCurrentRevisionIdx(prev => prev + 1);
+                        }
+                      }}
+                      disabled={currentRevisionIdx === historyRevisions.length - 1}
+                      className="p-1.5 hover:bg-surface disabled:opacity-20 rounded-lg text-text border border-border transition-colors flex items-center justify-center"
+                      title="Older revision (Left Arrow)"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span className="text-[8px] font-black text-muted uppercase tracking-widest">
+                      Revision {historyRevisions.length - currentRevisionIdx} of {historyRevisions.length}
+                    </span>
+                    <button
+                      onClick={() => {
+                        if (currentRevisionIdx > 0) {
+                          setCurrentRevisionIdx(prev => prev - 1);
+                        }
+                      }}
+                      disabled={currentRevisionIdx === 0}
+                      className="p-1.5 hover:bg-surface disabled:opacity-20 rounded-lg text-text border border-border transition-colors flex items-center justify-center"
+                      title="Newer revision (Right Arrow)"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

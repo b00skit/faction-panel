@@ -969,8 +969,9 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
             const newContents = [...s.contents];
             newContents[idx] = {
               ...newContents[idx],
-              content: data.content,
-              color: data.color,
+              content: data.content !== undefined ? data.content : newContents[idx].content,
+              color: data.color !== undefined ? data.color : newContents[idx].color,
+              notes: data.notes !== undefined ? data.notes : newContents[idx].notes,
               updated_at: new Date().toISOString()
             };
             return { ...s, contents: newContents };

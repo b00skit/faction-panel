@@ -138,7 +138,7 @@ class RosterContentController extends Controller
             'editing_col' => null,
         ]);
 
-        $this->audit('roster.content.update', "Updated roster content in section '{$content->section->name}' in roster '{$roster->name}'", null, $content, $oldValues, $content->getDirty());
+        $this->audit('roster.content.update', "Updated roster content in section '{$content->section->name}' in roster '{$roster->name}'", null, $content, $oldValues, $content->getChanges());
 
         RosterRevision::logRevision($roster->id, "Updated row in section '{$content->section->name}'", Auth::id());
 
@@ -303,5 +303,118 @@ class RosterContentController extends Controller
         RosterRevision::logRevision($roster->id, "Batch updated rows in section '{$section->name}'", Auth::id());
 
         return response()->json(['message' => 'Batch update successful']);
+    }
+
+    public function updateNote(Request $request, RosterContent $content)
+    {
+        $roster = $content->section->roster;
+        $user = Auth::user();
+        if (!User::hasRosterPermission($user, $roster, 'modify_roster') &&
+            !User::hasRosterPermission($user, $roster, 'edit_predefined')) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $validated = $request->validate([
+            'col_id' => 'required|string',
+            'note' => 'nullable|string',
+        ]);
+
+        $notes = $content->notes ?? [];
+        if (is_null($validated['note']) || $validated['note'] === '') {
+            unset($notes[$validated['col_id']]);
+        } else {
+            $notes[$validated['col_id']] = $validated['note'];
+        }
+
+        $content->update(['notes' => $notes]);
+
+        $this->audit('roster.content.update_note', "Updated note on roster cell '{$validated['col_id']}' in section '{$content->section->name}' in roster '{$roster->name}'", null, $content);
+
+        return response()->json($content);
+    }
+
+    public function cellHistory(Request $request, RosterContent $content)
+    {
+        $roster = $content->section->roster;
+        $user = Auth::user();
+        
+        // Ensure user can view roster
+        if (!User::canViewRoster($user, $roster)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $colId = $request->query('col_id');
+        if (!$colId) {
+            return response()->json(['message' => 'col_id is required'], 400);
+        }
+
+        $auditLogs = $content->audits()
+            ->reorder()
+            ->orderBy('id', 'desc')
+            ->with('user')
+            ->get();
+
+        $revisions = [];
+        $seenTimes = [];
+
+        foreach ($auditLogs as $log) {
+            $newValue = null;
+            $hasContentChange = false;
+
+            if ($log->event === 'created' || $log->event === 'roster.content.create') {
+                $newContent = $this->normalizeToArray($log->new_values['content'] ?? null);
+                if (array_key_exists($colId, $newContent)) {
+                    $newValue = $newContent[$colId];
+                    $hasContentChange = true;
+                }
+            } elseif (isset($log->new_values['content'])) {
+                $oldContent = $this->normalizeToArray($log->old_values['content'] ?? null);
+                $newContent = $this->normalizeToArray($log->new_values['content'] ?? null);
+
+                $oldVal = $oldContent[$colId] ?? null;
+                $newVal = $newContent[$colId] ?? null;
+
+                if ($oldVal !== $newVal) {
+                    $newValue = $newVal;
+                    $hasContentChange = true;
+                }
+            }
+
+            if ($hasContentChange) {
+                $timeKey = $log->created_at->toIso8601String();
+                if (in_array($timeKey, $seenTimes)) {
+                    continue;
+                }
+                $seenTimes[] = $timeKey;
+
+                $revisions[] = [
+                    'user' => $log->user ? [
+                        'username' => $log->user->username,
+                        'avatar_url' => $log->user->avatar_url
+                    ] : [
+                        'username' => 'System',
+                        'avatar_url' => null
+                    ],
+                    'value' => $newValue,
+                    'updated_at' => $timeKey
+                ];
+            }
+        }
+
+        return response()->json($revisions);
+    }
+
+    private function normalizeToArray($value): array
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                return $this->normalizeToArray($decoded);
+            }
+        }
+        if (is_object($value)) {
+            return json_decode(json_encode($value), true);
+        }
+        return is_array($value) ? $value : [];
     }
 }

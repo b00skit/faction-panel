@@ -50,6 +50,7 @@ export interface RosterContent {
   type: 'predefined' | 'defined' | 'spacer';
   color?: string | null;
   content: any;
+  notes?: Record<string, string> | null;
   updated_at?: string;
   editing_by?: number | null;
   editing_at?: string | null;
