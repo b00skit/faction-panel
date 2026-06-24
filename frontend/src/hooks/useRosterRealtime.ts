@@ -14,6 +14,7 @@ interface UseRosterRealtimeProps {
     onRowUpdated?: (row: RosterContent) => void;
     onRowAdded?: (row: RosterContent) => void;
     onRowDeleted?: (rowId: number) => void;
+    onRowsReordered?: (sectionId: number, contentIds: number[]) => void;
     onRosterUpdated?: () => void;
 }
 
@@ -23,6 +24,7 @@ export const useRosterRealtime = ({
     onRowUpdated,
     onRowAdded,
     onRowDeleted,
+    onRowsReordered,
     onRosterUpdated,
 }: UseRosterRealtimeProps) => {
     const [presenceUsers, setPresenceUsers] = useState<PresenceUser[]>([]);
@@ -53,6 +55,9 @@ export const useRosterRealtime = ({
             .listen('.roster.row_deleted', (e: { id: number }) => {
                 onRowDeleted?.(e.id);
             })
+            .listen('.roster.rows_reordered', (e: { section_id: number; content_ids: number[] }) => {
+                onRowsReordered?.(e.section_id, e.content_ids);
+            })
             .listen('.roster.updated', () => {
                 onRosterUpdated?.();
             });
@@ -69,7 +74,7 @@ export const useRosterRealtime = ({
             echo.leave(rosterChannel);
             echo.leave(updatesChannel);
         };
-    }, [factionId, rosterId, onRowUpdated, onRowAdded, onRowDeleted, onRosterUpdated]);
+    }, [factionId, rosterId, onRowUpdated, onRowAdded, onRowDeleted, onRowsReordered, onRosterUpdated]);
 
     return { presenceUsers };
 };

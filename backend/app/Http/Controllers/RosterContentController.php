@@ -224,9 +224,14 @@ class RosterContentController extends Controller
                 ->update(['order' => $index]);
         }
 
+        \App\Models\Faction::invalidateRosterCache($roster->faction_id);
+        \App\Models\Faction::invalidateDiagramsCache($roster->faction_id);
+
         $this->audit('roster.content.reorder', "Reordered roster content for section '{$section->name}' in roster '{$roster->name}'", null, $section, null, $request->content_ids);
 
         RosterRevision::logRevision($roster->id, "Reordered rows in section '{$section->name}'", Auth::id());
+
+        \App\Events\RosterRowsReordered::dispatch($section, $request->content_ids);
 
         return response()->json(['message' => 'Reordered successfully']);
     }

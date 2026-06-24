@@ -56,7 +56,13 @@ class RosterRowAdded implements ShouldBroadcast
             'section_id' => $this->content->section_id,
             'content' => $this->content->content,
             'order' => $this->content->order,
+            'type' => $this->content->type,
+            'color' => $this->content->color,
+            'notes' => $this->content->notes,
             'editing_by' => $this->content->editing_by,
+            'editing_at' => $this->content->editing_at?->toIso8601String(),
+            'editing_col' => $this->content->editing_col,
+            'updated_at' => $this->content->updated_at?->toIso8601String(),
         ];
     }
 }

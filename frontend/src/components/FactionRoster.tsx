@@ -146,12 +146,82 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
             });
         });
     },
-    onRowAdded: () => {
-        // For now, simpler to re-fetch on add/delete to ensure correct ordering/placement
-        fetchRosters();
+    onRowAdded: (newRow) => {
+        setRosters(prevRosters => {
+            return prevRosters.map(roster => {
+                if (roster.id !== activeDivision?.id) return roster;
+                
+                const updateSection = (sections: any[]): any[] => {
+                    return sections.map(section => {
+                        let newContents = section.contents || [];
+                        if (section.id === newRow.section_id) {
+                            const exists = newContents.some((c: any) => c.id === newRow.id);
+                            if (!exists) {
+                                newContents = [...newContents, newRow];
+                            }
+                        }
+                        
+                        const newChildren = section.children ? updateSection(section.children) : section.children;
+                        
+                        return { ...section, contents: newContents, children: newChildren };
+                    });
+                };
+
+                return {
+                    ...roster,
+                    root_sections: updateSection(roster.root_sections || [])
+                };
+            });
+        });
     },
-    onRowDeleted: () => {
-        fetchRosters();
+    onRowDeleted: (deletedRowId) => {
+        setRosters(prevRosters => {
+            return prevRosters.map(roster => {
+                if (roster.id !== activeDivision?.id) return roster;
+                
+                const updateSection = (sections: any[]): any[] => {
+                    return sections.map(section => {
+                        const newContents = (section.contents || []).filter((c: any) => c.id !== deletedRowId);
+                        const newChildren = section.children ? updateSection(section.children) : section.children;
+                        
+                        return { ...section, contents: newContents, children: newChildren };
+                    });
+                };
+
+                return {
+                    ...roster,
+                    root_sections: updateSection(roster.root_sections || [])
+                };
+            });
+        });
+    },
+    onRowsReordered: (sectionId, contentIds) => {
+        setRosters(prevRosters => {
+            return prevRosters.map(roster => {
+                if (roster.id !== activeDivision?.id) return roster;
+                
+                const updateSection = (sections: any[]): any[] => {
+                    return sections.map(section => {
+                        let newContents = section.contents || [];
+                        if (section.id === sectionId) {
+                            const contentsMap = new Map(newContents.map((c: any) => [c.id, c]));
+                            newContents = contentIds
+                                .map(id => contentsMap.get(id))
+                                .filter(Boolean);
+                        }
+                        
+                        const newChildren = section.children ? updateSection(section.children) : section.children;
+                        
+                        return { ...section, contents: newContents, children: newChildren };
+                    });
+                };
+
+                return {
+                    ...roster,
+                    root_sections: updateSection(roster.root_sections || [])
+                };
+            });
+        });
     },
     onRosterUpdated: () => {
         fetchRosters();

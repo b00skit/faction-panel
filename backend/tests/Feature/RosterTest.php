@@ -302,3 +302,128 @@ test('can fetch cell history with resolved array values', function () {
     expect(count($data))->toBeGreaterThanOrEqual(1);
     expect($data[0]['value'])->toBe('Updated Name');
 });
+
+test('reordering contents invalidates cache and dispatches RosterRowsReordered event', function () {
+    Event::fake([\App\Events\RosterRowsReordered::class]);
+
+    $roster = Roster::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Roster',
+        'shortname' => 'ROST',
+        'color' => '#ffffff',
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $section = RosterSection::create([
+        'roster_id' => $roster->id,
+        'name' => 'Section',
+        'shortname' => 'SEC',
+        'type' => 'section',
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $content1 = RosterContent::create([
+        'section_id' => $section->id,
+        'type' => 'predefined',
+        'content' => ['name' => 'One'],
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $content2 = RosterContent::create([
+        'section_id' => $section->id,
+        'type' => 'predefined',
+        'content' => ['name' => 'Two'],
+        'order' => 1,
+        'created_by' => $this->user->id,
+    ]);
+
+    $response = $this->actingAs($this->user)
+        ->putJson("/api/sections/{$section->id}/contents/reorder", [
+            'content_ids' => [$content2->id, $content1->id],
+        ]);
+
+    $response->assertStatus(200);
+
+    Event::assertDispatched(\App\Events\RosterRowsReordered::class, function ($event) use ($section, $content1, $content2) {
+        return $event->sectionId === $section->id && $event->contentIds === [$content2->id, $content1->id];
+    });
+});
+
+test('reordering sections dispatches RosterUpdated event', function () {
+    Event::fake([RosterUpdated::class]);
+
+    $roster = Roster::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Roster',
+        'shortname' => 'ROST',
+        'color' => '#ffffff',
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $section1 = RosterSection::create([
+        'roster_id' => $roster->id,
+        'name' => 'Section 1',
+        'shortname' => 'SEC1',
+        'type' => 'section',
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $section2 = RosterSection::create([
+        'roster_id' => $roster->id,
+        'name' => 'Section 2',
+        'shortname' => 'SEC2',
+        'type' => 'section',
+        'order' => 1,
+        'created_by' => $this->user->id,
+    ]);
+
+    $response = $this->actingAs($this->user)
+        ->putJson("/api/rosters/{$roster->id}/sections/reorder", [
+            'section_ids' => [$section2->id, $section1->id],
+        ]);
+
+    $response->assertStatus(200);
+
+    Event::assertDispatched(RosterUpdated::class, function ($event) use ($roster) {
+        return $event->roster->id === $roster->id;
+    });
+});
+
+test('reordering rosters dispatches RosterUpdated event', function () {
+    Event::fake([RosterUpdated::class]);
+
+    $roster1 = Roster::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Roster 1',
+        'shortname' => 'ROST1',
+        'color' => '#ffffff',
+        'order' => 0,
+        'created_by' => $this->user->id,
+    ]);
+
+    $roster2 = Roster::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Roster 2',
+        'shortname' => 'ROST2',
+        'color' => '#ffffff',
+        'order' => 1,
+        'created_by' => $this->user->id,
+    ]);
+
+    $response = $this->actingAs($this->user)
+        ->putJson("/api/factions/{$this->faction->shortname}/rosters/reorder", [
+            'roster_ids' => [$roster2->id, $roster1->id],
+        ]);
+
+    $response->assertStatus(200);
+
+    Event::assertDispatched(RosterUpdated::class, function ($event) use ($roster2) {
+        return $event->roster->id === $roster2->id;
+    });
+});
+

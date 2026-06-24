@@ -270,6 +270,8 @@ class RosterSectionController extends Controller
 
         RosterRevision::logRevision($roster->id, 'Reordered sections', Auth::id());
 
+        \App\Events\RosterUpdated::dispatch($roster);
+
         return response()->json(['message' => 'Order updated']);
     }
 }

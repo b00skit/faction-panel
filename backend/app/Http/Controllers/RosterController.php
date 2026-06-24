@@ -841,6 +841,10 @@ class RosterController extends Controller
             $this->audit('roster.reorder', "Reordered rosters for faction {$faction->name}", null, null, null, $request->roster_ids);
         }
 
+        if ($rosters->isNotEmpty()) {
+            \App\Events\RosterUpdated::dispatch($rosters->first());
+        }
+
         return response()->json(['message' => 'Order updated']);
     }
 }
