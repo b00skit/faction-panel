@@ -48,6 +48,12 @@ beforeEach(function () {
         'created_by' => $this->leader->id,
     ]);
 
+    // Grant view access to the user's role so it is visible in the tests
+    $this->roster->rosterPermissions()->create([
+        'role_id' => $this->userRole->id,
+        'permissions' => ['view_roster'],
+    ]);
+
     // Create a section
     $this->section = $this->roster->sections()->create([
         'name' => 'Main Section',
@@ -729,6 +735,11 @@ test('FactionController show does not crash when linked column contains decimal 
             'name' => '0.99',
             'secret_info' => 'temp_123',
         ],
+    ]);
+
+    // Grant public view access to the roster so it is visible to guests/public
+    $this->roster->rosterPermissions()->create([
+        'permissions' => ['view_roster'],
     ]);
 
     // 4. Request faction panel as guest (unauthenticated)

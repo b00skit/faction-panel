@@ -524,9 +524,10 @@ class User extends Authenticatable
             return self::hasRosterPermission($user, $roster, 'view_roster');
         }
 
-        $canViewGlobal = $user && self::hasFactionPermission($user, $faction, 'view_faction_roster');
-
-        return $canViewGlobal || self::hasRosterPermission($user, $roster, 'view_roster');
+        // If no permissions are set for a roster, then it should not appear publicly for anyone
+        // apart from roster owner + faction owner + roster master. Since those are handled by the
+        // bypass checks above, we return false here.
+        return false;
     }
 
     public static function hasHierarchyPermission(?User $user, Hierarchy $hierarchy, string $permissionKey): bool

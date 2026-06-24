@@ -93,6 +93,12 @@ beforeEach(function () {
         'created_by' => $this->leader->id,
     ]);
 
+    // Grant view access to the user's role so it is visible in the tests
+    $this->roster->rosterPermissions()->create([
+        'role_id' => $this->userRole->id,
+        'permissions' => ['view_roster'],
+    ]);
+
     $this->section = $this->roster->sections()->create([
         'name' => 'HQ',
         'shortname' => 'HQ',

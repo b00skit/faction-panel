@@ -175,13 +175,8 @@ class RosterController extends Controller
                 ->orderBy('id')
                 ->get();
 
-            $filteredRosters = $rosters->filter(function ($roster) use ($user, $isGlobalViewer) {
-                $hasExplicitPerms = $roster->rosterPermissions->isNotEmpty();
-                if ($hasExplicitPerms) {
-                    return User::hasRosterPermission($user, $roster, 'view_roster');
-                }
-
-                return $isGlobalViewer || User::hasRosterPermission($user, $roster, 'view_roster');
+            $filteredRosters = $rosters->filter(function ($roster) use ($user) {
+                return User::canViewRoster($user, $roster);
             });
 
             $sandboxRosters = collect();

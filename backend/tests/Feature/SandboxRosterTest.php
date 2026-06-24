@@ -57,6 +57,12 @@ beforeEach(function () {
         'is_sandbox' => false,
     ]);
 
+    // Grant view access to the user's role so it is visible in the tests
+    $this->mainRoster->rosterPermissions()->create([
+        'role_id' => $this->userRole->id,
+        'permissions' => ['view_roster'],
+    ]);
+
     $this->mainSection = $this->mainRoster->sections()->create([
         'name' => 'Command',
         'shortname' => 'CMD',
