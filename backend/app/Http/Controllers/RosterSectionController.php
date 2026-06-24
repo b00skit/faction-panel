@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\RosterUpdated;
 use App\Models\Roster;
 use App\Models\RosterContent;
 use App\Models\RosterRevision;
@@ -270,7 +271,7 @@ class RosterSectionController extends Controller
 
         RosterRevision::logRevision($roster->id, 'Reordered sections', Auth::id());
 
-        \App\Events\RosterUpdated::dispatch($roster);
+        RosterUpdated::dispatch($roster);
 
         return response()->json(['message' => 'Order updated']);
     }

@@ -1,16 +1,16 @@
 <?php
 
+use App\Formula\EvaluationContext;
+use App\Formula\Lexer;
+use App\Formula\Parser;
+use App\Models\Faction;
 use App\Models\Roster;
 use App\Models\RosterContent;
 use App\Models\RosterSection;
 use App\Models\StatisticsModel;
 use App\Models\StatisticsWidget;
-use App\Models\Faction;
 use App\Services\FormulaEvaluatorService;
 use App\Services\StatisticsService;
-use App\Formula\Lexer;
-use App\Formula\Parser;
-use App\Formula\EvaluationContext;
 
 test('lexer tokenizes formulas correctly', function () {
     $lexer = new Lexer("sum(roster_rows(1, 'Status', 'Active'), 'col_hours') + 10.5");
@@ -22,9 +22,9 @@ test('lexer tokenizes formulas correctly', function () {
 });
 
 test('parser parses simple expressions correctly', function () {
-    $lexer = new Lexer("12 - (1 + 2)");
+    $lexer = new Lexer('12 - (1 + 2)');
     $tokens = $lexer->tokenize();
-    
+
     $parser = new Parser($tokens);
     $ast = $parser->parse();
 
@@ -35,8 +35,8 @@ test('parser parses simple expressions correctly', function () {
 });
 
 test('evaluator executes math formulas correctly', function () {
-    $evaluator = new FormulaEvaluatorService();
-    $result = $evaluator->evaluate("10 * 2.5 + 5", 1);
+    $evaluator = new FormulaEvaluatorService;
+    $result = $evaluator->evaluate('10 * 2.5 + 5', 1);
     expect($result)->toBe(30.0);
 });
 
@@ -76,7 +76,7 @@ test('evaluator resolves roster counts and rows correctly', function () {
         'content' => ['col_status' => 'Active', 'col_hours' => 8],
     ]);
 
-    $evaluator = new FormulaEvaluatorService();
+    $evaluator = new FormulaEvaluatorService;
 
     // 1. roster_count
     $count = $evaluator->evaluate("roster_count('patrol', 'Status', 'Active')", $faction->id);
@@ -123,7 +123,7 @@ test('statistics service calculates pie chart widget series correctly', function
         ],
     ]);
 
-    $statisticsService = new StatisticsService(new FormulaEvaluatorService());
+    $statisticsService = new StatisticsService(new FormulaEvaluatorService);
     $result = $statisticsService->calculate($widget, true);
 
     expect($result['data'])->toBe([
@@ -148,7 +148,7 @@ test('statistics service calculates series with default_hidden flag correctly', 
         ],
     ]);
 
-    $statisticsService = new StatisticsService(new FormulaEvaluatorService());
+    $statisticsService = new StatisticsService(new FormulaEvaluatorService);
     $result = $statisticsService->calculate($widget, true);
 
     expect($result['data'])->toBe([
@@ -186,7 +186,7 @@ test('statistics service calculates grouped widgets with custom label settings c
         ],
     ]);
 
-    $statisticsService = new StatisticsService(new FormulaEvaluatorService());
+    $statisticsService = new StatisticsService(new FormulaEvaluatorService);
     $result = $statisticsService->calculate($widget, true);
 
     // Collect data to avoid order issues
