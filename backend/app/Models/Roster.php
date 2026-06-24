@@ -70,4 +70,9 @@ class Roster extends Model
     {
         return $this->hasMany(RosterPermission::class);
     }
+
+    public function exclusions()
+    {
+        return $this->hasMany(RosterExclusion::class);
+    }
 }

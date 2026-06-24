@@ -309,8 +309,8 @@ class RosterContentController extends Controller
     {
         $roster = $content->section->roster;
         $user = Auth::user();
-        if (!User::hasRosterPermission($user, $roster, 'modify_roster') &&
-            !User::hasRosterPermission($user, $roster, 'edit_predefined')) {
+        if (! User::hasRosterPermission($user, $roster, 'modify_roster') &&
+            ! User::hasRosterPermission($user, $roster, 'edit_predefined')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -337,14 +337,14 @@ class RosterContentController extends Controller
     {
         $roster = $content->section->roster;
         $user = Auth::user();
-        
+
         // Ensure user can view roster
-        if (!User::canViewRoster($user, $roster)) {
+        if (! User::canViewRoster($user, $roster)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
         $colId = $request->query('col_id');
-        if (!$colId) {
+        if (! $colId) {
             return response()->json(['message' => 'col_id is required'], 400);
         }
 
@@ -390,13 +390,13 @@ class RosterContentController extends Controller
                 $revisions[] = [
                     'user' => $log->user ? [
                         'username' => $log->user->username,
-                        'avatar_url' => $log->user->avatar_url
+                        'avatar_url' => $log->user->avatar_url,
                     ] : [
                         'username' => 'System',
-                        'avatar_url' => null
+                        'avatar_url' => null,
                     ],
                     'value' => $newValue,
-                    'updated_at' => $timeKey
+                    'updated_at' => $timeKey,
                 ];
             }
         }
@@ -415,6 +415,7 @@ class RosterContentController extends Controller
         if (is_object($value)) {
             return json_decode(json_encode($value), true);
         }
+
         return is_array($value) ? $value : [];
     }
 }

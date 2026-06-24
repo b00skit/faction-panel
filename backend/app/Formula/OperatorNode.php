@@ -5,7 +5,9 @@ namespace App\Formula;
 class OperatorNode extends ASTNode
 {
     private string $operator;
+
     private ASTNode $left;
+
     private ASTNode $right;
 
     public function __construct(string $operator, ASTNode $left, ASTNode $right)
@@ -21,17 +23,18 @@ class OperatorNode extends ASTNode
         $rVal = $this->right->evaluate($context);
 
         switch ($this->operator) {
-            case '+': return (float)$lVal + (float)$rVal;
-            case '-': return (float)$lVal - (float)$rVal;
-            case '*': return (float)$lVal * (float)$rVal;
+            case '+': return (float) $lVal + (float) $rVal;
+            case '-': return (float) $lVal - (float) $rVal;
+            case '*': return (float) $lVal * (float) $rVal;
             case '/':
-                $divisor = (float)$rVal;
+                $divisor = (float) $rVal;
                 if ($divisor === 0.0) {
                     return 0.0;
                 }
-                return (float)$lVal / $divisor;
+
+                return (float) $lVal / $divisor;
             default:
-                throw new \Exception("Unsupported operator: " . $this->operator);
+                throw new \Exception('Unsupported operator: '.$this->operator);
         }
     }
 }

@@ -130,7 +130,6 @@ class User extends Authenticatable
         return $this->hasMany(FactionUserFieldValue::class);
     }
 
-
     public function ownedRosters()
     {
         return $this->hasMany(Roster::class, 'created_by');
@@ -162,6 +161,8 @@ class User extends Authenticatable
 
     protected static $hierarchyPermissionsCache = [];
 
+    protected static $exclusionCheckedCache = [];
+
     public static function clearPermissionsCache()
     {
         self::$userGroupsCache = [];
@@ -172,6 +173,7 @@ class User extends Authenticatable
         self::$statisticsPermissionsCache = [];
         self::$formPermissionsCache = [];
         self::$hierarchyPermissionsCache = [];
+        self::$exclusionCheckedCache = [];
     }
 
     protected static function shouldCache(): bool
@@ -401,10 +403,31 @@ class User extends Authenticatable
 
         $faction = $roster->faction;
 
+        // Faction leader is always exempt.
+        if ($user && $faction->faction_leader === $user->id) {
+            return true;
+        }
+
+        // Exclusion check: if user has any excluded role on this roster, deny access
+        if ($user) {
+            $userRoleIds = self::getUserRoleIds($user, $faction->id)->toArray();
+            if (! empty($userRoleIds)) {
+                $roleIdsKey = implode(',', $userRoleIds);
+                $exclusionCacheKey = "{$roster->id}_{$roleIdsKey}";
+                if (! isset(self::$exclusionCheckedCache[$exclusionCacheKey])) {
+                    self::$exclusionCheckedCache[$exclusionCacheKey] = RosterExclusion::where('roster_id', $roster->id)
+                        ->whereIn('role_id', $userRoleIds)
+                        ->exists();
+                }
+                if (self::$exclusionCheckedCache[$exclusionCacheKey]) {
+                    return false;
+                }
+            }
+        }
+
         // 1. Superadmin/Faction Leader/Global Roster Moderator/Creator always have access
         if ($user) {
             if ($user->is_superadmin ||
-                $faction->faction_leader === $user->id ||
                 self::hasFactionPermission($user, $faction, 'global_roster_moderation') ||
                 $roster->created_by === $user->id
             ) {
@@ -462,12 +485,29 @@ class User extends Authenticatable
                    self::hasFactionPermission($user, $roster->faction, 'utilize_sandbox_rosters');
         }
 
-        if ($user && $user->is_superadmin) {
+        $faction = $roster->faction;
+        if ($user && $faction->faction_leader === $user->id) {
             return true;
         }
 
-        $faction = $roster->faction;
-        if ($user && $faction->faction_leader === $user->id) {
+        // Exclusion check: if user has any excluded role on this roster, deny access
+        if ($user) {
+            $userRoleIds = self::getUserRoleIds($user, $faction->id)->toArray();
+            if (! empty($userRoleIds)) {
+                $roleIdsKey = implode(',', $userRoleIds);
+                $exclusionCacheKey = "{$roster->id}_{$roleIdsKey}";
+                if (! isset(self::$exclusionCheckedCache[$exclusionCacheKey])) {
+                    self::$exclusionCheckedCache[$exclusionCacheKey] = RosterExclusion::where('roster_id', $roster->id)
+                        ->whereIn('role_id', $userRoleIds)
+                        ->exists();
+                }
+                if (self::$exclusionCheckedCache[$exclusionCacheKey]) {
+                    return false;
+                }
+            }
+        }
+
+        if ($user && $user->is_superadmin) {
             return true;
         }
 

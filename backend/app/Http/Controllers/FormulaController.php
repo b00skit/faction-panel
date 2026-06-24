@@ -22,7 +22,7 @@ class FormulaController extends Controller
         $user = Auth::user();
 
         // Must be superadmin, faction leader, or faction member
-        if (!$user->is_superadmin && !$faction->users()->where('user_id', $user->id)->exists()) {
+        if (! $user->is_superadmin && ! $faction->users()->where('user_id', $user->id)->exists()) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

@@ -790,7 +790,7 @@ class FactionSeeder extends Seeder
             'type' => 'pie',
             'configuration' => [
                 'mode' => 'grouped',
-                'formula' => 'roster_rows(' . $lspdMainRoster->id . ')',
+                'formula' => 'roster_rows('.$lspdMainRoster->id.')',
                 'group_by_column' => 'status',
             ],
             'cache_result' => [
@@ -812,7 +812,7 @@ class FactionSeeder extends Seeder
             'configuration' => [
                 'mode' => 'series',
                 'series' => [
-                    ['name' => 'Active Warrants', 'color' => '#ef4444', 'formula' => 'database_count(' . $warrantsDb->id . ', "status", "Active")'],
+                    ['name' => 'Active Warrants', 'color' => '#ef4444', 'formula' => 'database_count('.$warrantsDb->id.', "status", "Active")'],
                 ],
             ],
             'cache_result' => [

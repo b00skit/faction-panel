@@ -7,6 +7,7 @@ use App\Models\Faction;
 use App\Models\FactionRecordDatabase;
 use App\Models\FactionRecordEntry;
 use App\Models\FactionSnapshot;
+use App\Models\FactionUserField;
 use App\Models\RosterContent;
 use App\Models\User;
 use App\Services\DynamicSectionService;
@@ -1084,10 +1085,10 @@ class FactionController extends Controller
                 $query->where('faction_id', $faction->id);
             },
             'factionUserFieldValues' => function ($query) use ($faction) {
-                $query->whereHas('field', function($q) use ($faction) {
+                $query->whereHas('field', function ($q) use ($faction) {
                     $q->where('faction_id', $faction->id);
                 })->with('field');
-            }
+            },
         ]);
 
         if ($search) {
@@ -1122,16 +1123,16 @@ class FactionController extends Controller
                 $query->where('faction_id', $faction->id);
             },
             'factionUserFieldValues' => function ($query) use ($faction) {
-                $query->whereHas('field', function($q) use ($faction) {
+                $query->whereHas('field', function ($q) use ($faction) {
                     $q->where('faction_id', $faction->id);
                 })->with('field');
-            }
+            },
         ]);
 
         $ownedRosters = $member->ownedRosters()->where('faction_id', $faction->id)->get();
         $ownedDatabases = $member->ownedDatabases()->where('faction_id', $faction->id)->get();
         $ownedStatistics = $member->ownedStatistics()->where('faction_id', $faction->id)->get();
-        $customFields = \App\Models\FactionUserField::where('faction_id', $faction->id)->orderBy('id')->get();
+        $customFields = FactionUserField::where('faction_id', $faction->id)->orderBy('id')->get();
 
         return response()->json([
             'user' => $memberWithPivot,

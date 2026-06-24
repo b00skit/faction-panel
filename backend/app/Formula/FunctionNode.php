@@ -5,6 +5,7 @@ namespace App\Formula;
 class FunctionNode extends ASTNode
 {
     private string $name;
+
     private array $arguments;
 
     public function __construct(string $name, array $arguments)
@@ -19,6 +20,7 @@ class FunctionNode extends ASTNode
         foreach ($this->arguments as $arg) {
             $evaluatedArgs[] = $arg->evaluate($context);
         }
+
         return $context->callFunction($this->name, $evaluatedArgs);
     }
 }

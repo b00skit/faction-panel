@@ -14,13 +14,14 @@ class FactionUserFieldController extends Controller
     public function index($shortname)
     {
         $faction = Faction::where('shortname', $shortname)->firstOrFail();
-        
-        if (! User::hasFactionPermission(Auth::user(), $faction, 'view_users') && 
+
+        if (! User::hasFactionPermission(Auth::user(), $faction, 'view_users') &&
             ! User::hasFactionPermission(Auth::user(), $faction, 'manage_user_fields')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
         $fields = FactionUserField::where('faction_id', $faction->id)->orderBy('id')->get();
+
         return response()->json($fields);
     }
 

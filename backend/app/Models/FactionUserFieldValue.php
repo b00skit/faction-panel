@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class FactionUserFieldValue extends Model
 {
-    use HasFactory, Auditable;
+    use Auditable, HasFactory;
 
     protected $fillable = [
         'user_id',

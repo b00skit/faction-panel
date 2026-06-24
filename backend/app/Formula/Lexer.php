@@ -5,7 +5,9 @@ namespace App\Formula;
 class Lexer
 {
     private string $input;
+
     private int $pos = 0;
+
     private int $len = 0;
 
     public function __construct(string $input)
@@ -22,30 +24,35 @@ class Lexer
 
             if (ctype_space($char)) {
                 $this->pos++;
+
                 continue;
             }
 
             if ($char === '(') {
                 $tokens[] = new Token(Token::TYPE_LPAREN, '(');
                 $this->pos++;
+
                 continue;
             }
 
             if ($char === ')') {
                 $tokens[] = new Token(Token::TYPE_RPAREN, ')');
                 $this->pos++;
+
                 continue;
             }
 
             if ($char === ',') {
                 $tokens[] = new Token(Token::TYPE_COMMA, ',');
                 $this->pos++;
+
                 continue;
             }
 
             if (in_array($char, ['+', '-', '*', '/'], true)) {
                 $tokens[] = new Token(Token::TYPE_OPERATOR, $char);
                 $this->pos++;
+
                 continue;
             }
 
@@ -62,10 +69,11 @@ class Lexer
                     $this->pos++;
                 }
                 if ($this->pos >= $this->len) {
-                    throw new \Exception("Unterminated string literal");
+                    throw new \Exception('Unterminated string literal');
                 }
                 $this->pos++; // skip closing quote
                 $tokens[] = new Token(Token::TYPE_STRING, $val);
+
                 continue;
             }
 
@@ -76,7 +84,8 @@ class Lexer
                     $val .= $this->input[$this->pos];
                     $this->pos++;
                 }
-                $tokens[] = new Token(Token::TYPE_NUMBER, (float)$val);
+                $tokens[] = new Token(Token::TYPE_NUMBER, (float) $val);
+
                 continue;
             }
 
@@ -88,12 +97,14 @@ class Lexer
                     $this->pos++;
                 }
                 $tokens[] = new Token(Token::TYPE_IDENTIFIER, $val);
+
                 continue;
             }
 
-            throw new \Exception("Unexpected character: " . $char);
+            throw new \Exception('Unexpected character: '.$char);
         }
         $tokens[] = new Token(Token::TYPE_EOF);
+
         return $tokens;
     }
 }

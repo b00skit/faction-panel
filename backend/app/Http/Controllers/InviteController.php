@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Faction;
 use App\Models\FactionInvite;
+use App\Models\FactionUserField;
+use App\Models\FactionUserFieldValue;
 use App\Models\Role;
 use App\Models\User;
 use Carbon\Carbon;
@@ -91,7 +93,7 @@ class InviteController extends Controller
 
         $fieldValues = $request->input('field_values', []);
         if (! empty($fieldValues)) {
-            $validFieldsCount = \App\Models\FactionUserField::where('faction_id', $faction->id)
+            $validFieldsCount = FactionUserField::where('faction_id', $faction->id)
                 ->whereIn('id', array_keys($fieldValues))
                 ->count();
             if ($validFieldsCount !== count($fieldValues)) {
@@ -205,7 +207,7 @@ class InviteController extends Controller
         // Apply pre-filled custom user field values
         if ($invite->field_values && is_array($invite->field_values)) {
             foreach ($invite->field_values as $fieldId => $val) {
-                $field = \App\Models\FactionUserField::where('faction_id', $faction->id)->find($fieldId);
+                $field = FactionUserField::where('faction_id', $faction->id)->find($fieldId);
                 if ($field) {
                     $coercedValue = $val;
                     if ($field->type === 'checkbox') {
@@ -213,7 +215,7 @@ class InviteController extends Controller
                     } else {
                         $coercedValue = $val !== null ? (string) $val : null;
                     }
-                    \App\Models\FactionUserFieldValue::updateOrCreate(
+                    FactionUserFieldValue::updateOrCreate(
                         [
                             'user_id' => $user->id,
                             'faction_user_field_id' => $field->id,

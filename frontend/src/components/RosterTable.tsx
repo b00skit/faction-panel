@@ -1254,54 +1254,6 @@ export const RosterTable: React.FC<RosterTableProps> = ({
         }
     }
 
-    const getCellDisplayValue = () => {
-        // Always return redacted placeholder for hidden columns when user lacks permission
-        if (!showValue) return '??????';
-
-        if (col.type?.includes('database_data') && col.source_column_id) {
-            const sourceCol = activeCols.find(c => c.id === col.source_column_id);
-            let sourceValue = isEditing ? editData[sourceCol?.id || ''] : (row.content?.[sourceCol?.id || ''] || '');
-            if (sourceCol?.type?.includes('linked_roster_data')) {
-                sourceValue = resolvedLinks.get(`${row.id}_${sourceCol.id}`) || '';
-            }
-            if (sourceValue) {
-                const sourceDataset = datasets.find(d => d.id === sourceCol?.dataset_id);
-                const db = findRecordDatabase(recordData, sourceDataset?.record_database_id);
-                if (db && db.entries) {
-                    const entry = db.entries.find((e: any) => {
-                        if (String(e.entry_id) === String(sourceValue)) return true;
-                        let fieldId = sourceCol?.database_field_id;
-                        if (!fieldId || ['table', 'compact', 'cards', 'detailed', 'rows'].includes(fieldId)) {
-                            fieldId = db.database_structure?.[0]?.id;
-                        }
-                        const label = (fieldId === 'id') ? String(e.entry_id) : 
-                                     (fieldId === 'created_at') ? new Date(e.created_at).toLocaleDateString() :
-                                     e.data?.[fieldId || ''];
-                        return String(label) === String(sourceValue);
-                    });
-                    if (entry) {
-                        const fieldId = col.data_field_id;
-                        if (fieldId === 'id') return String(entry.entry_id);
-                        if (fieldId === 'created_at') return new Date(entry.created_at).toLocaleDateString();
-                        return String(entry.data?.[fieldId || ''] || '-');
-                    }
-                }
-            }
-            if (!canEditAny && row.content?.[col.id]) return String(row.content[col.id]);
-            return '-';
-        }
-        if (col.type?.includes('linked_roster_data')) {
-            const resolvedValue = resolvedLinks.get(`${row.id}_${col.id}`);
-            if (resolvedValue) return resolvedValue;
-            if (row.content?.[col.id] && typeof row.content[col.id] !== 'object') {
-                return String(row.content[col.id]);
-            }
-            return '-';
-        }
-        return selectedOpt?.label || String(value) || '-';
-    };
-    const cellDisplayValue = getCellDisplayValue();
-
     const legendItems: { icon: React.ReactNode, label: string }[] = [];
 
     // Only populate legend items when the user is allowed to see the cell value.
@@ -1352,11 +1304,8 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                 {rowName.toUpperCase() || 'MEMBER'}
             </div>
             <div className="border-t border-border/80 my-0.5" />
-            <div className="text-[9px] text-muted font-bold uppercase tracking-tight">
-                {cellDisplayValue}
-            </div>
             {legendItems.length > 0 && (
-                <div className="flex flex-col gap-1.5 mt-1 pt-1.5 border-t border-border/30">
+                <div className="flex flex-col gap-1.5">
                     {legendItems.map((item, idx) => (
                         <div key={idx} className="flex items-center gap-1.5 text-[8px] font-black uppercase text-muted/80">
                             <span className="shrink-0 flex items-center justify-center w-3 h-3">
@@ -1369,7 +1318,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                 </div>
             )}
             {noteText && (
-                <div className="mt-1 pt-1.5 border-t border-border/30 text-[9px] text-amber-500 font-bold uppercase tracking-tight">
+                <div className={`${legendItems.length > 0 ? 'mt-1 pt-1.5 border-t border-border/30' : ''} text-[9px] text-amber-500 font-bold uppercase tracking-tight`}>
                     <span className="text-muted/50 font-normal block lowercase normal-case text-[9px] italic mb-0.5">Note:</span>
                     <span className="normal-case font-medium text-text/90 block leading-relaxed whitespace-pre-wrap">{noteText}</span>
                 </div>

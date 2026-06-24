@@ -28,6 +28,7 @@ export const RosterPermissionsModal: React.FC<RosterPermissionsModalProps> = ({ 
     const [groups, setGroups] = useState<Group[]>([]);
     const [roles, setRoles] = useState<Role[]>([]);
     const [factionMembers, setFactionMembers] = useState<any[]>([]);
+    const [exclusions, setExclusions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showAddTarget, setShowAddTarget] = useState(false);
     const [currentOwnerId, setCurrentOwnerId] = useState<number | null>(roster.created_by);
@@ -35,16 +36,18 @@ export const RosterPermissionsModal: React.FC<RosterPermissionsModalProps> = ({ 
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [permRes, groupRes, roleRes, memberRes] = await Promise.all([
+            const [permRes, groupRes, roleRes, memberRes, exclusionRes] = await Promise.all([
                 api.get(`/rosters/${roster.id}/permissions`),
                 api.get(`/factions/${shortname}/groups`),
                 api.get(`/factions/${shortname}/roles`),
-                api.get(`/factions/${shortname}/users`)
+                api.get(`/factions/${shortname}/users`),
+                api.get(`/rosters/${roster.id}/exclusions`)
             ]);
             setPermissions(permRes.data);
             setGroups(groupRes.data);
             setRoles(roleRes.data);
             setFactionMembers(Array.isArray(memberRes.data) ? memberRes.data : (memberRes.data.data || []));
+            setExclusions(exclusionRes.data);
         } catch (err) {
             toast.error('Failed to load permissions');
         } finally {
@@ -158,6 +161,32 @@ export const RosterPermissionsModal: React.FC<RosterPermissionsModalProps> = ({ 
             toast.success(groupId === null && roleId === null ? 'Public access added' : 'Target added', { id: loadToast });
         } catch (err) {
             toast.error('Failed to add target', { id: loadToast });
+        }
+    };
+
+    const handleAddExclusion = async (roleId: number) => {
+        if (exclusions.some(e => e.role_id === roleId)) {
+            toast.error('This role is already excluded');
+            return;
+        }
+        const loadToast = toast.loading('Adding exclusion...');
+        try {
+            const res = await api.post(`/rosters/${roster.id}/exclusions`, { role_id: roleId });
+            setExclusions(prev => [...prev, res.data]);
+            toast.success('Role added to exclusions', { id: loadToast });
+        } catch (err) {
+            toast.error('Failed to exclude role', { id: loadToast });
+        }
+    };
+
+    const handleRemoveExclusion = async (roleId: number) => {
+        const loadToast = toast.loading('Removing exclusion...');
+        try {
+            await api.delete(`/rosters/${roster.id}/exclusions/${roleId}`);
+            setExclusions(prev => prev.filter(e => e.role_id !== roleId));
+            toast.success('Role removed from exclusions', { id: loadToast });
+        } catch (err) {
+            toast.error('Failed to remove exclusion', { id: loadToast });
         }
     };
 
@@ -388,6 +417,71 @@ export const RosterPermissionsModal: React.FC<RosterPermissionsModalProps> = ({ 
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+
+                    {/* Exclusions Section */}
+                    <div className="space-y-4 border-t border-border pt-8">
+                        <div>
+                            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-danger flex items-center gap-2">
+                                <Shield className="text-danger" size={16} />
+                                Permission Exclusions
+                            </h3>
+                            <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1 opacity-70">
+                                Roles added here will be completely blocked from accessing this roster, regardless of other permissions or global roles. The only exemption is the Faction Owner.
+                            </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-4 items-center bg-danger/5 border border-danger/10 rounded-xl p-4">
+                            <div className="flex-1 min-w-[200px]">
+                                <select
+                                    value=""
+                                    onChange={(e) => {
+                                        if (e.target.value) {
+                                            handleAddExclusion(parseInt(e.target.value));
+                                            e.target.value = "";
+                                        }
+                                    }}
+                                    className="w-full bg-card border border-border rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest outline-none focus:border-danger transition-colors text-muted"
+                                >
+                                    <option value="">-- Select Role to Exclude --</option>
+                                    {roles
+                                        .filter(r => r.name.toLowerCase() !== 'public' && !exclusions.some(e => e.role_id === r.id))
+                                        .map(role => (
+                                            <option key={role.id} value={role.id}>
+                                                {role.name}
+                                            </option>
+                                        ))
+                                    }
+                                </select>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 flex-1">
+                                {exclusions.map(ex => {
+                                    const roleObj = roles.find(r => r.id === ex.role_id);
+                                    return (
+                                        <div 
+                                            key={ex.id} 
+                                            className="flex items-center gap-2 px-3 py-1.5 bg-card border border-danger/20 rounded-lg text-danger text-[9px] font-black uppercase tracking-widest animate-in fade-in zoom-in-95 duration-150"
+                                        >
+                                            <Award size={12} style={{ color: roleObj?.color }} />
+                                            <span>{roleObj?.name || `Role #${ex.role_id}`}</span>
+                                            <button 
+                                                onClick={() => handleRemoveExclusion(ex.role_id)}
+                                                className="ml-1 hover:text-white hover:bg-danger rounded p-0.5 transition-colors"
+                                                title="Remove exclusion"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                                {exclusions.length === 0 && (
+                                    <span className="text-[10px] text-muted uppercase tracking-widest italic opacity-50">
+                                        No exclusions configured
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

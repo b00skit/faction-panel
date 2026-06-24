@@ -41,7 +41,7 @@ class RefreshStatistics extends Command
             try {
                 $statisticsService->calculate($widget, true);
             } catch (\Throwable $e) {
-                $this->error("\nFailed to calculate widget {$widget->id} ({$widget->name}): " . $e->getMessage());
+                $this->error("\nFailed to calculate widget {$widget->id} ({$widget->name}): ".$e->getMessage());
             }
             $bar->advance();
         }

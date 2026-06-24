@@ -5,6 +5,7 @@ namespace App\Formula;
 class Parser
 {
     private array $tokens;
+
     private int $pos = 0;
 
     public function __construct(array $tokens)
@@ -21,9 +22,10 @@ class Parser
     {
         $tok = $this->current();
         if ($tok->type !== $type) {
-            throw new \Exception("Expected token type {$type}, got {$tok->type} with value '" . ($tok->value ?? '') . "'");
+            throw new \Exception("Expected token type {$type}, got {$tok->type} with value '".($tok->value ?? '')."'");
         }
         $this->pos++;
+
         return $tok;
     }
 
@@ -31,8 +33,9 @@ class Parser
     {
         $node = $this->parseExpression();
         if ($this->current()->type !== Token::TYPE_EOF) {
-            throw new \Exception("Unexpected token at end of formula: " . ($this->current()->value ?? $this->current()->type));
+            throw new \Exception('Unexpected token at end of formula: '.($this->current()->value ?? $this->current()->type));
         }
+
         return $node;
     }
 
@@ -49,6 +52,7 @@ class Parser
             $right = $this->parseMultiplication();
             $left = new OperatorNode($op, $left, $right);
         }
+
         return $left;
     }
 
@@ -60,6 +64,7 @@ class Parser
             $right = $this->parsePrimary();
             $left = new OperatorNode($op, $left, $right);
         }
+
         return $left;
     }
 
@@ -69,11 +74,13 @@ class Parser
 
         if ($tok->type === Token::TYPE_NUMBER) {
             $this->consume(Token::TYPE_NUMBER);
+
             return new ConstantNode($tok->value);
         }
 
         if ($tok->type === Token::TYPE_STRING) {
             $this->consume(Token::TYPE_STRING);
+
             return new ConstantNode($tok->value);
         }
 
@@ -91,6 +98,7 @@ class Parser
                     }
                 }
                 $this->consume(Token::TYPE_RPAREN);
+
                 return new FunctionNode($name, $args);
             }
 
@@ -113,9 +121,10 @@ class Parser
             $this->consume(Token::TYPE_LPAREN);
             $expr = $this->parseExpression();
             $this->consume(Token::TYPE_RPAREN);
+
             return $expr;
         }
 
-        throw new \Exception("Unexpected token in primary expression: " . ($tok->value ?? $tok->type));
+        throw new \Exception('Unexpected token in primary expression: '.($tok->value ?? $tok->type));
     }
 }

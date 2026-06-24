@@ -2,19 +2,16 @@
 
 namespace App\Services;
 
+use App\Formula\EvaluationContext;
 use App\Formula\Lexer;
 use App\Formula\Parser;
-use App\Formula\EvaluationContext;
+use Illuminate\Support\Collection;
 
 class FormulaEvaluatorService
 {
     /**
      * Tokenize, parse, and evaluate a formula string within a faction context.
      *
-     * @param string $formula
-     * @param int $factionId
-     * @param array $variables
-     * @return mixed
      * @throws \Exception
      */
     public function evaluate(string $formula, int $factionId, array $variables = []): mixed
@@ -31,6 +28,7 @@ class FormulaEvaluatorService
         $ast = $parser->parse();
 
         $context = new EvaluationContext($factionId, $variables);
+
         return $ast->evaluate($context);
     }
 
@@ -47,15 +45,17 @@ class FormulaEvaluatorService
         }
 
         $context = new EvaluationContext($factionId);
+
         return $context->getPropertyVal($item, $property);
     }
 
     /**
      * Convert data to a Collection using EvaluationContext.
      */
-    public function toCollection(mixed $data): \Illuminate\Support\Collection
+    public function toCollection(mixed $data): Collection
     {
         $context = new EvaluationContext(0);
+
         return $context->toCollection($data);
     }
 }

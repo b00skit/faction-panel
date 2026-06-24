@@ -10,6 +10,7 @@ use App\Http\Controllers\FactionRecordController;
 use App\Http\Controllers\FactionRecordEntryController;
 use App\Http\Controllers\FactionRecordPermissionController;
 use App\Http\Controllers\FactionSnapshotController;
+use App\Http\Controllers\FactionUserFieldController;
 use App\Http\Controllers\FormAutomationController;
 use App\Http\Controllers\FormController;
 use App\Http\Controllers\FormFieldController;
@@ -18,6 +19,7 @@ use App\Http\Controllers\FormSectionController;
 use App\Http\Controllers\FormStageController;
 use App\Http\Controllers\FormStatusController;
 use App\Http\Controllers\FormSubmissionController;
+use App\Http\Controllers\FormulaController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\HelpAdminController;
 use App\Http\Controllers\HelpController;
@@ -40,7 +42,6 @@ use App\Http\Controllers\SetupController;
 use App\Http\Controllers\StatisticsController;
 use App\Http\Controllers\StatisticsPermissionController;
 use App\Http\Controllers\StatisticsWidgetController;
-use App\Http\Controllers\FormulaController;
 use App\Http\Controllers\SuperadminController;
 use App\Http\Controllers\UploadController;
 use Illuminate\Support\Facades\Route;
@@ -142,11 +143,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/factions/{shortname}/members/{member}', [FactionController::class, 'getMemberProfile']);
 
     // Custom User Fields
-    Route::get('/factions/{shortname}/user-fields', [\App\Http\Controllers\FactionUserFieldController::class, 'index']);
-    Route::post('/factions/{shortname}/user-fields', [\App\Http\Controllers\FactionUserFieldController::class, 'store']);
-    Route::put('/user-fields/{field}', [\App\Http\Controllers\FactionUserFieldController::class, 'update']);
-    Route::delete('/user-fields/{field}', [\App\Http\Controllers\FactionUserFieldController::class, 'destroy']);
-    Route::put('/factions/{shortname}/users/{member}/user-fields', [\App\Http\Controllers\FactionUserFieldController::class, 'updateUserValues']);
+    Route::get('/factions/{shortname}/user-fields', [FactionUserFieldController::class, 'index']);
+    Route::post('/factions/{shortname}/user-fields', [FactionUserFieldController::class, 'store']);
+    Route::put('/user-fields/{field}', [FactionUserFieldController::class, 'update']);
+    Route::delete('/user-fields/{field}', [FactionUserFieldController::class, 'destroy']);
+    Route::put('/factions/{shortname}/users/{member}/user-fields', [FactionUserFieldController::class, 'updateUserValues']);
 
     Route::delete('/factions/{faction}/users/{user}', [FactionController::class, 'removeMember']);
     Route::put('/factions/{faction}/users/{user}/roles', [FactionController::class, 'updateMemberRoles']);
@@ -199,6 +200,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/rosters/{roster}/permissions', [RosterPermissionController::class, 'index']);
     Route::put('/rosters/{roster}/permissions', [RosterPermissionController::class, 'update']);
     Route::delete('/rosters/{roster}/permissions/{permissionId}', [RosterPermissionController::class, 'destroy']);
+    Route::get('/rosters/{roster}/exclusions', [RosterPermissionController::class, 'getExclusions']);
+    Route::post('/rosters/{roster}/exclusions', [RosterPermissionController::class, 'addExclusion']);
+    Route::delete('/rosters/{roster}/exclusions/{roleId}', [RosterPermissionController::class, 'removeExclusion']);
 
     // Roster Dataset Management
     Route::post('/factions/{shortname}/datasets', [DatasetController::class, 'store']);

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Faction;
 use App\Models\StatisticsModel;
+use App\Models\StatisticsWidget;
 use App\Models\User;
 use App\Services\StatisticsService;
 use Illuminate\Http\Request;
@@ -104,10 +105,10 @@ class StatisticsController extends Controller
         if ($needsRefresh) {
             dispatch(function () use ($model) {
                 // Fetch fresh widgets list to avoid using stale memory instances
-                $widgets = \App\Models\StatisticsWidget::where('statistics_model_id', $model->id)->get();
+                $widgets = StatisticsWidget::where('statistics_model_id', $model->id)->get();
                 foreach ($widgets as $widget) {
                     if (is_null($widget->last_calculated_at) || $widget->last_calculated_at->lt(now()->subDay())) {
-                        app(\App\Services\StatisticsService::class)->calculate($widget, true);
+                        app(StatisticsService::class)->calculate($widget, true);
                     }
                 }
             })->afterResponse();

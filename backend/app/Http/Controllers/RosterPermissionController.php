@@ -91,4 +91,65 @@ class RosterPermissionController extends Controller
 
         return response()->json(['message' => 'Permission removed']);
     }
+
+    public function getExclusions(Roster $roster)
+    {
+        if ($roster->is_sandbox) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $faction = $roster->faction;
+        if (! User::hasFactionPermission(Auth::user(), $faction, 'global_roster_moderation') && $roster->created_by !== Auth::id()) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        return response()->json($roster->exclusions()->with('role')->get());
+    }
+
+    public function addExclusion(Request $request, Roster $roster)
+    {
+        if ($roster->is_sandbox) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $faction = $roster->faction;
+        if (! User::hasFactionPermission(Auth::user(), $faction, 'global_roster_moderation') && $roster->created_by !== Auth::id()) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $validated = $request->validate([
+            'role_id' => 'required|exists:roles,id',
+        ]);
+
+        $exclusion = $roster->exclusions()->updateOrCreate([
+            'role_id' => $validated['role_id'],
+        ]);
+
+        $this->audit('roster_exclusion.create', "Excluded role '{$exclusion->role->name}' from roster '{$roster->name}'", $faction->id, $exclusion);
+        RosterRevision::logRevision($roster->id, "Excluded role '{$exclusion->role->name}'", Auth::id());
+
+        return response()->json($exclusion->load('role'));
+    }
+
+    public function removeExclusion(Roster $roster, $roleId)
+    {
+        if ($roster->is_sandbox) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $faction = $roster->faction;
+        if (! User::hasFactionPermission(Auth::user(), $faction, 'global_roster_moderation') && $roster->created_by !== Auth::id()) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $exclusion = $roster->exclusions()->where('role_id', $roleId)->firstOrFail();
+
+        $roleName = $exclusion->role ? $exclusion->role->name : "Role #{$roleId}";
+        $this->audit('roster_exclusion.delete', "Removed exclusion for role '{$roleName}' from roster '{$roster->name}'", $faction->id, $exclusion, $exclusion->getAttributes());
+        $exclusion->delete();
+
+        RosterRevision::logRevision($roster->id, "Removed exclusion for role '{$roleName}'", Auth::id());
+
+        return response()->json(['message' => 'Exclusion removed']);
+    }
 }

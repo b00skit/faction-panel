@@ -153,8 +153,8 @@ test('can capture snapshot and restore it 1:1 with complex relations and ID mapp
         'configuration' => [
             'mode' => 'series',
             'series' => [
-                ['name' => 'Active', 'color' => '#3b82f6', 'formula' => 'roster_count(' . $roster->id . ')']
-            ]
+                ['name' => 'Active', 'color' => '#3b82f6', 'formula' => 'roster_count('.$roster->id.')'],
+            ],
         ],
         'order' => 1,
         'width' => 6,

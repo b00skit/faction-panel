@@ -39,14 +39,15 @@ class StatisticsService
                 $rows = $this->evaluator->evaluate($formula, $factionId);
                 $grouped = $this->evaluator->toCollection($rows)->groupBy(function ($item) use ($groupByCol) {
                     $val = $this->evaluator->getPropertyVal($item, $groupByCol) ?? 'Unknown';
-                    return is_array($val) ? json_encode($val) : (string)$val;
+
+                    return is_array($val) ? json_encode($val) : (string) $val;
                 });
 
                 foreach ($grouped as $key => $items) {
                     $labelSetting = $labelSettings[$key] ?? [];
                     $data[] = [
                         'name' => $key,
-                        'value' => (float)$items->count(),
+                        'value' => (float) $items->count(),
                         'color' => $labelSetting['color'] ?? null,
                         'default_hidden' => $labelSetting['default_hidden'] ?? false,
                     ];
@@ -63,7 +64,7 @@ class StatisticsService
                     $val = $this->evaluator->evaluate($s['formula'] ?? '0', $factionId);
                     $data[] = [
                         'name' => $s['name'] ?? 'Data',
-                        'value' => (float)$val,
+                        'value' => (float) $val,
                         'color' => $s['color'] ?? null,
                         'default_hidden' => $s['default_hidden'] ?? false,
                     ];
