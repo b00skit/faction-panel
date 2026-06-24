@@ -141,6 +141,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/factions/{shortname}/users/{member}', [FactionController::class, 'getMemberProfile']);
     Route::get('/factions/{shortname}/members/{member}', [FactionController::class, 'getMemberProfile']);
 
+    // Custom User Fields
+    Route::get('/factions/{shortname}/user-fields', [\App\Http\Controllers\FactionUserFieldController::class, 'index']);
+    Route::post('/factions/{shortname}/user-fields', [\App\Http\Controllers\FactionUserFieldController::class, 'store']);
+    Route::put('/user-fields/{field}', [\App\Http\Controllers\FactionUserFieldController::class, 'update']);
+    Route::delete('/user-fields/{field}', [\App\Http\Controllers\FactionUserFieldController::class, 'destroy']);
+    Route::put('/factions/{shortname}/users/{member}/user-fields', [\App\Http\Controllers\FactionUserFieldController::class, 'updateUserValues']);
+
     Route::delete('/factions/{faction}/users/{user}', [FactionController::class, 'removeMember']);
     Route::put('/factions/{faction}/users/{user}/roles', [FactionController::class, 'updateMemberRoles']);
 

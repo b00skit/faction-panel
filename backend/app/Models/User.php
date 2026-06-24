@@ -125,6 +125,12 @@ class User extends Authenticatable
         return $this->belongsToMany(Group::class)->withPivot('is_leader')->withTimestamps();
     }
 
+    public function factionUserFieldValues()
+    {
+        return $this->hasMany(FactionUserFieldValue::class);
+    }
+
+
     public function ownedRosters()
     {
         return $this->hasMany(Roster::class, 'created_by');

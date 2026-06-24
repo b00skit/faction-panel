@@ -20,6 +20,7 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
         { id: 'details', perm: 'view_faction_details' },
         { id: 'roles', perm: 'view_permissions' },
         { id: 'users', perm: 'view_users' },
+        { id: 'user_fields', perm: 'manage_user_fields' },
         { id: 'invites', perm: 'manage_invites' },
         { id: 'integrations', perm: 'sync_gtaw' },
         { id: 'quick_search', perm: 'modify_global_quick_search' }
@@ -45,6 +46,16 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [selectedMemberProfile, setSelectedMemberProfile] = useState<any>(null);
     const [fetchingProfile, setFetchingProfile] = useState(false);
+
+    // Custom User Fields State
+    const [userFields, setUserFields] = useState<any[]>([]);
+    const [fetchingUserFields, setFetchingUserFields] = useState(false);
+    const [savingUserField, setSavingUserField] = useState(false);
+    const [newFieldForm, setNewFieldForm] = useState({ name: '', type: 'text', is_featured: false });
+    const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
+    const [profileValues, setProfileValues] = useState<Record<number, any>>({});
+    const [savingProfileValues, setSavingProfileValues] = useState(false);
+    const [inviteFieldValues, setInviteFieldValues] = useState<Record<number, any>>({});
 
     // Invites State
     const [activeInvites, setActiveInvites] = useState<any[]>([]);
@@ -183,6 +194,96 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
         }
     };
 
+    const fetchUserFields = async () => {
+        setFetchingUserFields(true);
+        try {
+            const res = await api.get(`/factions/${faction.shortname}/user-fields`);
+            setUserFields(res.data);
+        } catch (err) {
+            toast.error('Failed to fetch user fields');
+        } finally {
+            setFetchingUserFields(false);
+        }
+    };
+
+    const handleCreateOrUpdateField = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newFieldForm.name.trim()) return;
+        setSavingUserField(true);
+        try {
+            if (editingFieldId) {
+                const res = await api.put(`/user-fields/${editingFieldId}`, newFieldForm);
+                toast.success('Field updated successfully!');
+                setUserFields(userFields.map(f => f.id === editingFieldId ? res.data : f));
+                setEditingFieldId(null);
+            } else {
+                const res = await api.post(`/factions/${faction.shortname}/user-fields`, newFieldForm);
+                toast.success('Field created successfully!');
+                setUserFields([...userFields, res.data]);
+            }
+            setNewFieldForm({ name: '', type: 'text', is_featured: false });
+        } catch (err) {
+            toast.error('Failed to save user field');
+        } finally {
+            setSavingUserField(false);
+        }
+    };
+
+    const handleDeleteField = async (fieldId: number) => {
+        const confirmed = await confirm({
+            title: 'Delete User Field',
+            message: 'Are you sure you want to delete this custom user field? This will delete all stored values for all users on this field.',
+            confirmText: 'Delete Field',
+        });
+        if (!confirmed) return;
+        try {
+            await api.delete(`/user-fields/${fieldId}`);
+            toast.success('Field deleted successfully!');
+            setUserFields(userFields.filter(f => f.id !== fieldId));
+        } catch (err) {
+            toast.error('Failed to delete user field');
+        }
+    };
+
+    const handleUpdateMemberFields = async () => {
+        if (!selectedMemberProfile) return;
+        setSavingProfileValues(true);
+        try {
+            await api.put(`/factions/${faction.shortname}/users/${selectedMemberProfile.user.id}/user-fields`, {
+                values: profileValues
+            });
+            toast.success('Custom fields updated successfully!');
+            const updatedValues = selectedMemberProfile.custom_fields.map((f: any) => {
+                const val = profileValues[f.id];
+                return {
+                    faction_user_field_id: f.id,
+                    value: f.type === 'checkbox' ? (val ? '1' : '0') : val,
+                    field: f
+                };
+            });
+            setMembers(members.map(m => {
+                if (m.id === selectedMemberProfile.user.id) {
+                    return {
+                        ...m,
+                        faction_user_field_values: updatedValues
+                    };
+                }
+                return m;
+            }));
+            setSelectedMemberProfile({
+                ...selectedMemberProfile,
+                user: {
+                    ...selectedMemberProfile.user,
+                    faction_user_field_values: updatedValues
+                }
+            });
+        } catch (err) {
+            toast.error('Failed to update custom fields');
+        } finally {
+            setSavingProfileValues(false);
+        }
+    };
+
     const fetchActiveInvites = async () => {
         setFetchingActiveInvites(true);
         try {
@@ -251,14 +352,33 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
 
     useEffect(() => {
         if (activeTab === 'users' && members.length === 0) fetchMembers();
+        if (activeTab === 'user_fields' && userFields.length === 0) fetchUserFields();
         if (activeTab === 'invites') {
             if (activeInvites.length === 0) fetchActiveInvites();
             fetchGroups();
+            if (userFields.length === 0) fetchUserFields();
         }
         if (activeTab === 'integrations' && availableFactions.length === 0 && !faction.gtaw_faction_id) {
             fetchAvailableFactions();
         }
     }, [activeTab]);
+
+    useEffect(() => {
+        if (selectedMemberProfile && selectedMemberProfile.custom_fields) {
+            const vals: Record<number, any> = {};
+            selectedMemberProfile.custom_fields.forEach((f: any) => {
+                vals[f.id] = f.type === 'checkbox' ? false : '';
+            });
+            if (selectedMemberProfile.user.faction_user_field_values) {
+                selectedMemberProfile.user.faction_user_field_values.forEach((v: any) => {
+                    if (v.field) {
+                        vals[v.faction_user_field_id] = v.field.type === 'checkbox' ? (v.value === '1' || v.value === 'true' || v.value === true) : v.value || '';
+                    }
+                });
+            }
+            setProfileValues(vals);
+        }
+    }, [selectedMemberProfile]);
 
     useEffect(() => {
         if (activeTab !== 'users') return;
@@ -317,11 +437,13 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
         try {
             await api.post(`/factions/${faction.shortname}/invites`, {
                 ...inviteForm,
-                role_id: inviteForm.role_id || null
+                role_id: inviteForm.role_id || null,
+                field_values: inviteFieldValues
             });
             toast.success('Invite code generated!');
             fetchActiveInvites();
             setInviteForm(prev => ({ ...prev, role_id: '', max_uses: 0, group_ids: [] }));
+            setInviteFieldValues({});
         } catch (err) {
             toast.error('Failed to create invite');
         } finally {
@@ -546,12 +668,14 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
                             {tab.id === 'details' && <Info size={14} />}
                             {tab.id === 'roles' && <Key size={14} />}
                             {tab.id === 'users' && <Users size={14} />}
+                            {tab.id === 'user_fields' && <LayoutGrid size={14} />}
                             {tab.id === 'invites' && <LinkIcon size={14} />}
                             {tab.id === 'integrations' && <RefreshCw size={14} />}
                             {tab.id === 'quick_search' && <Search size={14} />}
                             {tab.id === 'details' && 'Faction Details'}
                             {tab.id === 'roles' && 'Ranks & Permissions'}
                             {tab.id === 'users' && 'Users'}
+                            {tab.id === 'user_fields' && 'User Fields'}
                             {tab.id === 'invites' && 'Invites'}
                             {tab.id === 'integrations' && 'GTA:W Sync'}
                             {tab.id === 'quick_search' && 'Quick Search'}
@@ -967,6 +1091,24 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
                                                                 <Crown size={14} className="text-yellow-500" />
                                                             )}
                                                         </div>
+                                                        {member.faction_user_field_values && member.faction_user_field_values.length > 0 && (
+                                                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 mb-1 text-[11px]">
+                                                                {member.faction_user_field_values
+                                                                    .filter((v: any) => v.field && v.field.is_featured)
+                                                                    .slice(0, 2)
+                                                                    .map((v: any) => {
+                                                                        const displayVal = v.field.type === 'checkbox'
+                                                                            ? (v.value === '1' || v.value === 'true' || v.value === true ? 'Yes' : 'No')
+                                                                            : v.value;
+                                                                        return (
+                                                                            <span key={v.id} className="text-muted/80">
+                                                                                <span className="font-semibold text-text/70">{v.field.name}:</span> {displayVal || 'N/A'}
+                                                                            </span>
+                                                                        );
+                                                                    })
+                                                                }
+                                                            </div>
+                                                        )}
                                                         <div className="flex flex-wrap gap-1 mt-1">
                                                             {member.roles?.filter((r: any) => r.faction_id === faction.id).sort((a: any, b: any) => b.weight - a.weight).map((role: any) => (
                                                                 <span 
@@ -1020,6 +1162,126 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
                                 </div>
                             </div>
                         )}
+                    </motion.div>
+                )}
+
+                {activeTab === 'user_fields' && (
+                    <motion.div key="user_fields" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-1">
+                            <div className="bg-card border border-border rounded-lg p-6 sticky top-6">
+                                <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-text">
+                                    {editingFieldId ? <Edit2 size={18} className="text-accent" /> : <Plus size={18} className="text-accent" />}
+                                    {editingFieldId ? 'Edit Field' : 'Create User Field'}
+                                </h3>
+                                <form onSubmit={handleCreateOrUpdateField} className="space-y-4">
+                                    <div>
+                                        <label className="block text-[10px] text-muted font-bold uppercase tracking-widest mb-1.5">Field Name</label>
+                                        <input 
+                                            type="text" 
+                                            value={newFieldForm.name} 
+                                            onChange={e => setNewFieldForm({ ...newFieldForm, name: e.target.value })}
+                                            className="w-full bg-surface border border-border p-3 rounded text-sm text-text focus:border-accent outline-none transition"
+                                            placeholder="e.g. Callsign, Badge Number"
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] text-muted font-bold uppercase tracking-widest mb-1.5">Field Type</label>
+                                        <select 
+                                            value={newFieldForm.type} 
+                                            onChange={e => setNewFieldForm({ ...newFieldForm, type: e.target.value })}
+                                            className="w-full bg-surface border border-border p-3 rounded text-sm text-text focus:border-accent outline-none transition text-text"
+                                        >
+                                            <option value="text">Text Field (single line)</option>
+                                            <option value="textarea">Text Area (multi-line)</option>
+                                            <option value="checkbox">Checkbox</option>
+                                        </select>
+                                    </div>
+                                    <label className="flex items-center justify-between p-3 rounded bg-surface hover:bg-surface/80 border border-border cursor-pointer transition">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-text">Feature on User List</span>
+                                            <span className="text-[8px] text-muted font-bold uppercase tracking-wider mt-0.5">Show this field under username (max 2)</span>
+                                        </div>
+                                        <input 
+                                            type="checkbox"
+                                            checked={newFieldForm.is_featured}
+                                            onChange={e => setNewFieldForm({ ...newFieldForm, is_featured: e.target.checked })}
+                                            className="w-4 h-4 rounded border-border text-accent focus:ring-accent bg-bg cursor-pointer"
+                                        />
+                                    </label>
+                                    <div className="flex gap-2 pt-2">
+                                        <button 
+                                            type="submit" 
+                                            disabled={savingUserField}
+                                            className="flex-1 px-4 py-2 bg-accent hover:bg-accent/90 text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition disabled:opacity-50"
+                                        >
+                                            {savingUserField ? 'Saving...' : (editingFieldId ? 'Update Field' : 'Create Field')}
+                                        </button>
+                                        {editingFieldId && (
+                                            <button 
+                                                type="button" 
+                                                onClick={() => {
+                                                    setEditingFieldId(null);
+                                                    setNewFieldForm({ name: '', type: 'text', is_featured: false });
+                                                }}
+                                                className="px-4 py-2 bg-surface hover:bg-surface/80 border border-border text-text rounded-xl font-black text-[10px] uppercase tracking-widest transition"
+                                            >
+                                                Cancel
+                                            </button>
+                                        )}
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        <div className="lg:col-span-2">
+                            <div className="bg-card border border-border rounded-lg p-6">
+                                <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-text"><LayoutGrid size={18} className="text-accent" /> Custom User Fields</h3>
+                                {fetchingUserFields ? <Loading message="Loading fields..." fullScreen={false} /> : (
+                                    userFields.length === 0 ? (
+                                        <div className="text-center py-12 bg-surface border border-border border-dashed rounded-xl">
+                                            <LayoutGrid size={32} className="mx-auto text-muted mb-3 opacity-50" />
+                                            <p className="text-sm text-muted font-bold uppercase tracking-widest">No custom user fields defined</p>
+                                            <p className="text-xs text-muted/60 mt-1">Create user fields on the left to start customizing your member profiles.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {userFields.map(f => (
+                                                <div key={f.id} className="flex justify-between items-center p-4 bg-surface border border-border rounded-xl hover:border-border/80 transition">
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold text-sm text-text">{f.name}</span>
+                                                            {f.is_featured && (
+                                                                <span className="px-1.5 py-0.5 rounded-[4px] bg-accent/10 border border-accent/20 text-accent font-black text-[6px] uppercase tracking-widest">
+                                                                    Featured
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-[8px] text-muted font-bold uppercase tracking-widest mt-1">Type: {f.type}</p>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button 
+                                                            onClick={() => {
+                                                                setEditingFieldId(f.id);
+                                                                setNewFieldForm({ name: f.name, type: f.type, is_featured: !!f.is_featured });
+                                                            }}
+                                                            className="p-2 hover:bg-card border border-transparent hover:border-border text-muted hover:text-accent rounded-lg transition"
+                                                        >
+                                                            <Edit2 size={14} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleDeleteField(f.id)}
+                                                            className="p-2 hover:bg-card border border-transparent hover:border-border text-muted hover:text-danger rounded-lg transition"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )
+                                )}
+                            </div>
+                        </div>
                     </motion.div>
                 )}
 
@@ -1119,6 +1381,54 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
                                             </div>
                                         )}
                                     </div>
+                                    {userFields.length > 0 && (
+                                        <div className="space-y-1.5">
+                                            <label className="block text-[10px] text-muted font-bold uppercase tracking-widest mb-1.5">Pre-fill Custom User Fields</label>
+                                            <div className="space-y-3 p-3 bg-surface border border-border rounded max-h-48 overflow-y-auto">
+                                                {userFields.map((f: any) => {
+                                                    if (f.type === 'checkbox') {
+                                                        return (
+                                                            <label key={f.id} className="flex items-center justify-between p-2 rounded bg-card hover:bg-surface border border-border/50 cursor-pointer">
+                                                                <span className="text-[10px] font-black uppercase tracking-wider text-text">{f.name}</span>
+                                                                <input 
+                                                                    type="checkbox"
+                                                                    checked={!!inviteFieldValues[f.id]}
+                                                                    onChange={e => setInviteFieldValues({ ...inviteFieldValues, [f.id]: e.target.checked })}
+                                                                    className="w-3.5 h-3.5 rounded border-border text-accent focus:ring-accent bg-bg cursor-pointer"
+                                                                />
+                                                            </label>
+                                                        );
+                                                    }
+                                                    if (f.type === 'textarea') {
+                                                        return (
+                                                            <div key={f.id} className="space-y-1">
+                                                                <label className="block text-[8px] text-muted font-bold uppercase tracking-wider">{f.name}</label>
+                                                                <textarea 
+                                                                    value={inviteFieldValues[f.id] || ''}
+                                                                    onChange={e => setInviteFieldValues({ ...inviteFieldValues, [f.id]: e.target.value })}
+                                                                    className="w-full bg-card border border-border p-2 rounded text-xs text-text focus:border-accent outline-none transition min-h-[50px]"
+                                                                    placeholder={`Pre-fill ${f.name}...`}
+                                                                />
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <div key={f.id} className="space-y-1">
+                                                            <label className="block text-[8px] text-muted font-bold uppercase tracking-wider">{f.name}</label>
+                                                            <input 
+                                                                type="text"
+                                                                value={inviteFieldValues[f.id] || ''}
+                                                                onChange={e => setInviteFieldValues({ ...inviteFieldValues, [f.id]: e.target.value })}
+                                                                className="w-full bg-card border border-border p-2 rounded text-xs text-text focus:border-accent outline-none transition"
+                                                                placeholder={`Pre-fill ${f.name}...`}
+                                                            />
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <button type="submit" disabled={creatingInvite} className="w-full py-3 bg-accent hover:bg-accent/90 text-white rounded font-bold text-[10px] uppercase tracking-widest transition flex items-center justify-center gap-2 shadow-lg shadow-accent/20">
                                         <LinkIcon size={14} /> {creatingInvite ? 'Generating...' : 'Generate Invite Link'}
                                     </button>
@@ -1565,6 +1875,69 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
                                         </div>
                                     </div>
                                 </div>
+
+                                {selectedMemberProfile.custom_fields && selectedMemberProfile.custom_fields.length > 0 && (
+                                    <div className="space-y-4">
+                                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-accent/60 px-1 border-b border-accent/20 pb-1">Custom User Fields</div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            {selectedMemberProfile.custom_fields.map((f: any) => {
+                                                const isEditable = hasPerm('manage_user_fields');
+                                                if (f.type === 'checkbox') {
+                                                    return (
+                                                        <label key={f.id} className="flex items-center justify-between p-3 rounded-xl bg-surface border border-border/50 cursor-pointer">
+                                                            <span className="text-xs font-bold uppercase tracking-widest text-text">{f.name}</span>
+                                                            <input 
+                                                                type="checkbox"
+                                                                checked={!!profileValues[f.id]}
+                                                                disabled={!isEditable}
+                                                                onChange={e => setProfileValues({ ...profileValues, [f.id]: e.target.checked })}
+                                                                className="w-4 h-4 rounded border-border text-accent focus:ring-accent bg-bg cursor-pointer disabled:opacity-50"
+                                                            />
+                                                        </label>
+                                                    );
+                                                }
+                                                if (f.type === 'textarea') {
+                                                    return (
+                                                        <div key={f.id} className="sm:col-span-2 space-y-1.5">
+                                                            <label className="block text-[10px] text-muted font-bold uppercase tracking-widest">{f.name}</label>
+                                                            <textarea 
+                                                                value={profileValues[f.id] || ''}
+                                                                disabled={!isEditable}
+                                                                onChange={e => setProfileValues({ ...profileValues, [f.id]: e.target.value })}
+                                                                className="w-full bg-surface border border-border p-3 rounded-xl text-xs text-text focus:border-accent outline-none transition min-h-[80px] disabled:opacity-50 text-text"
+                                                                placeholder={`Enter ${f.name}...`}
+                                                            />
+                                                        </div>
+                                                    );
+                                                }
+                                                return (
+                                                    <div key={f.id} className="space-y-1.5">
+                                                        <label className="block text-[10px] text-muted font-bold uppercase tracking-widest">{f.name}</label>
+                                                        <input 
+                                                            type="text"
+                                                            value={profileValues[f.id] || ''}
+                                                            disabled={!isEditable}
+                                                            onChange={e => setProfileValues({ ...profileValues, [f.id]: e.target.value })}
+                                                            className="w-full bg-surface border border-border p-3 rounded-xl text-xs text-text focus:border-accent outline-none transition disabled:opacity-50 text-text"
+                                                            placeholder={`Enter ${f.name}...`}
+                                                        />
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        {hasPerm('manage_user_fields') && (
+                                            <div className="flex justify-end pt-2">
+                                                <button 
+                                                    onClick={handleUpdateMemberFields}
+                                                    disabled={savingProfileValues}
+                                                    className="px-5 py-2 bg-accent hover:bg-accent/90 text-white rounded-xl font-black text-[9px] uppercase tracking-widest transition shadow-lg shadow-accent/20 disabled:opacity-50"
+                                                >
+                                                    {savingProfileValues ? 'Saving Fields...' : 'Save Custom Fields'}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 <div className="space-y-6">
                                     <div className="space-y-3">

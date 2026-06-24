@@ -65,6 +65,7 @@ class InviteController extends Controller
             'role_id' => 'nullable|integer|exists:roles,id',
             'group_ids' => 'nullable|array',
             'group_ids.*' => 'integer|exists:groups,id',
+            'field_values' => 'nullable|array',
         ]);
 
         $roleId = $request->input('role_id') ? (int) $request->input('role_id') : null;
@@ -88,6 +89,16 @@ class InviteController extends Controller
             }
         }
 
+        $fieldValues = $request->input('field_values', []);
+        if (! empty($fieldValues)) {
+            $validFieldsCount = \App\Models\FactionUserField::where('faction_id', $faction->id)
+                ->whereIn('id', array_keys($fieldValues))
+                ->count();
+            if ($validFieldsCount !== count($fieldValues)) {
+                return response()->json(['message' => 'One or more user fields are invalid.'], 422);
+            }
+        }
+
         $expiresAt = null;
         if ($request->duration !== 'never') {
             $expiresAt = match ($request->duration) {
@@ -108,6 +119,7 @@ class InviteController extends Controller
             'max_uses' => $request->max_uses == 0 ? null : $request->max_uses,
             'role_id' => $roleId,
             'created_by' => $request->user()->id,
+            'field_values' => $fieldValues,
         ]);
 
         if (! empty($groupIds)) {
@@ -189,6 +201,30 @@ class InviteController extends Controller
 
         $faction->users()->attach($user->id);
         $invite->increment('uses');
+
+        // Apply pre-filled custom user field values
+        if ($invite->field_values && is_array($invite->field_values)) {
+            foreach ($invite->field_values as $fieldId => $val) {
+                $field = \App\Models\FactionUserField::where('faction_id', $faction->id)->find($fieldId);
+                if ($field) {
+                    $coercedValue = $val;
+                    if ($field->type === 'checkbox') {
+                        $coercedValue = ($val === '1' || $val === 'true' || $val === true || $val === 'yes') ? '1' : '0';
+                    } else {
+                        $coercedValue = $val !== null ? (string) $val : null;
+                    }
+                    \App\Models\FactionUserFieldValue::updateOrCreate(
+                        [
+                            'user_id' => $user->id,
+                            'faction_user_field_id' => $field->id,
+                        ],
+                        [
+                            'value' => $coercedValue,
+                        ]
+                    );
+                }
+            }
+        }
 
         // Assign role attached to the invite, or fall back to default User role
         if ($invite->role_id) {

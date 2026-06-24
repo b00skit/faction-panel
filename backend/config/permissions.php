@@ -145,6 +145,11 @@ return [
                     'description' => 'Allows configuring the global quick search feature for the faction.',
                     'type' => 'MODIFY',
                 ],
+                'manage_user_fields' => [
+                    'name' => 'Manage User Fields',
+                    'description' => 'Allows managing faction-bound custom user fields.',
+                    'type' => 'MODIFY',
+                ],
             ],
         ],
         'records' => [

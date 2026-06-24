@@ -17,10 +17,12 @@ class FactionInvite extends Model
         'uses',
         'role_id',
         'created_by',
+        'field_values',
     ];
 
     protected $casts = [
         'expires_at' => 'datetime',
+        'field_values' => 'array',
     ];
 
     public function faction()

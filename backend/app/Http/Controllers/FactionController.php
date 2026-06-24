@@ -1079,9 +1079,16 @@ class FactionController extends Controller
         $this->audit('faction.members.index', "Viewed members list for faction '{$faction->name}'", $faction->id, $faction);
 
         $search = $request->query('search');
-        $query = $faction->users()->with(['roles' => function ($query) use ($faction) {
-            $query->where('faction_id', $faction->id);
-        }]);
+        $query = $faction->users()->with([
+            'roles' => function ($query) use ($faction) {
+                $query->where('faction_id', $faction->id);
+            },
+            'factionUserFieldValues' => function ($query) use ($faction) {
+                $query->whereHas('field', function($q) use ($faction) {
+                    $q->where('faction_id', $faction->id);
+                })->with('field');
+            }
+        ]);
 
         if ($search) {
             $query->where(function ($q) use ($search) {
@@ -1110,19 +1117,28 @@ class FactionController extends Controller
         $this->audit('faction.members.show', "Viewed member profile of '{$member->username}' in faction '{$faction->name}'", $faction->id, $member);
 
         $memberWithPivot = $faction->users()->where('users.id', $member->id)->firstOrFail();
-        $memberWithPivot->load(['roles' => function ($query) use ($faction) {
-            $query->where('faction_id', $faction->id);
-        }]);
+        $memberWithPivot->load([
+            'roles' => function ($query) use ($faction) {
+                $query->where('faction_id', $faction->id);
+            },
+            'factionUserFieldValues' => function ($query) use ($faction) {
+                $query->whereHas('field', function($q) use ($faction) {
+                    $q->where('faction_id', $faction->id);
+                })->with('field');
+            }
+        ]);
 
         $ownedRosters = $member->ownedRosters()->where('faction_id', $faction->id)->get();
         $ownedDatabases = $member->ownedDatabases()->where('faction_id', $faction->id)->get();
         $ownedStatistics = $member->ownedStatistics()->where('faction_id', $faction->id)->get();
+        $customFields = \App\Models\FactionUserField::where('faction_id', $faction->id)->orderBy('id')->get();
 
         return response()->json([
             'user' => $memberWithPivot,
             'owned_rosters' => $ownedRosters,
             'owned_databases' => $ownedDatabases,
             'owned_statistics' => $ownedStatistics,
+            'custom_fields' => $customFields,
         ]);
     }
 
