@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { 
-    Plus, Trash2, Edit3, Settings, Users, Shield, Award, Crown, Check, X, 
+    Plus, Minus, Trash2, Edit3, Settings, Users, Shield, Award, Crown, Check, X, 
     GitFork, Save, Eye, Edit, ListOrdered, Grid, Maximize2, Trash, Link2, Link2Off,
     MoreVertical, ChevronLeft, ChevronRight, GripVertical,
     Star, Briefcase, Heart, Target, Key
@@ -90,6 +90,150 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
     
     const [editMode, setEditMode] = useState(false);
     const confirm = useConfirm();
+
+    // Node creation positioning state
+    const [nodePosition, setNodePosition] = useState<'left' | 'right' | 'below'>('below');
+    const [activeAddMenuNodeId, setActiveAddMenuNodeId] = useState<number | null>(null);
+
+    // Pan & Zoom states
+    const [scale, setScale] = useState(1);
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+    const dragStart = useRef({ x: 0, y: 0 });
+    const containerRef = useRef<HTMLDivElement>(null);
+    const canvasRef = useRef<HTMLDivElement>(null);
+    const scaleRef = useRef(1);
+    const positionRef = useRef({ x: 0, y: 0 });
+
+    // Sync refs for event handlers to prevent stale closure issues
+    useEffect(() => {
+        scaleRef.current = scale;
+        positionRef.current = position;
+    }, [scale, position]);
+
+    const clampPosition = useCallback((x: number, y: number, targetScale: number) => {
+        if (!containerRef.current || !canvasRef.current) return { x, y };
+
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const canvasRect = canvasRef.current.getBoundingClientRect();
+        
+        const currentScale = scaleRef.current;
+        const unscaledW = currentScale > 0 ? canvasRect.width / currentScale : canvasRect.width;
+        const unscaledH = currentScale > 0 ? canvasRect.height / currentScale : canvasRect.height;
+        
+        const rectW = unscaledW * targetScale;
+        const rectH = unscaledH * targetScale;
+
+        const padding = 200;
+        const cW = containerRect.width;
+        const cH = containerRect.height;
+
+        const maxX = cW - padding;
+        const minX = padding - rectW;
+        const maxY = cH - padding;
+        const minY = padding - rectH;
+
+        return {
+            x: Math.max(minX, Math.min(maxX, x)),
+            y: Math.max(minY, Math.min(maxY, y))
+        };
+    }, []);
+
+    const centerCanvas = useCallback(() => {
+        if (!containerRef.current || !canvasRef.current) return;
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const canvasRect = canvasRef.current.getBoundingClientRect();
+        
+        const currentScale = scaleRef.current;
+        const unscaledW = currentScale > 0 ? canvasRect.width / currentScale : canvasRect.width;
+        
+        // Center horizontally, position 40px from top
+        const x = (containerRect.width - unscaledW) / 2;
+        const y = 40;
+        
+        setPosition({ x, y });
+        setScale(1);
+    }, []);
+
+    // Recenter canvas on tab change
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            centerCanvas();
+        }, 100);
+        return () => clearTimeout(timer);
+    }, [activeTabId, centerCanvas]);
+
+    // Handle global mouse dragging events
+    useEffect(() => {
+        if (!isDragging) return;
+
+        const handleGlobalMouseMove = (e: MouseEvent) => {
+            const newX = e.clientX - dragStart.current.x;
+            const newY = e.clientY - dragStart.current.y;
+            setPosition(clampPosition(newX, newY, scaleRef.current));
+        };
+
+        const handleGlobalMouseUp = () => {
+            setIsDragging(false);
+        };
+
+        window.addEventListener('mousemove', handleGlobalMouseMove);
+        window.addEventListener('mouseup', handleGlobalMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', handleGlobalMouseMove);
+            window.removeEventListener('mouseup', handleGlobalMouseUp);
+        };
+    }, [isDragging, clampPosition]);
+
+    // Handle mouse wheel zoom
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        const onWheel = (e: WheelEvent) => {
+            e.preventDefault();
+            const currentScale = scaleRef.current;
+            const currentPos = positionRef.current;
+
+            const zoomIntensity = 0.06;
+            const delta = e.deltaY < 0 ? 1 : -1;
+            const newScale = Math.max(0.2, Math.min(2.0, currentScale + delta * zoomIntensity));
+
+            const rect = container.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const canvasX = (mouseX - currentPos.x) / currentScale;
+            const canvasY = (mouseY - currentPos.y) / currentScale;
+
+            const newX = mouseX - canvasX * newScale;
+            const newY = mouseY - canvasY * newScale;
+
+            setScale(newScale);
+            setPosition(clampPosition(newX, newY, newScale));
+        };
+
+        container.addEventListener('wheel', onWheel, { passive: false });
+        return () => {
+            container.removeEventListener('wheel', onWheel);
+        };
+    }, [clampPosition]);
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if (e.button !== 0 && e.button !== 1) return; // Left or middle click
+
+        const target = e.target as HTMLElement;
+        if (target.closest('button') || target.closest('input') || target.closest('select') || target.closest('a')) {
+            return;
+        }
+
+        setIsDragging(true);
+        dragStart.current = {
+            x: e.clientX - positionRef.current.x,
+            y: e.clientY - positionRef.current.y
+        };
+    };
 
     // Inline editing states for slots
     const [editingSlotKey, setEditingSlotKey] = useState<{
@@ -263,12 +407,12 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                 roster_ids: tabRosterIds,
             });
             toast.success('Diagram created', { id: loadToast });
-            await fetchHierarchies();
-            setActiveTabId(res.data.id);
             setShowCreateTabModal(false);
             setTabName('');
             setTabColor('#2563eb');
             setTabRosterIds([]);
+            await fetchHierarchies();
+            setActiveTabId(res.data.id);
         } catch (err: any) {
             toast.error(err.response?.data?.message || 'Failed to create diagram', { id: loadToast });
         }
@@ -342,7 +486,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
     };
 
     // Node updates
-    const handleAddNode = async (parentId: number | null) => {
+    const handleAddNode = async (parentId: number | null, position: 'left' | 'right' | 'below' = 'below') => {
         if (!activeHierarchy) return;
 
         const loadToast = toast.loading('Adding card...');
@@ -351,6 +495,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                 parent_id: parentId,
                 title: 'New Card',
                 color: activeHierarchy.color,
+                position: position,
                 slots: [
                     {
                         id: uniqid('slot_'),
@@ -418,6 +563,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                 icon: nodeCardStyle === 'spotlight' ? (nodeIcon || 'users') : null,
                 slots: nodeRosterSyncEnabled ? [] : cleanedSlots,
                 roster_sync_config: syncConfig,
+                position: selectedNode.parent_id ? nodePosition : 'below',
             });
             toast.success('Card updated', { id: loadToast });
             setShowNodeEditModal(false);
@@ -435,6 +581,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
         setNodeCardStyle(node.card_style || 'standard');
         setNodeImageUrl(node.image_url || '');
         setNodeIcon(node.icon || 'users');
+        setNodePosition(node.position || 'below');
 
         const syncConfig = node.roster_sync_config || {};
         setNodeRosterSyncEnabled(!!syncConfig.enabled);
@@ -555,11 +702,14 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
             <div className="flex flex-col items-center select-none" key={node.id}>
                 {/* Node Box Card */}
                 <div 
-                    className="w-72 bg-card rounded-xl border border-border shadow-lg flex flex-col overflow-hidden transition-all duration-300 hover:shadow-2xl group relative"
-                    style={{ borderTop: `4px solid ${node.color || activeHierarchy?.color}` }}
+                    className="w-72 bg-card rounded-xl border border-border shadow-lg flex flex-col transition-all duration-300 hover:shadow-2xl group relative"
+                    style={{ 
+                        borderTop: `4px solid ${node.color || activeHierarchy?.color}`,
+                        zIndex: activeAddMenuNodeId === node.id ? 50 : 1
+                    }}
                 >
                     {/* Header bar / Title */}
-                    <div className="px-4 py-3 bg-surface/40 flex justify-between items-center border-b border-border">
+                    <div className="px-4 py-3 bg-surface/40 flex justify-between items-center border-b border-border rounded-t-xl">
                         <div className="text-[10px] font-black uppercase tracking-wider text-text truncate max-w-[170px]">
                             {node.title || 'Untitled Card'}
                         </div>
@@ -574,13 +724,56 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                 </button>
                                 {hasManagePerm && (
                                     <>
-                                        <button 
-                                            onClick={() => handleAddNode(node.id)}
-                                            className="p-1 hover:bg-surface text-muted hover:text-accent rounded transition-colors"
-                                            title="Add Child Card"
-                                        >
-                                            <Plus size={12} />
-                                        </button>
+                                        <div className="relative">
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (activeAddMenuNodeId === node.id) {
+                                                        setActiveAddMenuNodeId(null);
+                                                    } else {
+                                                        setActiveAddMenuNodeId(node.id);
+                                                    }
+                                                }}
+                                                className={`p-1 hover:bg-surface rounded transition-colors ${activeAddMenuNodeId === node.id ? 'text-accent bg-surface' : 'text-muted hover:text-accent'}`}
+                                                title="Add Child Card"
+                                            >
+                                                <Plus size={12} />
+                                            </button>
+                                            {activeAddMenuNodeId === node.id && (
+                                                <div 
+                                                    className="absolute right-0 mt-1 bg-card border border-border rounded-lg shadow-2xl p-1 z-[999] min-w-[120px]"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <button 
+                                                        onClick={() => {
+                                                            setActiveAddMenuNodeId(null);
+                                                            handleAddNode(node.id, 'left');
+                                                        }}
+                                                        className="w-full text-left px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-muted hover:text-text hover:bg-surface rounded transition-colors"
+                                                    >
+                                                        Add Left Card
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setActiveAddMenuNodeId(null);
+                                                            handleAddNode(node.id, 'below');
+                                                        }}
+                                                        className="w-full text-left px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-muted hover:text-text hover:bg-surface rounded transition-colors"
+                                                    >
+                                                        Add Below Card
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setActiveAddMenuNodeId(null);
+                                                            handleAddNode(node.id, 'right');
+                                                        }}
+                                                        className="w-full text-left px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-muted hover:text-text hover:bg-surface rounded transition-colors"
+                                                    >
+                                                        Add Right Card
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                         <button 
                                             onClick={() => handleDeleteNode(node.id)}
                                             className="p-1 hover:bg-danger/10 text-muted hover:text-danger rounded transition-colors"
@@ -634,7 +827,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                                         onClick={(e) => {
                                                             if (isEditable && !slots[0]?.roster_content_id) {
                                                                 e.stopPropagation();
-                                                                setEditingSlotKey({ nodeId: node.id, slotId: slots[0].id, field: 'label' });
+                                                                 setEditingSlotKey({ nodeId: node.id, slotId: slots[0].id, field: 'label' });
                                                                 setInlineEditValue(slots[0].label || '');
                                                             }
                                                         }}
@@ -1022,25 +1215,92 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                     </div>
                 </div>
 
-                {/* Draw connecting vertical line to children */}
-                {children.length > 0 && (
-                    <div className="w-px h-6 bg-border" />
-                )}
+                {/* Filter and group children */}
+                {(() => {
+                    const leftChildren = children.filter((c: any) => c.position === 'left');
+                    const rightChildren = children.filter((c: any) => c.position === 'right');
+                    const belowChildren = children.filter((c: any) => c.position === 'below' || !c.position);
 
-                {/* Draw horizontal lines and recurse children */}
-                {children.length > 0 && (
-                    <div className="flex gap-8 relative pt-6">
-                        {/* Horizontal connector line drawn with borders on children */}
-                        {children.map((child: any) => (
-                            <div 
-                                key={child.id} 
-                                className="relative pt-6 flex flex-col items-center before:content-[''] before:absolute before:top-0 before:left-1/2 before:-translate-x-1/2 before:w-px before:h-6 before:bg-border after:content-[''] after:absolute after:top-0 after:left-0 after:right-0 after:h-px after:bg-border first:after:left-1/2 last:after:right-1/2 only:after:hidden"
-                            >
-                                {renderNodeTree(child)}
-                            </div>
-                        ))}
-                    </div>
-                )}
+                    const maxRows = Math.max(leftChildren.length, rightChildren.length);
+                    const rows = [];
+                    for (let i = 0; i < maxRows; i++) {
+                        rows.push({
+                            left: leftChildren[i] || null,
+                            right: rightChildren[i] || null
+                        });
+                    }
+
+                    const hasChildren = children.length > 0;
+                    const hasSides = maxRows > 0;
+                    const hasBelow = belowChildren.length > 0;
+
+                    return (
+                        <>
+                            {/* Draw connecting vertical line to children */}
+                            {hasChildren && (
+                                <div className="w-px h-6 bg-border flex-none" />
+                            )}
+
+                            {/* Render side-branching left/right rows */}
+                            {hasSides && (
+                                <div className="flex flex-col items-center w-full relative flex-none">
+                                    {rows.map((row, index) => {
+                                        const isLastRow = index === rows.length - 1;
+                                        return (
+                                            <div key={index} className="flex items-stretch justify-center relative w-full">
+                                                {/* Left Column */}
+                                                <div className="flex-1 min-w-[320px] flex items-start justify-end pr-8 relative">
+                                                    {row.left && (
+                                                        <>
+                                                            <div className="absolute right-0 top-[36px] w-8 h-px bg-border" />
+                                                            {renderNodeTree(row.left)}
+                                                        </>
+                                                    )}
+                                                </div>
+
+                                                {/* Center Column (Trunk) */}
+                                                <div className={`w-px flex-none relative ${(!hasBelow && isLastRow) ? 'bg-transparent' : 'bg-border h-full'}`}>
+                                                    {(!hasBelow && isLastRow) ? (
+                                                        <div className="absolute top-0 left-0 w-px h-[36px] bg-border" />
+                                                    ) : null}
+                                                </div>
+
+                                                {/* Right Column */}
+                                                <div className="flex-1 min-w-[320px] flex items-start justify-start pl-8 relative">
+                                                    {row.right && (
+                                                        <>
+                                                            <div className="absolute left-0 top-[36px] w-8 h-px bg-border" />
+                                                            {renderNodeTree(row.right)}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Draw vertical line from rows to below children */}
+                            {hasSides && hasBelow && (
+                                <div className="w-px h-6 bg-border flex-none" />
+                            )}
+
+                            {/* Render below children horizontally */}
+                            {hasBelow && (
+                                <div className="flex gap-8 relative flex-none">
+                                    {belowChildren.map((child: any) => (
+                                        <div 
+                                            key={child.id} 
+                                            className="relative pt-6 flex flex-col items-center before:content-[''] before:absolute before:top-0 before:left-1/2 before:-translate-x-1/2 before:w-px before:h-6 before:bg-border after:content-[''] after:absolute after:top-0 after:left-0 after:right-0 after:h-px after:bg-border first:after:left-1/2 last:after:right-1/2 only:after:hidden"
+                                        >
+                                            {renderNodeTree(child)}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    );
+                })()}
             </div>
         );
     };
@@ -1050,6 +1310,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
             className="flex flex-col h-full relative" 
             onClick={() => {
                 setActiveMenuId(null);
+                setActiveAddMenuNodeId(null);
                 handleCancelInlineEdit();
             }}
         >
@@ -1085,30 +1346,86 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                 </div>
 
                 {/* Tree Workspace canvas area */}
-                <div className="flex-1 overflow-auto border border-border rounded-2xl bg-card/40 relative flex items-start justify-center p-12 min-h-[400px]">
+                <div 
+                    ref={containerRef}
+                    onMouseDown={handleMouseDown}
+                    className={`flex-1 overflow-hidden border border-border rounded-2xl bg-card/40 relative min-h-[400px] ${
+                        isDragging ? 'cursor-grabbing' : 'cursor-grab'
+                    }`}
+                >
                     {activeHierarchy ? (
-                        <div className="min-w-max flex flex-col items-center">
-                            {activeHierarchy.nodes_tree && activeHierarchy.nodes_tree.length > 0 ? (
-                                activeHierarchy.nodes_tree.map((node: any) => renderNodeTree(node))
-                            ) : (
-                                <div className="text-center p-20 space-y-4">
-                                    <GitFork className="text-muted/30 mx-auto" size={48} />
-                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted opacity-50">
-                                        No diagram cards defined.
-                                    </p>
-                                    {editMode && activeHierarchy.user_permissions?.manage_nodes && (
-                                        <button
-                                            onClick={() => handleAddNode(null)}
-                                            className="px-6 py-2.5 bg-accent text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition"
-                                        >
-                                            Create Main Card
-                                        </button>
-                                    )}
-                                </div>
-                            )}
-                        </div>
+                        <>
+                            <div 
+                                ref={canvasRef}
+                                style={{
+                                    transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                                    transformOrigin: '0 0',
+                                    transition: isDragging ? 'none' : 'transform 0.15s ease-out',
+                                }}
+                                className="absolute top-0 left-0 min-w-max flex flex-col items-center p-12 select-none"
+                            >
+                                {activeHierarchy.nodes_tree && activeHierarchy.nodes_tree.length > 0 ? (
+                                    activeHierarchy.nodes_tree.map((node: any) => renderNodeTree(node))
+                                ) : (
+                                    <div className="text-center p-20 space-y-4">
+                                        <GitFork className="text-muted/30 mx-auto" size={48} />
+                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted opacity-50">
+                                            No diagram cards defined.
+                                        </p>
+                                        {editMode && activeHierarchy.user_permissions?.manage_nodes && (
+                                            <button
+                                                onClick={() => handleAddNode(null)}
+                                                className="px-6 py-2.5 bg-accent text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition"
+                                            >
+                                                Create Main Card
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Floating control panel */}
+                            <div className="absolute bottom-4 right-4 flex items-center gap-1.5 bg-card/90 border border-border p-1.5 rounded-xl shadow-lg z-30 select-none">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const newScale = Math.max(0.2, scale - 0.1);
+                                        setScale(newScale);
+                                        setPosition(prev => clampPosition(prev.x, prev.y, newScale));
+                                    }}
+                                    className="p-2 hover:bg-surface text-text rounded-lg transition-colors cursor-pointer"
+                                    title="Zoom Out"
+                                >
+                                    <Minus size={14} />
+                                </button>
+                                <span className="text-[10px] font-black w-12 text-center uppercase tracking-wider text-muted">
+                                    {Math.round(scale * 100)}%
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const newScale = Math.min(2.0, scale + 0.1);
+                                        setScale(newScale);
+                                        setPosition(prev => clampPosition(prev.x, prev.y, newScale));
+                                    }}
+                                    className="p-2 hover:bg-surface text-text rounded-lg transition-colors cursor-pointer"
+                                    title="Zoom In"
+                                >
+                                    <Plus size={14} />
+                                </button>
+                                <div className="w-px h-4 bg-border mx-1" />
+                                <button
+                                    type="button"
+                                    onClick={() => centerCanvas()}
+                                    className="p-2 hover:bg-surface text-text rounded-lg transition-colors cursor-pointer"
+                                    title="Recenter view"
+                                >
+                                    <Maximize2 size={14} />
+                                </button>
+                            </div>
+                        </>
                     ) : (
-                        <div className="text-center p-20 space-y-4">
+                        <div className="text-center p-20 space-y-4 absolute inset-0 flex flex-col justify-center items-center">
                             <GitFork className="text-muted/20 mx-auto" size={56} />
                             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted opacity-40">
                                 Create a diagram to begin charting structures.
@@ -1244,7 +1561,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                 setTabRosterIds([]);
                                 setShowCreateTabModal(true);
                             }}
-                            className="p-2 text-muted hover:text-accent transition-colors"
+                            className="p-2 text-muted hover:text-accent transition-colors cursor-pointer"
                             title="Create New Diagram"
                         >
                             <Plus size={16} />
@@ -1506,6 +1823,25 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                                     </div>
                                 </div>
                             </div>
+
+                            {selectedNode.parent_id && (
+                                <div className="pt-4 border-t border-border/40">
+                                    <label className="text-[9px] font-black text-muted uppercase tracking-[0.2em] block mb-2 px-1">Card Position (Relative to Parent)</label>
+                                    <select
+                                        value={nodePosition}
+                                        onChange={e => setNodePosition(e.target.value as any)}
+                                        className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-[10px] font-bold uppercase tracking-widest outline-none focus:border-accent transition-colors"
+                                    >
+                                        <option value="left">Left</option>
+                                        <option value="below">Below</option>
+                                        <option value="right">Right</option>
+                                    </select>
+                                    <p className="text-[9.5px] text-muted leading-relaxed px-1 mt-1.5 text-muted/80">
+                                        LEFT or RIGHT positions the card directly to the side of the parent's center trunk line.
+                                        BELOW centers the card at the bottom of the trunk line, below any side-positioned cards.
+                                    </p>
+                                </div>
+                            )}
 
                             {/* Card Layout Style Section */}
                             <div className="space-y-3 pt-4 border-t border-border/40">
