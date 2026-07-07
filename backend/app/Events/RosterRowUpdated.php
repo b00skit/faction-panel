@@ -5,7 +5,7 @@ namespace App\Events;
 use App\Models\RosterContent;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -34,7 +34,7 @@ class RosterRowUpdated implements ShouldBroadcast
         $roster = $this->content->section->roster;
 
         return [
-            new PrivateChannel("faction.{$roster->faction_id}.roster.{$roster->id}"),
+            new PresenceChannel("faction.{$roster->faction_id}.roster.{$roster->id}"),
         ];
     }
 

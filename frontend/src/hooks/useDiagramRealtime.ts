@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import echo from '../echo';
 
 interface UseDiagramRealtimeProps {
@@ -13,6 +13,12 @@ export const useDiagramRealtime = ({
     onDiagramUpdated,
 }: UseDiagramRealtimeProps) => {
     const rosterIdsStr = JSON.stringify(rosterIds);
+    const onDiagramUpdatedRef = useRef(onDiagramUpdated);
+
+    // Keep callback ref up to date on every render
+    useEffect(() => {
+        onDiagramUpdatedRef.current = onDiagramUpdated;
+    });
 
     useEffect(() => {
         if (!factionId) return;
@@ -24,14 +30,14 @@ export const useDiagramRealtime = ({
         // Listen to diagram updates
         echo.private(diagramsChannel)
             .listen('.hierarchy.updated', () => {
-                onDiagramUpdated();
+                onDiagramUpdatedRef.current();
             });
 
         // Listen to global roster updates
-        echo.private(updatesChannel)
+        echo.join(updatesChannel)
             .listen('.roster.updated', (e: { roster_id: number }) => {
                 if (ids.length > 0 && ids.includes(e.roster_id)) {
-                    onDiagramUpdated();
+                    onDiagramUpdatedRef.current();
                 }
             });
 
@@ -39,7 +45,7 @@ export const useDiagramRealtime = ({
             echo.leave(diagramsChannel);
             echo.leave(updatesChannel);
         };
-    }, [factionId, rosterIdsStr, onDiagramUpdated]);
+    }, [factionId, rosterIdsStr]);
 
     useEffect(() => {
         const ids = JSON.parse(rosterIdsStr) as number[];
@@ -53,16 +59,16 @@ export const useDiagramRealtime = ({
 
             echo.join(rosterChannel)
                 .listen('.roster.row_updated', () => {
-                    onDiagramUpdated();
+                    onDiagramUpdatedRef.current();
                 })
                 .listen('.roster.row_added', () => {
-                    onDiagramUpdated();
+                    onDiagramUpdatedRef.current();
                 })
                 .listen('.roster.row_deleted', () => {
-                    onDiagramUpdated();
+                    onDiagramUpdatedRef.current();
                 })
                 .listen('.roster.updated', () => {
-                    onDiagramUpdated();
+                    onDiagramUpdatedRef.current();
                 });
         });
 
@@ -71,5 +77,5 @@ export const useDiagramRealtime = ({
                 echo.leave(channel);
             });
         };
-    }, [factionId, rosterIdsStr, onDiagramUpdated]);
+    }, [factionId, rosterIdsStr]);
 };
