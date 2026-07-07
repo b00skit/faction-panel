@@ -1550,24 +1550,23 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
                             </Reorder.Item>
                         );
                     })}
+                    {canCreateHierarchy && (
+                        <div className="relative flex items-center gap-1 ml-2 shrink-0">
+                            <button 
+                                onClick={() => {
+                                    setTabName('');
+                                    setTabColor('#2563eb');
+                                    setTabRosterIds([]);
+                                    setShowCreateTabModal(true);
+                                }}
+                                className="p-2 text-muted hover:text-accent transition-colors cursor-pointer"
+                                title="Create New Diagram"
+                            >
+                                <Plus size={16} />
+                            </button>
+                        </div>
+                    )}
                 </Reorder.Group>
-
-                {canCreateHierarchy && (
-                    <div className="relative flex items-center gap-1 ml-2 shrink-0">
-                        <button 
-                            onClick={() => {
-                                setTabName('');
-                                setTabColor('#2563eb');
-                                setTabRosterIds([]);
-                                setShowCreateTabModal(true);
-                            }}
-                            className="p-2 text-muted hover:text-accent transition-colors cursor-pointer"
-                            title="Create New Diagram"
-                        >
-                            <Plus size={16} />
-                        </button>
-                    </div>
-                )}
 
                 {hierarchies.length > 5 && (
                     <div className="flex border-l border-border pl-2 gap-1 h-full items-center">
