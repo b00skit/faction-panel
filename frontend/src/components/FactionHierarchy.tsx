@@ -20,6 +20,7 @@ const ICON_MAP: Record<string, React.ComponentType<any>> = {
 };
 import api from '../api';
 import toast from 'react-hot-toast';
+import Loading from './Loading';
 import { HierarchyPermissionsModal } from './HierarchyPermissionsModal';
 import { useConfirm } from './ConfirmationProvider';
 import { useDiagramRealtime } from '../hooks/useDiagramRealtime';
@@ -538,12 +539,7 @@ export default function FactionHierarchy({ user, shortname, permissions, isDark,
     const uniqid = (prefix: string) => prefix + Math.random().toString(36).substring(2, 9);
 
     if (loading && hierarchies.length === 0) {
-        return (
-            <div className="flex-1 flex flex-col items-center justify-center p-12 bg-bg text-text">
-                <div className="w-10 h-10 border-2 border-accent border-t-transparent rounded-full animate-spin mb-4" />
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Loading Diagrams...</p>
-            </div>
-        );
+        return <Loading message="Loading Diagrams..." />;
     }
 
     // Node Tree component rendering recursively

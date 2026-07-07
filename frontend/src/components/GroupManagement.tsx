@@ -78,10 +78,16 @@ const GroupManagement: React.FC<GroupManagementProps> = ({ shortname, user, perm
 
     useEffect(() => {
         fetchGroups();
-        if (hasPerm('manage_group_members') || groups.some(g => g.leaders?.some(l => l.id === user.id))) {
-            fetchUsers();
-        }
     }, [shortname]);
+
+    useEffect(() => {
+        if (showMemberModal) {
+            const isLeaderOfThis = showMemberModal.leaders?.some((l: any) => l.id === user.id) || false;
+            if (isGlobalManager || isLeaderOfThis) {
+                fetchUsers();
+            }
+        }
+    }, [showMemberModal, isGlobalManager, user.id]);
 
     useEffect(() => {
         if (groups.length > 0) {
@@ -197,6 +203,9 @@ const GroupManagement: React.FC<GroupManagementProps> = ({ shortname, user, perm
         u.username.toLowerCase().includes(searchQuery.toLowerCase()) &&
         !showMemberModal?.members?.some(m => m.id === u.id)
     );
+
+    const isLeaderOfThis = showMemberModal?.leaders?.some((l: any) => l.id === user.id) || false;
+    const canManageThis = isGlobalManager || isLeaderOfThis;
 
     if (loading) return <Loading message="Loading groups..." fullScreen={false} />;
 
@@ -360,42 +369,48 @@ const GroupManagement: React.FC<GroupManagementProps> = ({ shortname, user, perm
 
                         <div className="flex-1 overflow-hidden flex">
                             {/* Current Members */}
-                            <div className="w-1/2 border-r border-border flex flex-col">
+                            <div className={`${canManageThis ? 'w-1/2 border-r border-border' : 'w-full'} flex flex-col`}>
                                 <div className="p-4 bg-surface/30 text-[9px] font-black uppercase tracking-[0.2em] text-muted border-b border-border">Current Members ({showMemberModal.members?.length || 0})</div>
                                 <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                                    {showMemberModal.members?.map(member => (
-                                        <div key={member.id} className="flex justify-between items-center p-3 bg-surface border border-border rounded-xl group/member">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent text-xs font-black">
-                                                    {member.username[0].toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <div className="text-xs font-bold uppercase">{member.username}</div>
-                                                    <div className="text-[8px] text-muted font-bold uppercase tracking-widest">
-                                                        {member.pivot.is_leader ? <span className="text-accent flex items-center gap-1"><Shield size={8} /> Group Leader</span> : 'Member'}
+                                    {showMemberModal.members?.map(member => {
+                                        const isMemberLeader = member.pivot.is_leader;
+                                        const canRemoveThisMember = canManageThis && (isGlobalManager || !isMemberLeader);
+                                        return (
+                                            <div key={member.id} className="flex justify-between items-center p-3 bg-surface border border-border rounded-xl group/member">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent text-xs font-black">
+                                                        {member.username[0].toUpperCase()}
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-xs font-bold uppercase">{member.username}</div>
+                                                        <div className="text-[8px] text-muted font-bold uppercase tracking-widest">
+                                                            {member.pivot.is_leader ? <span className="text-accent flex items-center gap-1"><Shield size={8} /> Group Leader</span> : 'Member'}
+                                                        </div>
                                                     </div>
                                                 </div>
+                                                <div className="flex items-center gap-1 opacity-0 group-hover/member:opacity-100 transition-opacity">
+                                                    {canManageThis && isGlobalManager && (
+                                                        <button 
+                                                            onClick={() => handleToggleLeader(showMemberModal.id, member.id)}
+                                                            className={`p-1.5 rounded transition-colors ${member.pivot.is_leader ? 'bg-accent/10 text-accent' : 'hover:bg-surface text-muted'}`}
+                                                            title={member.pivot.is_leader ? 'Remove Leader' : 'Promote to Leader'}
+                                                        >
+                                                            <Shield size={14} />
+                                                        </button>
+                                                    )}
+                                                    {canRemoveThisMember && (
+                                                        <button 
+                                                            onClick={() => handleRemoveMember(showMemberModal.id, member.id)}
+                                                            className="p-1.5 hover:bg-danger/10 text-muted hover:text-danger rounded transition-colors"
+                                                            title="Remove from group"
+                                                        >
+                                                            <UserMinus size={14} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-1 opacity-0 group-hover/member:opacity-100 transition-opacity">
-                                                {isGlobalManager && (
-                                                    <button 
-                                                        onClick={() => handleToggleLeader(showMemberModal.id, member.id)}
-                                                        className={`p-1.5 rounded transition-colors ${member.pivot.is_leader ? 'bg-accent/10 text-accent' : 'hover:bg-surface text-muted'}`}
-                                                        title={member.pivot.is_leader ? 'Remove Leader' : 'Promote to Leader'}
-                                                    >
-                                                        <Shield size={14} />
-                                                    </button>
-                                                )}
-                                                <button 
-                                                    onClick={() => handleRemoveMember(showMemberModal.id, member.id)}
-                                                    className="p-1.5 hover:bg-danger/10 text-muted hover:text-danger rounded transition-colors"
-                                                    title="Remove from group"
-                                                >
-                                                    <UserMinus size={14} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                     {showMemberModal.members?.length === 0 && (
                                         <div className="py-10 text-center text-[10px] text-muted uppercase tracking-widest font-bold opacity-40">No members in this group</div>
                                     )}
@@ -403,42 +418,44 @@ const GroupManagement: React.FC<GroupManagementProps> = ({ shortname, user, perm
                             </div>
 
                             {/* Add Members */}
-                            <div className="w-1/2 flex flex-col bg-surface/10">
-                                <div className="p-4 bg-surface/30 border-b border-border">
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} />
-                                        <input 
-                                            placeholder="SEARCH FACTION MEMBERS..."
-                                            value={searchQuery}
-                                            onChange={e => setSearchQuery(e.target.value)}
-                                            className="w-full bg-surface border border-border py-2 pl-9 pr-4 rounded-lg text-[10px] font-bold uppercase tracking-widest focus:border-accent outline-none transition"
-                                        />
+                            {canManageThis && (
+                                <div className="w-1/2 flex flex-col bg-surface/10">
+                                    <div className="p-4 bg-surface/30 border-b border-border">
+                                        <div className="relative">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} />
+                                            <input 
+                                                placeholder="SEARCH FACTION MEMBERS..."
+                                                value={searchQuery}
+                                                onChange={e => setSearchQuery(e.target.value)}
+                                                className="w-full bg-surface border border-border py-2 pl-9 pr-4 rounded-lg text-[10px] font-bold uppercase tracking-widest focus:border-accent outline-none transition"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                                        {filteredUsers.map(u => (
+                                            <div key={u.id} className="flex justify-between items-center p-3 bg-card border border-border rounded-xl hover:border-accent transition-colors">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-muted text-xs font-black uppercase">
+                                                        {u.username[0]}
+                                                    </div>
+                                                    <div className="text-xs font-bold uppercase">{u.username}</div>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <button 
+                                                        onClick={() => handleAddMember(showMemberModal.id, u.id)}
+                                                        className="p-2 bg-surface hover:bg-accent hover:text-white rounded-lg transition-all text-muted"
+                                                    >
+                                                        <UserPlus size={14} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {filteredUsers.length === 0 && (
+                                            <div className="py-10 text-center text-[10px] text-muted uppercase tracking-widest font-bold opacity-40">No matching members found</div>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                                    {filteredUsers.map(u => (
-                                        <div key={u.id} className="flex justify-between items-center p-3 bg-card border border-border rounded-xl hover:border-accent transition-colors">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-muted text-xs font-black uppercase">
-                                                    {u.username[0]}
-                                                </div>
-                                                <div className="text-xs font-bold uppercase">{u.username}</div>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <button 
-                                                    onClick={() => handleAddMember(showMemberModal.id, u.id)}
-                                                    className="p-2 bg-surface hover:bg-accent hover:text-white rounded-lg transition-all text-muted"
-                                                >
-                                                    <UserPlus size={14} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {filteredUsers.length === 0 && (
-                                        <div className="py-10 text-center text-[10px] text-muted uppercase tracking-widest font-bold opacity-40">No matching members found</div>
-                                    )}
-                                </div>
-                            </div>
+                            )}
                         </div>
                     </div>
                 </div>
