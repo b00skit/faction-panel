@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import echo from '../echo';
 import { RosterContent } from '../types';
 
@@ -29,6 +29,21 @@ export const useRosterRealtime = ({
 }: UseRosterRealtimeProps) => {
     const [presenceUsers, setPresenceUsers] = useState<PresenceUser[]>([]);
 
+    const onRowUpdatedRef = useRef(onRowUpdated);
+    const onRowAddedRef = useRef(onRowAdded);
+    const onRowDeletedRef = useRef(onRowDeleted);
+    const onRowsReorderedRef = useRef(onRowsReordered);
+    const onRosterUpdatedRef = useRef(onRosterUpdated);
+
+    // Keep callback refs up to date on every render without triggering effects
+    useEffect(() => {
+        onRowUpdatedRef.current = onRowUpdated;
+        onRowAddedRef.current = onRowAdded;
+        onRowDeletedRef.current = onRowDeleted;
+        onRowsReorderedRef.current = onRowsReordered;
+        onRosterUpdatedRef.current = onRosterUpdated;
+    });
+
     useEffect(() => {
         if (!factionId || !rosterId) return;
 
@@ -47,26 +62,26 @@ export const useRosterRealtime = ({
                 setPresenceUsers((prev) => prev.filter((u) => u.id !== user.id));
             })
             .listen('.roster.row_updated', (e: RosterContent) => {
-                onRowUpdated?.(e);
+                onRowUpdatedRef.current?.(e);
             })
             .listen('.roster.row_added', (e: RosterContent) => {
-                onRowAdded?.(e);
+                onRowAddedRef.current?.(e);
             })
             .listen('.roster.row_deleted', (e: { id: number }) => {
-                onRowDeleted?.(e.id);
+                onRowDeletedRef.current?.(e.id);
             })
             .listen('.roster.rows_reordered', (e: { section_id: number; content_ids: number[] }) => {
-                onRowsReordered?.(e.section_id, e.content_ids);
+                onRowsReorderedRef.current?.(e.section_id, e.content_ids);
             })
             .listen('.roster.updated', () => {
-                onRosterUpdated?.();
+                onRosterUpdatedRef.current?.();
             });
 
         // Listen for global faction updates that might affect rosters
         echo.join(updatesChannel)
             .listen('.roster.updated', (e: { roster_id: number }) => {
                 if (e.roster_id === rosterId) {
-                    onRosterUpdated?.();
+                    onRosterUpdatedRef.current?.();
                 }
             });
 
@@ -74,7 +89,7 @@ export const useRosterRealtime = ({
             echo.leave(rosterChannel);
             echo.leave(updatesChannel);
         };
-    }, [factionId, rosterId, onRowUpdated, onRowAdded, onRowDeleted, onRowsReordered, onRosterUpdated]);
+    }, [factionId, rosterId]);
 
     return { presenceUsers };
 };

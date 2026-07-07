@@ -49,6 +49,7 @@ class HierarchyNodeController extends Controller
             'roster_sync_config.label_bold' => 'nullable|boolean',
             'roster_sync_config.value_color' => ['nullable', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'roster_sync_config.value_bold' => 'nullable|boolean',
+            'position' => 'sometimes|string|in:left,right,below',
         ]);
 
         $maxOrder = $hierarchy->nodes()->where('parent_id', $validated['parent_id'] ?? null)->max('order') ?? -1;
@@ -63,6 +64,7 @@ class HierarchyNodeController extends Controller
             'slots' => $validated['slots'] ?? [],
             'roster_sync_config' => $validated['roster_sync_config'] ?? null,
             'order' => $maxOrder + 1,
+            'position' => $validated['position'] ?? 'below',
         ]);
 
         $this->audit('hierarchy_node.create', "Created node '{$node->title}' in hierarchy '{$hierarchy->name}'", $hierarchy->faction_id, $node, null, $node->getAttributes());
@@ -114,6 +116,7 @@ class HierarchyNodeController extends Controller
             'roster_sync_config.value_color' => ['nullable', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'roster_sync_config.value_bold' => 'nullable|boolean',
             'order' => 'sometimes|integer',
+            'position' => 'sometimes|string|in:left,right,below',
         ]);
 
         // If trying to change structure (parent_id, order, or modifying slots configuration) but only has edit_nodes, block it.

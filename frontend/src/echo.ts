@@ -27,7 +27,9 @@ const echo = new Echo({
     authEndpoint: (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000') + '/broadcasting/auth',
     auth: {
         headers: {
-            Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+            get Authorization() {
+                return `Bearer ${localStorage.getItem('access_token')}`;
+            },
             'X-API-Auth-Key': import.meta.env.VITE_API_AUTH_KEY,
         },
     },

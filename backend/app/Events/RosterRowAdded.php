@@ -5,7 +5,7 @@ namespace App\Events;
 use App\Models\RosterContent;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -34,7 +34,7 @@ class RosterRowAdded implements ShouldBroadcast
         $roster = $this->content->section->roster;
 
         return [
-            new PrivateChannel("faction.{$roster->faction_id}.roster.{$roster->id}"),
+            new PresenceChannel("faction.{$roster->faction_id}.roster.{$roster->id}"),
         ];
     }
 
@@ -62,6 +62,10 @@ class RosterRowAdded implements ShouldBroadcast
             'editing_by' => $this->content->editing_by,
             'editing_at' => $this->content->editing_at?->toIso8601String(),
             'editing_col' => $this->content->editing_col,
+            'editor' => $this->content->editor ? [
+                'id' => $this->content->editor->id,
+                'username' => $this->content->editor->username,
+            ] : null,
             'updated_at' => $this->content->updated_at?->toIso8601String(),
         ];
     }

@@ -855,6 +855,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
     if (!canEditAny) return;
 
     const isDifferentRow = editingRowId !== row.id;
+    const isDifferentCol = editingColId !== colId;
 
     // If another row is being edited, save it first
     if (isDifferentRow && editingRowId) {
@@ -869,13 +870,15 @@ export const RosterTable: React.FC<RosterTableProps> = ({
         api.post(`/contents/${rowIdToSave}/unlock`).catch(() => {});
     }
 
-    // Only reset data and lock if we are switching to a NEW row
+    // Only reset data if we are switching to a NEW row
     if (isDifferentRow) {
         setEditData(row.content || {});
         setRowColor(row.color || null);
         setLastUpdatedAt(row.updated_at || null);
-        
-        // Passive locking - only once per row session
+    }
+
+    // Lock the cell (either if row changed or col changed on the same row)
+    if (isDifferentRow || isDifferentCol) {
         api.post(`/contents/${row.id}/lock`, { col_id: colId }).catch(() => {});
     }
 
@@ -987,7 +990,76 @@ export const RosterTable: React.FC<RosterTableProps> = ({
         api.post(`/contents/${id}/unlock`).catch(() => {});
     }
   };
-  
+
+  const editingRowIdRef = useRef<number | null>(null);
+  useEffect(() => {
+      editingRowIdRef.current = editingRowId;
+  }, [editingRowId]);
+
+  useEffect(() => {
+      return () => {
+          if (editingRowIdRef.current) {
+              api.post(`/contents/${editingRowIdRef.current}/unlock`).catch(() => {});
+          }
+      };
+  }, []);
+
+  // Save on click outside the active row
+  useEffect(() => {
+    if (!editingRowId) return;
+
+    const handleGlobalClick = (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (
+            target.closest('.color-picker-window') ||
+            target.closest('.tag-menu-window') ||
+            target.closest('.tag-pencil-button') ||
+            target.closest('.modal-content')
+        ) {
+            return;
+        }
+
+        const tr = target.closest('.rt-tr') as HTMLTableRowElement;
+        if (tr) {
+            const idxAttr = tr.getAttribute('data-row-index');
+            if (idxAttr !== null) {
+                const rowAtIdx = contents[parseInt(idxAttr)];
+                if (rowAtIdx && rowAtIdx.id === editingRowId) {
+                    return; // Clicked inside the active row
+                }
+            }
+        }
+
+        handleSaveEdit(editingRowId);
+    };
+
+    // Delay adding the listener slightly to avoid triggering it on the initial click-to-edit
+    const timer = setTimeout(() => {
+        window.addEventListener('click', handleGlobalClick);
+    }, 50);
+
+    return () => {
+        clearTimeout(timer);
+        window.removeEventListener('click', handleGlobalClick);
+    };
+  }, [editingRowId, contents, handleSaveEdit]);
+
+  // Cancel on Escape key
+  useEffect(() => {
+    if (!editingRowId) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+            handleCancelEdit();
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [editingRowId]);
+
   // REMOVED handleRowBlur auto-save as it causes race conditions during same-row navigation
 
   const updateField = (colId: string, value: any) => {
@@ -1160,7 +1232,7 @@ export const RosterTable: React.FC<RosterTableProps> = ({
 
   const inlineCheckboxes = localStorage.getItem('roster-inline-checkboxes') === 'true';
 
-  const renderCell = (row: RosterContent, col: RosterColumn) => {
+  const renderCellBody = (row: RosterContent, col: RosterColumn) => {
 
     const isEditing = editingRowId === row.id;
     const isSaving = savingRows.has(row.id);
@@ -1325,31 +1397,6 @@ export const RosterTable: React.FC<RosterTableProps> = ({
             )}
         </div>
     ) : null;
-
-    if (isSaving && col.id === savingRows.get(row.id)) {
-        return (
-            <div className="flex items-center justify-center h-full w-full rt-cell-content">
-                <div className="px-2 py-0.5 bg-accent/10 border border-accent/20 rounded animate-pulse flex items-center gap-1.5">
-                    <div className="w-1 h-1 rounded-full bg-accent animate-bounce" />
-                    <span className="text-[7px] font-black text-accent uppercase tracking-widest">Saving</span>
-                </div>
-            </div>
-        );
-    }
-
-    if (isLocked && col.id === (row.editing_col || activeCols[0].id)) {
-        return (
-            <div className="flex items-center justify-center h-full w-full rt-cell-content">
-                <div className="px-2 py-0.5 bg-danger/10 border border-danger/20 rounded flex items-center gap-1.5 group/lock relative">
-                    <div className="w-1 h-1 rounded-full bg-danger" />
-                    <span className="text-[7px] font-black text-danger uppercase tracking-widest">Editing</span>
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 bg-black text-white text-[7px] font-bold uppercase rounded opacity-0 group-hover/lock:opacity-100 transition-opacity whitespace-nowrap z-[100]">
-                        {row.editor?.username || 'Another user'} is editing
-                    </div>
-                </div>
-            </div>
-        );
-    }
 
 
     // Handle Database Data Column Type
@@ -1644,7 +1691,10 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                     setHasTyped(true);
                     updateField(col.id, e.target.value);
                 }}
-                onKeyDown={e => e.key === 'Enter' && handleSaveEdit(row.id)}
+                onKeyDown={e => {
+                    if (e.key === 'Enter') handleSaveEdit(row.id);
+                    else if (e.key === 'Escape') handleCancelEdit();
+                }}
                 onClick={(e) => {
                     e.stopPropagation();
                     setFocusedColId(col.id);
@@ -1947,6 +1997,47 @@ export const RosterTable: React.FC<RosterTableProps> = ({
     );
   };
 
+  const renderCell = (row: RosterContent, col: RosterColumn) => {
+    const isEditing = editingRowId === row.id;
+    const isSaving = savingRows.has(row.id);
+    const isLocked = !isEditing && row.editing_by && Number(row.editing_by) !== Number(user?.id) && row.editing_at && (new Date().getTime() - new Date(row.editing_at).getTime() < 60000);
+    const isThisCellLocked = isLocked && col.id === (row.editing_col || activeCols[0].id);
+
+    if (isSaving && col.id === savingRows.get(row.id)) {
+        return (
+            <div className="flex items-center justify-center h-full w-full rt-cell-content">
+                <div className="px-2 py-0.5 bg-accent/10 border border-accent/20 rounded animate-pulse flex items-center gap-1.5">
+                    <div className="w-1 h-1 rounded-full bg-accent animate-bounce" />
+                    <span className="text-[7px] font-black text-accent uppercase tracking-widest">Saving</span>
+                </div>
+            </div>
+        );
+    }
+
+    const content = renderCellBody(row, col);
+
+    if (isThisCellLocked) {
+        return (
+            <div className="relative w-full h-full group/lock cursor-not-allowed overflow-visible">
+                {/* Gray out container */}
+                <div className="w-full h-full opacity-45 pointer-events-none filter grayscale-[40%] bg-surface/20">
+                    {content}
+                </div>
+                {/* Google Sheets-like colored editing border */}
+                <div className="absolute inset-0 border border-danger/50 pointer-events-none rounded animate-pulse" />
+                
+                {/* User indicator pill on hover */}
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-black text-white text-[8px] font-black uppercase tracking-wider rounded opacity-0 group-hover/lock:opacity-100 transition-opacity whitespace-nowrap z-[10000] pointer-events-none shadow-lg flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-danger animate-pulse" />
+                    <span>{row.editor?.username || 'Another user'} is editing</span>
+                </div>
+            </div>
+        );
+    }
+
+    return content;
+  };
+
   return (
     <div 
       className={`rt-wrap ${editingRowId ? 'z-[5000]' : 'overflow-x-auto'}`}
@@ -2068,8 +2159,11 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                         style={{ 
                             ...cellStyle,
                             backgroundColor: effectiveRowColor ? `${effectiveRowColor}33` : 'rgba(255,255,255,0.02)',
+                        }}                        onClick={() => {
+                            const isSpacerLocked = isLocked && (row.editing_col === 'spacer_text' || !row.editing_col);
+                            if (isSpacerLocked) return;
+                            if (!isEditing && canEditPredefined) handleStartEdit(row, 'spacer_text');
                         }}
-                        onClick={() => !isEditing && canEditPredefined && handleStartEdit(row, 'spacer_text')}
                     >
                         {isSaving ? (
                             <div className="flex items-center justify-center h-full w-full">
@@ -2079,13 +2173,16 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                                 </div>
                             </div>
                         ) : (isLocked && (row.editing_col === 'spacer_text' || !row.editing_col)) ? (
-                             <div className="flex items-center justify-center h-full w-full">
-                                <div className="px-2 py-0.5 bg-danger/10 border border-danger/20 rounded flex items-center gap-1.5 group/lock relative">
-                                    <div className="w-1 h-1 rounded-full bg-danger" />
-                                    <span className="text-[7px] font-black text-danger uppercase tracking-widest">Editing</span>
-                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 bg-black text-white text-[7px] font-bold uppercase rounded opacity-0 group-hover/lock:opacity-100 transition-opacity whitespace-nowrap z-[100]">
-                                        {row.editor?.username || 'Another user'} is editing
-                                    </div>
+                             <div className="relative w-full h-full group/lock cursor-not-allowed overflow-visible flex items-center justify-center">
+                                <div className="w-full h-full opacity-40 pointer-events-none filter grayscale-[40%] bg-surface/20 flex items-center justify-center px-4">
+                                    <span className={`text-[10px] uppercase font-black tracking-[0.2em] ${effectiveRowColor ? 'text-text drop-shadow-sm' : 'opacity-60 italic'}`}>
+                                        {row.content?.['spacer_text'] || ''}
+                                    </span>
+                                </div>
+                                <div className="absolute inset-0 border border-danger/50 pointer-events-none rounded animate-pulse" />
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-black text-white text-[8px] font-black uppercase tracking-wider rounded opacity-0 group-hover/lock:opacity-100 transition-opacity whitespace-nowrap z-[10000] pointer-events-none shadow-lg flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-danger animate-pulse" />
+                                    <span>{row.editor?.username || 'Another user'} is editing</span>
                                 </div>
                             </div>
                         ) : isEditing ? (
@@ -2094,7 +2191,10 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                                     ref={inputRef}
                                     value={editData['spacer_text'] || ''}
                                     onChange={e => updateField('spacer_text', e.target.value)}
-                                    onKeyDown={e => e.key === 'Enter' && handleSaveEdit(row.id)}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') handleSaveEdit(row.id);
+                                        else if (e.key === 'Escape') handleCancelEdit();
+                                    }}
                                     className="flex-1 bg-transparent border-none text-[10px] text-center uppercase font-black outline-none focus:ring-0 p-0 text-text placeholder:opacity-20"
                                     placeholder="Spacer Text (Optional)"
                                 />
@@ -2127,7 +2227,13 @@ export const RosterTable: React.FC<RosterTableProps> = ({
                                     zIndex: isEditing && editingColId === col.id ? 5001 : 0,
                                     ...cellStyle
                                 }}
-                                onClick={() => isColEditable(col) && (editingRowId !== row.id || editingColId !== col.id) && handleStartEdit(row, col.id)}
+                                onClick={() => {
+                                    const isCellLocked = !isEditing && row.editing_by && Number(row.editing_by) !== Number(user?.id) && row.editing_at && (new Date().getTime() - new Date(row.editing_at).getTime() < 60000) && col.id === (row.editing_col || activeCols[0].id);
+                                    if (isCellLocked) return;
+                                    if (isColEditable(col) && (editingRowId !== row.id || editingColId !== col.id)) {
+                                        handleStartEdit(row, col.id);
+                                    }
+                                }}
                                 onContextMenu={(e) => handleCellContextMenu(e, row, col)}
                             >
                                 {renderCell(row, col)}

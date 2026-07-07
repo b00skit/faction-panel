@@ -16,6 +16,11 @@ class GroupController extends Controller
         $user = Auth::user();
 
         $canManageAll = User::hasFactionPermission($user, $faction, 'view_groups');
+        $isGroupLeader = $user->isGroupLeaderInFaction($faction->id);
+
+        if (! $canManageAll && ! $isGroupLeader) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
 
         if ($canManageAll) {
             $groups = $faction->groups()->with('members', 'leaders')->get();

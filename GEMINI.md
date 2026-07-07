@@ -64,6 +64,7 @@ batch\start.bat # Start backend and frontend in separate windows
 - **Frontend Style:** Component-per-page/feature in `src/components`. Prop-drilling for faction context. No heavy global state (Context API/TanStack Query preferred).
 - **Auditing:** Models should use `Auditable` trait for automatic activity logging.
 - **API:** Use `api.ts` (Axios) for all requests. Token stored in `localStorage` as `access_token`.
+- **Loading State Indicator:** React pages must use the standard `<Loading />` component (`frontend/src/components/Loading.tsx`) to show loading states instead of custom spinners, keeping UI loading progress bars consistent across the app. Pass `fullScreen={false}` if rendering inline within a container rather than filling the entire layout.
 
 ## Key Files & Directories
 

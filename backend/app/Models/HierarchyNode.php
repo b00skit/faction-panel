@@ -37,6 +37,7 @@ class HierarchyNode extends Model
     protected $fillable = [
         'hierarchy_id',
         'parent_id',
+        'position',
         'title',
         'color',
         'card_style',
