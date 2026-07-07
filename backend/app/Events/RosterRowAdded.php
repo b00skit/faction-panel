@@ -62,6 +62,10 @@ class RosterRowAdded implements ShouldBroadcast
             'editing_by' => $this->content->editing_by,
             'editing_at' => $this->content->editing_at?->toIso8601String(),
             'editing_col' => $this->content->editing_col,
+            'editor' => $this->content->editor ? [
+                'id' => $this->content->editor->id,
+                'username' => $this->content->editor->username,
+            ] : null,
             'updated_at' => $this->content->updated_at?->toIso8601String(),
         ];
     }
