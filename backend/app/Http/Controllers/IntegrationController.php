@@ -154,7 +154,7 @@ class IntegrationController extends Controller
 
         $automation = GtawSyncAutomation::where('faction_id', $faction->id)->first();
         $logs = GtawSyncLog::where('faction_id', $faction->id)
-            ->with('user:id,name,username')
+            ->with('user:id,username,gtaw_username')
             ->orderBy('started_at', 'desc')
             ->limit(20)
             ->get();
@@ -205,7 +205,7 @@ class IntegrationController extends Controller
         );
 
         $logs = GtawSyncLog::where('faction_id', $faction->id)
-            ->with('user:id,name,username')
+            ->with('user:id,username,gtaw_username')
             ->orderBy('started_at', 'desc')
             ->limit(20)
             ->get();
