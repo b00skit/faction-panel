@@ -5,7 +5,6 @@ use App\Models\StatisticsModel;
 use App\Models\StatisticsWidget;
 use App\Models\User;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Auth;
 
 test('statistics:refresh command recalculates widgets and updates cache', function () {
     $faction = Faction::factory()->create();
@@ -21,7 +20,7 @@ test('statistics:refresh command recalculates widgets and updates cache', functi
         'configuration' => [
             'mode' => 'series',
             'series' => [
-                ['name' => 'Constant', 'color' => '#00ff00', 'formula' => "5 + 2"],
+                ['name' => 'Constant', 'color' => '#00ff00', 'formula' => '5 + 2'],
             ],
         ],
         'cache_result' => null,
@@ -58,7 +57,7 @@ test('statistics controller show route dispatches background refresh if stale', 
         'configuration' => [
             'mode' => 'series',
             'series' => [
-                ['name' => 'Value', 'color' => '#00ff00', 'formula' => "10"],
+                ['name' => 'Value', 'color' => '#00ff00', 'formula' => '10'],
             ],
         ],
         'cache_result' => null,

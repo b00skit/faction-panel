@@ -1,5 +1,6 @@
 <?php
 
+use App\Events\RosterRowsReordered;
 use App\Events\RosterUpdated;
 use App\Models\Faction;
 use App\Models\Roster;
@@ -284,7 +285,7 @@ test('can fetch cell history with resolved array values', function () {
         'order' => 0,
         'created_by' => $this->user->id,
     ]);
-    
+
     // Update content via API to create audit log
     $this->actingAs($this->user)
         ->putJson("/api/contents/{$content->id}", [
@@ -304,7 +305,7 @@ test('can fetch cell history with resolved array values', function () {
 });
 
 test('reordering contents invalidates cache and dispatches RosterRowsReordered event', function () {
-    Event::fake([\App\Events\RosterRowsReordered::class]);
+    Event::fake([RosterRowsReordered::class]);
 
     $roster = Roster::create([
         'faction_id' => $this->faction->id,
@@ -347,7 +348,7 @@ test('reordering contents invalidates cache and dispatches RosterRowsReordered e
 
     $response->assertStatus(200);
 
-    Event::assertDispatched(\App\Events\RosterRowsReordered::class, function ($event) use ($section, $content1, $content2) {
+    Event::assertDispatched(RosterRowsReordered::class, function ($event) use ($section, $content1, $content2) {
         return $event->sectionId === $section->id && $event->contentIds === [$content2->id, $content1->id];
     });
 });
@@ -426,4 +427,3 @@ test('reordering rosters dispatches RosterUpdated event', function () {
         return $event->roster->id === $roster2->id;
     });
 });
-

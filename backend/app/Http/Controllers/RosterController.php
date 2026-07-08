@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\RosterUpdated;
 use App\Models\Faction;
 use App\Models\FactionRecordDatabase;
 use App\Models\Roster;
@@ -842,7 +843,7 @@ class RosterController extends Controller
         }
 
         if ($rosters->isNotEmpty()) {
-            \App\Events\RosterUpdated::dispatch($rosters->first());
+            RosterUpdated::dispatch($rosters->first());
         }
 
         return response()->json(['message' => 'Order updated']);

@@ -4,6 +4,7 @@ use App\Models\Faction;
 use App\Models\Roster;
 use App\Models\User;
 use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Log;
 
 Broadcast::routes(['middleware' => ['api', 'auth:sanctum']]);
 
@@ -18,7 +19,7 @@ Broadcast::channel('faction.{factionId}.updates', function ($user, $factionId) {
     }
 
     $canView = User::hasFactionPermission($user, $faction, 'view_faction_roster');
-    \Illuminate\Support\Facades\Log::info("Updates Channel Auth Attempt: User ID={$user->id}, Username={$user->username}, Faction ID={$factionId}, Can View=" . ($canView ? 'YES' : 'NO'));
+    Log::info("Updates Channel Auth Attempt: User ID={$user->id}, Username={$user->username}, Faction ID={$factionId}, Can View=".($canView ? 'YES' : 'NO'));
 
     if ($canView) {
         $primaryRole = $user->roles()
@@ -55,7 +56,7 @@ Broadcast::channel('faction.{factionId}.roster.{rosterId}', function ($user, $fa
     }
 
     $canView = User::canViewRoster($user, $roster);
-    \Illuminate\Support\Facades\Log::info("Roster Channel Auth Attempt: User ID={$user->id}, Username={$user->username}, Faction ID={$factionId}, Roster ID={$rosterId}, Can View=" . ($canView ? 'YES' : 'NO'));
+    Log::info("Roster Channel Auth Attempt: User ID={$user->id}, Username={$user->username}, Faction ID={$factionId}, Roster ID={$rosterId}, Can View=".($canView ? 'YES' : 'NO'));
 
     if ($canView) {
         return [
