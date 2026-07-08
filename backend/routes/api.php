@@ -335,6 +335,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/factions/{shortname}/integrations/gtaw/setup', [IntegrationController::class, 'setupGtaw']);
     Route::post('/factions/{shortname}/integrations/gtaw/sync', [IntegrationController::class, 'syncGtaw']);
     Route::post('/factions/{shortname}/integrations/gtaw/prune', [IntegrationController::class, 'pruneGtaw']);
+    Route::get('/factions/{shortname}/integrations/gtaw/automation', [IntegrationController::class, 'getAutomationSettings']);
+    Route::post('/factions/{shortname}/integrations/gtaw/automation', [IntegrationController::class, 'saveAutomationSettings']);
 
     // Help Center Public Routes
     Route::get('/help/categories', [HelpController::class, 'getCategories']);

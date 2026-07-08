@@ -232,4 +232,14 @@ class Faction extends Model
     {
         return $this->hasMany(StatisticsModel::class);
     }
+
+    public function gtawSyncAutomation()
+    {
+        return $this->hasOne(GtawSyncAutomation::class);
+    }
+
+    public function gtawSyncLogs()
+    {
+        return $this->hasMany(GtawSyncLog::class);
+    }
 }
