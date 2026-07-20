@@ -77,3 +77,12 @@ Broadcast::channel('faction.{factionId}.diagrams', function ($user, $factionId) 
 
     return User::hasFactionPermission($user, $faction, 'view_faction_hierarchy');
 });
+
+Broadcast::channel('faction.{factionId}.kanban', function ($user, $factionId) {
+    $faction = Faction::find($factionId);
+    if (! $faction) {
+        return false;
+    }
+
+    return User::hasFactionPermission($user, $faction, 'view_faction_projects');
+});

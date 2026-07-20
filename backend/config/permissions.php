@@ -272,6 +272,26 @@ return [
                 ],
             ],
         ],
+        'kanban' => [
+            'name' => 'Faction Kanban',
+            'permissions' => [
+                'view_faction_projects' => [
+                    'name' => 'View Faction Projects',
+                    'description' => 'Allows viewing the projects tab and list.',
+                    'type' => 'VIEW',
+                ],
+                'create_project' => [
+                    'name' => 'Create Kanban Projects',
+                    'description' => 'Allows creating new Kanban projects for the faction.',
+                    'type' => 'CREATE',
+                ],
+                'global_kanban_moderation' => [
+                    'name' => 'Global Kanban Moderator',
+                    'description' => 'Grants full administrative access to all projects, card types, columns, and cards.',
+                    'type' => 'MODIFY',
+                ],
+            ],
+        ],
         'system' => [
             'name' => 'System',
             'permissions' => [

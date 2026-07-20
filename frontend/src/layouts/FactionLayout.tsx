@@ -22,6 +22,7 @@ interface FactionLayoutProps {
     canViewSandboxRoster?: boolean;
     canViewFactionHierarchy?: boolean;
     canViewNotifications?: boolean;
+    canViewKanban?: boolean;
     siteVersion: string;
     children: React.ReactNode;
 }
@@ -46,6 +47,7 @@ const FactionLayout: React.FC<FactionLayoutProps> = ({
     canViewSandboxRoster,
     canViewFactionHierarchy,
     canViewNotifications,
+    canViewKanban,
     siteVersion,
     children
 }) => {
@@ -90,6 +92,7 @@ const FactionLayout: React.FC<FactionLayoutProps> = ({
                     canViewSandboxRoster={canViewSandboxRoster}
                     canViewFactionHierarchy={canViewFactionHierarchy}
                     canViewNotifications={canViewNotifications}
+                    canViewKanban={canViewKanban}
                     user={user} 
                     siteVersion={siteVersion} 
                     customFooterText={factionData.custom_footer_text}

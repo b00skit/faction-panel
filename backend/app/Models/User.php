@@ -161,6 +161,8 @@ class User extends Authenticatable
 
     protected static $hierarchyPermissionsCache = [];
 
+    protected static $projectPermissionsCache = [];
+
     protected static $exclusionCheckedCache = [];
 
     public static function clearPermissionsCache()
@@ -173,6 +175,7 @@ class User extends Authenticatable
         self::$statisticsPermissionsCache = [];
         self::$formPermissionsCache = [];
         self::$hierarchyPermissionsCache = [];
+        self::$projectPermissionsCache = [];
         self::$exclusionCheckedCache = [];
     }
 
@@ -613,6 +616,92 @@ class User extends Authenticatable
         $canViewGlobal = $user && self::hasFactionPermission($user, $faction, 'view_faction_hierarchy');
 
         return $canViewGlobal || self::hasHierarchyPermission($user, $hierarchy, 'view_hierarchy');
+    }
+
+    public static function hasProjectPermission(?User $user, KanbanProject $project, string $permissionKey): bool
+    {
+        $faction = $project->faction;
+
+        // 1. Superadmin/Faction Leader/Global Kanban Moderator/Creator always have access
+        if ($user) {
+            if ($user->is_superadmin ||
+                $faction->faction_leader === $user->id ||
+                self::hasFactionPermission($user, $faction, 'global_kanban_moderation') ||
+                $project->created_by === $user->id
+            ) {
+                return true;
+            }
+        }
+
+        $userId = $user ? $user->id : 'guest';
+        $cacheKey = "{$userId}_{$project->id}";
+
+        if (! isset(self::$projectPermissionsCache[$cacheKey])) {
+            $permissionSets = collect();
+
+            // Public permissions (group_id and role_id are null)
+            $publicPerms = $project->permissions->whereNull('group_id')->whereNull('role_id')->first();
+            if ($publicPerms) {
+                $permissionSets->push($publicPerms->permissions);
+            }
+
+            if ($user) {
+                // Group permissions
+                $userGroupIds = self::getUserGroupIds($user, $faction->id);
+                $groupPerms = $project->permissions->whereIn('group_id', $userGroupIds);
+                foreach ($groupPerms as $gp) {
+                    $permissionSets->push($gp->permissions);
+                }
+
+                // Role permissions
+                $userRoleIds = self::getUserRoleIds($user, $faction->id);
+                $rolePerms = $project->permissions->whereIn('role_id', $userRoleIds);
+                foreach ($rolePerms as $rp) {
+                    $permissionSets->push($rp->permissions);
+                }
+            }
+
+            $resolved = [];
+            foreach ($permissionSets as $set) {
+                if (is_array($set)) {
+                    foreach ($set as $perm) {
+                        $resolved[] = $perm;
+                    }
+                }
+            }
+            self::$projectPermissionsCache[$cacheKey] = array_unique($resolved);
+        }
+
+        return in_array($permissionKey, self::$projectPermissionsCache[$cacheKey]);
+    }
+
+    public static function canViewProject(?User $user, KanbanProject $project): bool
+    {
+        if ($user && $user->is_superadmin) {
+            return true;
+        }
+
+        $faction = $project->faction;
+        if ($user && $faction->faction_leader === $user->id) {
+            return true;
+        }
+
+        if ($user && self::hasFactionPermission($user, $faction, 'global_kanban_moderation')) {
+            return true;
+        }
+
+        if ($user && $project->created_by === $user->id) {
+            return true;
+        }
+
+        $hasExplicitPerms = $project->permissions->isNotEmpty();
+        if ($hasExplicitPerms) {
+            return self::hasProjectPermission($user, $project, 'view_project');
+        }
+
+        $canViewGlobal = $user && self::hasFactionPermission($user, $faction, 'view_faction_projects');
+
+        return $canViewGlobal || self::hasProjectPermission($user, $project, 'view_project');
     }
 
     public static function hasRecordPermission(?User $user, FactionRecordDatabase $database, string $permissionKey): bool

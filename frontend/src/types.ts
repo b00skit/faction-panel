@@ -515,3 +515,107 @@ export interface ChangelogEntry {
   released_at: string;
   order: number;
 }
+
+export interface KanbanCardType {
+  id: number;
+  name: string;
+  color: string;
+  icon: string;
+  settings: {
+    description: boolean;
+    subtasks: boolean;
+    color: boolean;
+    icon: boolean;
+    comments: boolean;
+    assignee: boolean;
+    priority: boolean;
+  };
+}
+
+export interface KanbanPriority {
+  id: number;
+  name: string;
+  color: string;
+  icon: string;
+  order: number;
+  is_default: boolean;
+}
+
+export interface KanbanLabel {
+  id: number;
+  project_id: number;
+  name: string;
+  color: string;
+}
+
+export interface KanbanSubtask {
+  id: number;
+  card_id: number;
+  title: string;
+  is_completed: boolean;
+  order: number;
+}
+
+export interface KanbanComment {
+  id: number;
+  card_id: number;
+  user_id: number | null;
+  comment: string;
+  created_at: string;
+  user?: {
+    id: number;
+    username: string;
+    avatar_url?: string | null;
+  };
+}
+
+export interface KanbanCard {
+  id: number;
+  project_id: number;
+  status_id: number;
+  card_type_id: number;
+  priority_id: number | null;
+  title: string;
+  description: string | null;
+  color: string | null;
+  order: number;
+  created_by: number | null;
+  card_type?: KanbanCardType;
+  priority?: KanbanPriority | null;
+  assignees?: User[];
+  labels?: KanbanLabel[];
+  subtasks?: KanbanSubtask[];
+  comments?: KanbanComment[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface KanbanProject {
+  id: number;
+  faction_id: number;
+  name: string;
+  color: string;
+  description?: string | null;
+  order: number;
+  created_by: number | null;
+  statuses?: KanbanStatus[];
+  labels?: KanbanLabel[];
+  permissions?: any[];
+  user_permissions?: {
+    view_project: boolean;
+    add_card: boolean;
+    modify_card: boolean;
+    view_card_details: boolean;
+    manage_statuses: boolean;
+    manage_labels: boolean;
+    modify_project: boolean;
+  };
+}
+
+export interface KanbanStatus {
+  id: number;
+  project_id: number;
+  name: string;
+  order: number;
+  cards?: KanbanCard[];
+}
