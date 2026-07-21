@@ -117,7 +117,7 @@ const FormSubmissionReview: React.FC<FormSubmissionReviewProps> = ({ submissionI
                 comment: internalComment,
                 is_internal: true
             });
-            setSubmission(prev => ({
+            setSubmission((prev: any) => ({
                 ...prev,
                 comments: [...prev.comments, res.data]
             }));
@@ -143,7 +143,7 @@ const FormSubmissionReview: React.FC<FormSubmissionReviewProps> = ({ submissionI
                 is_internal: false,
                 form_section_id: sectionId
             });
-            setSubmission(prev => ({
+            setSubmission((prev: any) => ({
                 ...prev,
                 comments: [...prev.comments, res.data]
             }));

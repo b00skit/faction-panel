@@ -34,7 +34,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
   renderContextMenu,
   extraButtons
 }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<any>(null);
   const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ left: number }>({ left: 0 });
 

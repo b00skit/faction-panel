@@ -6,10 +6,10 @@ import toast from 'react-hot-toast';
 import { Shield, Search, ArrowLeft, Plus, User, ChevronDown, Settings, LogOut, ShieldAlert, Crown } from 'lucide-react';
 
 interface FactionCatalogProps {
-    isDark: boolean;
-    toggleTheme: () => void;
-    user: any;
-    onLogout: () => void;
+    isDark?: boolean;
+    toggleTheme?: () => void;
+    user?: any;
+    onLogout?: () => void;
 }
 
 const FactionCatalog: React.FC<FactionCatalogProps> = ({ isDark, toggleTheme, user, onLogout }) => {

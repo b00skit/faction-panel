@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { Users, Settings, Layers, Database, History, RefreshCw, Camera, BarChart3, FileText, Sparkles, Bell, GitFork, Trello } from 'lucide-react';
+import { Users, Settings, Layers, Database, History, RefreshCw, Camera, BarChart3, FileText, Sparkles, Bell, GitFork, Columns3 } from 'lucide-react';
 
 interface SidebarProps {
   shortname: string;
@@ -55,7 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             to={`/${shortname}/kanban`}
             className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
           >
-            <Trello size={14} />
+            <Columns3 size={14} />
             Faction Kanban
           </NavLink>
         )}

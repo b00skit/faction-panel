@@ -63,7 +63,7 @@ export const CountManagerModal: React.FC<CountManagerModalProps> = ({
             }
             return acc;
         }, {});
-        return Object.values(grouped);
+        return Object.values(grouped) as any[];
     }, [rawColumns]);
     const [counts, setCounts] = useState<any[]>(() => {
         const existing = target.counts || [];

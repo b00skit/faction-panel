@@ -24,7 +24,7 @@ interface FactionRosterProps {
     activeDivision: any;
     totalMembers: number;
     rosters: any[];
-    setRosters: (rosters: any[]) => void;
+    setRosters: React.Dispatch<React.SetStateAction<any[]>>;
     activeDivId: number | null;
     setActiveDivId: (id: number | null) => void;
     permissions: string[];
@@ -1193,11 +1193,13 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                             color: '', 
                                             image_url: '',
                                             type: 'section', 
+                                            data_source: 'manual',
                                             parent_id: null, 
                                             columns: null, 
                                             use_roster_columns: true, 
                                             children: [], 
                                             layout_settings: null, 
+                                            section_options: null,
                                             subsections_per_row: 1, 
                                             content_html: '' 
                                         });
@@ -1393,11 +1395,13 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                         color: '', 
                                         image_url: '',
                                         type: 'section', 
+                                        data_source: 'manual',
                                         parent_id: null, 
                                         columns: null, 
                                         use_roster_columns: true,
                                         children: [], 
                                         layout_settings: null, 
+                                        section_options: null,
                                         subsections_per_row: 1,
                                         content_html: ''
                                     });
@@ -1808,7 +1812,7 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
       {showPermissionsModal && (
         <RosterPermissionsModal
           roster={showPermissionsModal}
-          shortname={shortname}
+          shortname={shortname || ''}
           onClose={() => setShowPermissionsModal(null)}
         />
       )}
@@ -2739,14 +2743,14 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
 
       {showVariablesModal && (
           <GlobalVariablesModal 
-            shortname={shortname} 
+            shortname={shortname || ''} 
             onClose={() => setShowVariablesModal(false)} 
           />
       )}
 
       {showFlagsModal && (
           <FlagManagerModal 
-            shortname={shortname} 
+            shortname={shortname || ''} 
             onClose={() => setShowFlagsModal(false)} 
           />
       )}

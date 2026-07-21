@@ -97,6 +97,7 @@ export interface RosterSection {
   content_html?: string | null;
   children?: RosterSection[];
   contents?: RosterContent[];
+  counts?: any;
 }
 
 export interface Roster {
@@ -313,6 +314,12 @@ export interface FormField {
   is_automatic_scored: boolean;
   correct_answer?: string;
   prefill_type?: string | null;
+  width?: number;
+  default_value?: string | null;
+  description?: string | null;
+  placeholder?: string | null;
+  is_disabled?: boolean;
+  is_multi?: boolean;
 }
 
 export interface FormSection {
@@ -331,6 +338,7 @@ export interface FormStage {
   submit_status_id: number | null;
   required_points?: number;
   order: number;
+  description?: string | null;
   sections?: FormSection[];
 }
 
@@ -583,6 +591,7 @@ export interface KanbanCard {
   is_archived?: boolean;
   card_type?: KanbanCardType;
   priority?: KanbanPriority | null;
+  status?: KanbanStatus;
   assignees?: User[];
   labels?: KanbanLabel[];
   subtasks?: KanbanSubtask[];
