@@ -17,6 +17,16 @@ class KanbanProject extends Model
         'description',
         'order',
         'created_by',
+        'prefix',
+        'show_prefix',
+    ];
+
+    protected $casts = [
+        'show_prefix' => 'boolean',
+    ];
+
+    protected $attributes = [
+        'show_prefix' => true,
     ];
 
     public function faction()

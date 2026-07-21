@@ -580,6 +580,7 @@ export interface KanbanCard {
   color: string | null;
   order: number;
   created_by: number | null;
+  is_archived?: boolean;
   card_type?: KanbanCardType;
   priority?: KanbanPriority | null;
   assignees?: User[];
@@ -598,6 +599,8 @@ export interface KanbanProject {
   description?: string | null;
   order: number;
   created_by: number | null;
+  prefix?: string | null;
+  show_prefix?: boolean;
   statuses?: KanbanStatus[];
   labels?: KanbanLabel[];
   permissions?: any[];

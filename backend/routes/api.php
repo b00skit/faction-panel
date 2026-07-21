@@ -438,6 +438,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/kanban/cards/{card}', [KanbanCardController::class, 'update']);
     Route::delete('/kanban/cards/{card}', [KanbanCardController::class, 'destroy']);
     Route::post('/kanban/cards/{card}/move', [KanbanCardController::class, 'move']);
+    Route::get('/kanban/projects/{project}/archived', [KanbanProjectController::class, 'archivedCards']);
+    Route::post('/kanban/cards/{card}/archive', [KanbanCardController::class, 'archiveCard']);
+    Route::post('/kanban/cards/{card}/restore', [KanbanCardController::class, 'restoreCard']);
+    Route::get('/kanban/cards/{card}/activity', [KanbanCardController::class, 'activity']);
 
     // Kanban Comment Management
     Route::post('/kanban/cards/{card}/comments', [KanbanCommentController::class, 'store']);

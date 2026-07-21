@@ -227,4 +227,90 @@ class KanbanCardController extends Controller
 
         return response()->json(['message' => 'Card moved successfully']);
     }
+
+    public function archiveCard(KanbanCard $card)
+    {
+        if (!$this->canModifyCard($card, 'modify_card')) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $card->is_archived = true;
+        $card->save();
+
+        $project = $card->project;
+        $this->audit('kanban.card.archive', "Archived card '{$card->title}' in project '{$project->name}'", null, $project, null, $card->getAttributes());
+
+        KanbanBoardUpdated::dispatch($project->faction_id, $project->id, $card->id, 'card_archived');
+
+        return response()->json($card);
+    }
+
+    public function restoreCard(KanbanCard $card)
+    {
+        if (!$this->canModifyCard($card, 'modify_card')) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $card->is_archived = false;
+        $card->save();
+
+        $project = $card->project;
+        $this->audit('kanban.card.restore', "Restored card '{$card->title}' from archive in project '{$project->name}'", null, $project, null, $card->getAttributes());
+
+        KanbanBoardUpdated::dispatch($project->faction_id, $project->id, $card->id, 'card_restored');
+
+        return response()->json($card);
+    }
+
+    public function activity(Request $request, KanbanCard $card)
+    {
+        if (!$this->canViewDetails($card)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        // Fetch comments with user
+        $comments = $card->comments()->with('user')->get()->map(function ($comment) {
+            return [
+                'id' => 'comment_' . $comment->id,
+                'type' => 'comment',
+                'user' => $comment->user,
+                'comment' => $comment->comment,
+                'created_at' => $comment->created_at->toIso8601String(),
+                'raw_id' => $comment->id,
+            ];
+        });
+
+        // Fetch audits with user
+        $audits = $card->audits()->with('user')->get()->map(function ($audit) {
+            return [
+                'id' => 'audit_' . $audit->id,
+                'type' => 'action',
+                'user' => $audit->user,
+                'event' => $audit->event,
+                'description' => $audit->description,
+                'old_values' => $audit->old_values,
+                'new_values' => $audit->new_values,
+                'created_at' => $audit->created_at->toIso8601String(),
+                'raw_id' => $audit->id,
+            ];
+        });
+
+        // Combine and sort by created_at desc
+        $feed = $comments->concat($audits)->sortByDesc('created_at')->values();
+
+        // Paginate
+        $page = (int) $request->query('page', 1);
+        $perPage = 10;
+        $offset = ($page - 1) * $perPage;
+
+        $sliced = $feed->slice($offset, $perPage)->values();
+
+        return response()->json([
+            'data' => $sliced,
+            'current_page' => $page,
+            'per_page' => $perPage,
+            'total' => $feed->count(),
+            'last_page' => (int) ceil($feed->count() / $perPage),
+        ]);
+    }
 }

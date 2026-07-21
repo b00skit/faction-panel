@@ -20,6 +20,15 @@ class KanbanCard extends Model
         'color',
         'order',
         'created_by',
+        'is_archived',
+    ];
+
+    protected $casts = [
+        'is_archived' => 'boolean',
+    ];
+
+    protected $attributes = [
+        'is_archived' => false,
     ];
 
     public function project()

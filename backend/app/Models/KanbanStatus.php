@@ -25,6 +25,6 @@ class KanbanStatus extends Model
 
     public function cards()
     {
-        return $this->hasMany(KanbanCard::class, 'status_id')->orderBy('order')->orderBy('id');
+        return $this->hasMany(KanbanCard::class, 'status_id')->where('is_archived', false)->orderBy('order')->orderBy('id');
     }
 }

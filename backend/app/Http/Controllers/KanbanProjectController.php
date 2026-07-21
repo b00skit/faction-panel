@@ -29,18 +29,7 @@ class KanbanProjectController extends Controller
 
         // Map permission set for each project
         $mapped = $filtered->map(function ($project) use ($user) {
-            $project->user_permissions = [
-                'view_project' => User::hasProjectPermission($user, $project, 'view_project'),
-                'add_card' => User::hasProjectPermission($user, $project, 'add_card'),
-                'modify_card' => User::hasProjectPermission($user, $project, 'modify_card'),
-                'view_card_details' => User::hasProjectPermission($user, $project, 'view_card_details'),
-                'manage_statuses' => User::hasProjectPermission($user, $project, 'manage_statuses'),
-                'manage_labels' => User::hasProjectPermission($user, $project, 'manage_labels'),
-                'modify_project' => User::hasProjectPermission($user, $project, 'modify_project') || (
-                    $user && ($user->is_superadmin || $project->faction->faction_leader === $user->id || User::hasFactionPermission($user, $project->faction, 'global_kanban_moderation') || $project->created_by === $user->id)
-                ),
-            ];
-            return $project;
+            return $this->sanitizeProjectForUser($project, $user);
         })->values();
 
         $this->audit('kanban.project.list', "Viewed Kanban projects list for faction {$faction->name}");
@@ -61,6 +50,8 @@ class KanbanProjectController extends Controller
             'name' => 'required|string|max:255',
             'color' => ['required', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'description' => 'nullable|string|max:1000',
+            'prefix' => 'nullable|string|max:10',
+            'show_prefix' => 'sometimes|boolean',
         ]);
 
         $maxOrder = $faction->kanbanProjects()->max('order') ?? -1;
@@ -69,6 +60,8 @@ class KanbanProjectController extends Controller
             'name' => $validated['name'],
             'color' => $validated['color'],
             'description' => $validated['description'] ?? null,
+            'prefix' => $validated['prefix'] ?? null,
+            'show_prefix' => $validated['show_prefix'] ?? true,
             'order' => $maxOrder + 1,
             'created_by' => $user->id,
         ]);
@@ -82,7 +75,7 @@ class KanbanProjectController extends Controller
 
         $this->audit('kanban.project.create', "Created Kanban project '{$project->name}' for faction '{$faction->name}'", null, $project, null, $project->getAttributes());
 
-        return response()->json($project->load(['permissions', 'labels', 'statuses.cards']), 201);
+        return response()->json($this->sanitizeProjectForUser($project->load(['permissions', 'labels', 'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments']), $user), 201);
     }
 
     public function update(Request $request, KanbanProject $project)
@@ -102,6 +95,9 @@ class KanbanProjectController extends Controller
             'name' => 'sometimes|required|string|max:255',
             'color' => ['sometimes', 'required', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'description' => 'sometimes|nullable|string|max:1000',
+            'prefix' => 'sometimes|nullable|string|max:10',
+            'show_prefix' => 'sometimes|boolean',
+            'created_by' => 'sometimes|nullable|integer|exists:users,id',
         ]);
 
         $oldValues = $project->getOriginal();
@@ -111,7 +107,7 @@ class KanbanProjectController extends Controller
 
         KanbanBoardUpdated::dispatch($project->faction_id, $project->id, null, 'project_updated');
 
-        return response()->json($project->load(['permissions', 'labels', 'statuses.cards']));
+        return response()->json($this->sanitizeProjectForUser($project->load(['permissions', 'labels', 'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments']), $user));
     }
 
     public function destroy(KanbanProject $project)
@@ -186,5 +182,96 @@ class KanbanProjectController extends Controller
         })->values();
 
         return response()->json($assignees);
+    }
+
+    public function archivedCards(KanbanProject $project)
+    {
+        $user = Auth::user();
+        if (!User::canViewProject($user, $project)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $hasViewCardDetails = $user && (
+            $user->is_superadmin ||
+            $project->faction->faction_leader === $user->id ||
+            User::hasFactionPermission($user, $project->faction, 'global_kanban_moderation') ||
+            $project->created_by === $user->id ||
+            User::hasProjectPermission($user, $project, 'view_card_details')
+        );
+
+        $cards = $project->cards()
+            ->where('is_archived', true)
+            ->with(['assignees', 'labels', 'cardType', 'priority', 'status', 'comments'])
+            ->orderBy('updated_at', 'desc')
+            ->get();
+
+        $cards->map(function ($card) use ($user, $hasViewCardDetails) {
+            return $this->sanitizeCardForUser($card, $user, $hasViewCardDetails);
+        });
+
+        return response()->json($cards);
+    }
+
+    private function sanitizeCardForUser($card, $user, $hasViewCardDetails)
+    {
+        $canViewCardSpecific = $hasViewCardDetails || ($user && $card->created_by === $user->id);
+        if (!$canViewCardSpecific) {
+            $card->description = !empty($card->description);
+
+            $commentsCount = $card->comments ? $card->comments->count() : 0;
+            $card->unsetRelation('comments');
+            $card->setAttribute('comments', $commentsCount > 0 ? $commentsCount : null);
+
+            $card->unsetRelation('subtasks');
+            $card->setAttribute('subtasks', []);
+        }
+        return $card;
+    }
+
+    private function sanitizeProjectForUser($project, $user)
+    {
+        // First make sure we load everything needed if not loaded
+        if (!$project->relationLoaded('statuses')) {
+            $project->load(['permissions', 'labels', 'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments']);
+        } else {
+            // Ensure cards relations are loaded for status columns
+            foreach ($project->statuses as $status) {
+                if (!$status->relationLoaded('cards')) {
+                    $status->load('cards.assignees', 'cards.labels', 'cards.cardType', 'cards.priority', 'cards.subtasks', 'cards.comments');
+                }
+            }
+        }
+
+        $hasViewCardDetails = $user && (
+            $user->is_superadmin ||
+            $project->faction->faction_leader === $user->id ||
+            User::hasFactionPermission($user, $project->faction, 'global_kanban_moderation') ||
+            $project->created_by === $user->id ||
+            User::hasProjectPermission($user, $project, 'view_card_details')
+        );
+
+        $project->user_permissions = [
+            'view_project' => User::hasProjectPermission($user, $project, 'view_project'),
+            'add_card' => User::hasProjectPermission($user, $project, 'add_card'),
+            'modify_card' => User::hasProjectPermission($user, $project, 'modify_card'),
+            'view_card_details' => $hasViewCardDetails,
+            'manage_statuses' => User::hasProjectPermission($user, $project, 'manage_statuses'),
+            'manage_labels' => User::hasProjectPermission($user, $project, 'manage_labels'),
+            'modify_project' => User::hasProjectPermission($user, $project, 'modify_project') || (
+                $user && ($user->is_superadmin || $project->faction->faction_leader === $user->id || User::hasFactionPermission($user, $project->faction, 'global_kanban_moderation') || $project->created_by === $user->id)
+            ),
+        ];
+
+        if (isset($project->statuses)) {
+            foreach ($project->statuses as $status) {
+                if (isset($status->cards)) {
+                    foreach ($status->cards as $card) {
+                        $this->sanitizeCardForUser($card, $user, $hasViewCardDetails);
+                    }
+                }
+            }
+        }
+
+        return $project;
     }
 }
