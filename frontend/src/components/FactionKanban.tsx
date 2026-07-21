@@ -132,6 +132,10 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
   const [selectedCard, setSelectedCard] = useState<KanbanCard | null>(null);
   const [selectedCardDetails, setSelectedCardDetails] = useState<KanbanCard | null>(null);
   const [assigneesList, setAssigneesList] = useState<any[]>([]);
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+
+  // Card title inline editing state (only save on Enter/blur)
+  const [editingCardTitle, setEditingCardTitle] = useState<string | null>(null);
 
   // Dragging States for empty column styling
   const [isDraggingCard, setIsDraggingCard] = useState<boolean>(false);
@@ -1440,7 +1444,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                                 {activeProject.prefix}-{card.id}
                               </span>
                             )}
-                            <span>{card.title}</span>
+                            <span className="capitalize">{card.title}</span>
                           </h4>
 
                           {/* Card Footer Indicators */}
@@ -1506,6 +1510,16 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                           placeholder="Card Title..."
                           value={newCardTitle}
                           onChange={(e) => setNewCardTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleQuickCreateCard(col.id);
+                            }
+                            if (e.key === 'Escape') {
+                              setActiveQuickCreateColId(null);
+                              setNewCardTitle('');
+                            }
+                          }}
                           className="bg-card text-text text-xs border border-border rounded px-2.5 py-1.5 focus:outline-none w-full font-bold"
                           autoFocus
                         />
@@ -2515,8 +2529,29 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                       )}
                       <input
                         type="text"
-                        value={selectedCardDetails.title}
-                        onChange={(e) => handleUpdateCardFields({ title: e.target.value })}
+                        value={editingCardTitle !== null ? editingCardTitle : selectedCardDetails.title}
+                        onChange={(e) => setEditingCardTitle(e.target.value)}
+                        onFocus={() => setEditingCardTitle(selectedCardDetails.title)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (editingCardTitle !== null && editingCardTitle.trim() && editingCardTitle !== selectedCardDetails.title) {
+                              handleUpdateCardFields({ title: editingCardTitle.trim() });
+                            }
+                            setEditingCardTitle(null);
+                            (e.target as HTMLInputElement).blur();
+                          }
+                          if (e.key === 'Escape') {
+                            setEditingCardTitle(null);
+                            (e.target as HTMLInputElement).blur();
+                          }
+                        }}
+                        onBlur={() => {
+                          if (editingCardTitle !== null && editingCardTitle.trim() && editingCardTitle !== selectedCardDetails.title) {
+                            handleUpdateCardFields({ title: editingCardTitle.trim() });
+                          }
+                          setEditingCardTitle(null);
+                        }}
                         className="bg-transparent border-b border-transparent hover:border-border focus:border-accent font-black uppercase text-xs text-text py-0.5 px-1 focus:outline-none tracking-widest max-w-[400px]"
                         disabled={!projectPerms.modify_card}
                       />
@@ -2940,11 +2975,49 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                   {/* Assignees Selection */}
                   {selectedCardDetails.card_type?.settings.assignee && (
                     <div className="space-y-2">
-                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted flex items-center gap-1">
-                        <Users size={11} /> Assignees
-                      </label>
-                      <div className="border border-border rounded-xl bg-surface/30 p-2.5 max-h-40 overflow-y-auto space-y-1.5 scrollbar-thin">
-                        {assigneesList.map((userObj) => {
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[9px] font-bold uppercase tracking-wider text-muted flex items-center gap-1">
+                          <Users size={11} /> Assignees
+                        </label>
+                        {projectPerms.modify_card && (() => {
+                          const isAssignedToMe = selectedCardDetails.assignees?.some((a: any) => a.id === user?.id);
+                          const meInList = assigneesList.some((u: any) => u.id === user?.id);
+                          if (!meInList) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentIds = selectedCardDetails.assignees?.map((a: any) => a.id) || [];
+                                const nextIds = isAssignedToMe
+                                  ? currentIds.filter((id: number) => id !== user?.id)
+                                  : [...currentIds, user!.id];
+                                handleUpdateCardFields({ assignees: nextIds });
+                              }}
+                              className={`text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border transition-colors cursor-pointer ${
+                                isAssignedToMe
+                                  ? 'bg-accent/10 border-accent/25 text-accent hover:bg-danger/10 hover:border-danger/25 hover:text-danger'
+                                  : 'bg-surface border-border text-muted hover:bg-accent/10 hover:border-accent/25 hover:text-accent'
+                              }`}
+                            >
+                              {isAssignedToMe ? 'Unassign me' : 'Assign to me'}
+                            </button>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Search Filter */}
+                      <input
+                        type="text"
+                        placeholder="Search assignees..."
+                        value={assigneeSearch}
+                        onChange={(e) => setAssigneeSearch(e.target.value)}
+                        className="w-full bg-surface border border-border rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-accent text-text placeholder:text-muted"
+                      />
+
+                      <div className="border border-border rounded-xl bg-surface/30 p-2.5 max-h-36 overflow-y-auto space-y-1.5 scrollbar-thin">
+                        {assigneesList
+                          .filter((u: any) => u.username.toLowerCase().includes(assigneeSearch.toLowerCase()))
+                          .map((userObj) => {
                           const isAssigned = selectedCardDetails.assignees?.some((a: any) => a.id === userObj.id);
                           return (
                             <label
@@ -2976,12 +3049,15 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                                 )}
                               </div>
                               <span className="truncate">{userObj.username}</span>
+                              {userObj.id === user?.id && (
+                                <span className="ml-auto text-[7px] font-black uppercase tracking-wider text-muted">You</span>
+                              )}
                             </label>
                           );
                         })}
-                        {assigneesList.length === 0 && (
+                        {assigneesList.filter((u: any) => u.username.toLowerCase().includes(assigneeSearch.toLowerCase())).length === 0 && (
                           <p className="text-[9px] text-muted font-bold uppercase tracking-wider py-2">
-                            No eligible assignees found.
+                            {assigneeSearch ? 'No results found.' : 'No eligible assignees found.'}
                           </p>
                         )}
                       </div>

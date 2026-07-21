@@ -171,7 +171,18 @@ class KanbanProjectController extends Controller
         }
 
         $allMembers = $faction->users()->where('is_superadmin', false)->get();
-        $assignees = $allMembers->filter(function ($member) use ($project) {
+        $assignees = $allMembers->filter(function ($member) use ($project, $faction) {
+            // Always include faction administrators (users with administrator role permission)
+            $factionPermissions = User::getFactionPermissions($member, $faction);
+            if (in_array('administrator', $factionPermissions)) {
+                return true;
+            }
+
+            // Also include the faction leader
+            if ($faction->faction_leader === $member->id) {
+                return true;
+            }
+
             return User::canViewProject($member, $project);
         })->map(function ($member) {
             return [
