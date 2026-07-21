@@ -1,11 +1,46 @@
 import React from 'react';
 import { Fingerprint } from 'lucide-react';
-import { Bureau } from '../types';
-import { RosterTable } from './RosterTable';
+import { Bureau, Member } from '../types';
 
 interface BureauCardProps {
   bureau: Bureau;
 }
+
+interface RosterTableProps {
+  members: Member[];
+  isLeadership?: boolean;
+  accentColor: string;
+}
+
+const RosterTable: React.FC<RosterTableProps> = ({ members, isLeadership, accentColor }) => {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-xs border-collapse">
+        <thead>
+          <tr className="border-b border-border bg-border/5">
+            <th className="p-1.5 font-bold text-muted uppercase text-[8px] tracking-wider pl-3">Name</th>
+            <th className="p-1.5 font-bold text-muted uppercase text-[8px] tracking-wider">Rank</th>
+            <th className="p-1.5 font-bold text-muted uppercase text-[8px] tracking-wider pr-3">Callsign</th>
+          </tr>
+        </thead>
+        <tbody>
+          {members.map(m => (
+            <tr key={m.id} className="border-b border-border/50 hover:bg-border/5 transition-colors">
+              <td className="p-1.5 font-medium text-[10px] pl-3">{m.name}</td>
+              <td className="p-1.5 text-[10px]">{m.rank}</td>
+              <td className="p-1.5 text-[10px] pr-3">{m.callsign || '-'}</td>
+            </tr>
+          ))}
+          {members.length === 0 && (
+            <tr>
+              <td colSpan={3} className="p-3 text-[10px] text-muted text-center italic">No members assigned</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 export const BureauCard: React.FC<BureauCardProps> = ({ bureau }) => {
   const memberCount = bureau.leadership.length + bureau.units.reduce((acc, u) => acc + u.members.length, 0);

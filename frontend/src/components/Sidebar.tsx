@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { Users, Settings, Layers, Database, History, RefreshCw, Camera, BarChart3, FileText, Sparkles, Bell, GitFork } from 'lucide-react';
+import { Users, Settings, Layers, Database, History, RefreshCw, Camera, BarChart3, FileText, Sparkles, Bell, GitFork, Columns3 } from 'lucide-react';
 
 interface SidebarProps {
   shortname: string;
@@ -15,6 +15,7 @@ interface SidebarProps {
   canViewSandboxRoster?: boolean;
   canViewFactionHierarchy?: boolean;
   canViewNotifications?: boolean;
+  canViewKanban?: boolean;
   user: any | null;
   siteVersion?: string;
   customFooterText?: string | null;
@@ -33,6 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   canViewSandboxRoster = false,
   canViewFactionHierarchy = false,
   canViewNotifications = false,
+  canViewKanban = false,
   user, 
   siteVersion = '1.0.0', 
   customFooterText 
@@ -47,6 +49,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Users size={14} />
           Personnel Roster
         </NavLink>
+
+        {canViewKanban && (
+          <NavLink 
+            to={`/${shortname}/kanban`}
+            className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
+          >
+            <Columns3 size={14} />
+            Faction Kanban
+          </NavLink>
+        )}
 
         {canViewSandboxRoster && (
           <NavLink 

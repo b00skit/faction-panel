@@ -10,6 +10,7 @@
   --color-card: var(--card);
   --color-danger: var(--danger);
   --color-warning: var(--warning);
+  --color-success: var(--success);
 
   --font-sans: "Inter", "Calibri", ui-sans-serif, system-ui, sans-serif;
 }
@@ -26,6 +27,7 @@
   --sh: 0 1px 5px rgba(0, 0, 0, 0.08);
   --danger: #b03030;
   --warning: #d97706;
+  --success: #16a34a;
   --nav-h: 44px;
   --faction-h: 24px;
   --tab-h: 28px;
@@ -44,6 +46,7 @@
   --sh: 0 1px 8px rgba(0, 0, 0, 0.5);
   --danger: #e04a4a;
   --warning: #f59e0b;
+  --success: #22c55e;
 }
 
 :root[data-theme="dark"][data-contrast="high"] {
@@ -58,6 +61,7 @@
   --sh: 0 0 0 2px rgba(255, 255, 255, 0.25) !important;
   --danger: #ff6b6b !important;
   --warning: #fbbf24 !important;
+  --success: #4ade80 !important;
 }
 
 /* Global High Contrast Overrides */

@@ -44,6 +44,15 @@ use App\Http\Controllers\StatisticsPermissionController;
 use App\Http\Controllers\StatisticsWidgetController;
 use App\Http\Controllers\SuperadminController;
 use App\Http\Controllers\UploadController;
+use App\Http\Controllers\KanbanProjectController;
+use App\Http\Controllers\KanbanProjectPermissionController;
+use App\Http\Controllers\KanbanCardTypeController;
+use App\Http\Controllers\KanbanStatusController;
+use App\Http\Controllers\KanbanLabelController;
+use App\Http\Controllers\KanbanCardController;
+use App\Http\Controllers\KanbanCommentController;
+use App\Http\Controllers\KanbanSubtaskController;
+use App\Http\Controllers\KanbanPriorityController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/setup/status', [SetupController::class, 'status']);
@@ -72,6 +81,9 @@ Route::get('/factions/{shortname}', [FactionController::class, 'show']);
 Route::get('/factions/{shortname}/permissions', [FactionController::class, 'getPermissions']);
 Route::get('/factions/{shortname}/rosters', [RosterController::class, 'index']);
 Route::get('/factions/{shortname}/hierarchies', [HierarchyController::class, 'index']);
+Route::get('/factions/{shortname}/kanban/projects', [KanbanProjectController::class, 'index']);
+Route::get('/kanban/card-types', [KanbanCardTypeController::class, 'index']);
+Route::get('/kanban/priorities', [KanbanPriorityController::class, 'index']);
 Route::post('/rosters/resolve-links', [RosterController::class, 'resolveLinks']);
 Route::get('/factions/{shortname}/datasets', [DatasetController::class, 'index']);
 Route::get('/factions/{shortname}/flags', [RosterFlagController::class, 'index']);
@@ -385,4 +397,59 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/hierarchies/{hierarchy}/permissions', [HierarchyPermissionController::class, 'index']);
     Route::put('/hierarchies/{hierarchy}/permissions', [HierarchyPermissionController::class, 'update']);
     Route::delete('/hierarchies/{hierarchy}/permissions/{permissionId}', [HierarchyPermissionController::class, 'destroy']);
+
+    // Kanban Project Management
+    Route::post('/factions/{shortname}/kanban/projects', [KanbanProjectController::class, 'store']);
+    Route::put('/kanban/projects/{project}', [KanbanProjectController::class, 'update']);
+    Route::delete('/kanban/projects/{project}', [KanbanProjectController::class, 'destroy']);
+    Route::put('/factions/{shortname}/kanban/projects/reorder', [KanbanProjectController::class, 'reorder']);
+    Route::get('/kanban/projects/{project}/assignees', [KanbanProjectController::class, 'getAssignees']);
+
+    // Kanban Project Permission Management
+    Route::get('/kanban/projects/{project}/permissions', [KanbanProjectPermissionController::class, 'index']);
+    Route::put('/kanban/projects/{project}/permissions', [KanbanProjectPermissionController::class, 'update']);
+    Route::delete('/kanban/projects/{project}/permissions/{permissionId}', [KanbanProjectPermissionController::class, 'destroy']);
+
+    // Kanban Card Type Management
+    Route::post('/kanban/card-types', [KanbanCardTypeController::class, 'store']);
+    Route::put('/kanban/card-types/{cardType}', [KanbanCardTypeController::class, 'update']);
+    Route::delete('/kanban/card-types/{cardType}', [KanbanCardTypeController::class, 'destroy']);
+
+    // Kanban Priority Management
+    Route::post('/kanban/priorities', [KanbanPriorityController::class, 'store']);
+    Route::put('/kanban/priorities/{priority}', [KanbanPriorityController::class, 'update']);
+    Route::delete('/kanban/priorities/{priority}', [KanbanPriorityController::class, 'destroy']);
+
+    // Kanban Status (Column) Management
+    Route::post('/kanban/projects/{project}/statuses', [KanbanStatusController::class, 'store']);
+    Route::put('/kanban/statuses/{status}', [KanbanStatusController::class, 'update']);
+    Route::delete('/kanban/statuses/{status}', [KanbanStatusController::class, 'destroy']);
+    Route::put('/kanban/projects/{project}/statuses/reorder', [KanbanStatusController::class, 'reorder']);
+
+    // Kanban Label Management
+    Route::get('/kanban/projects/{project}/labels', [KanbanLabelController::class, 'index']);
+    Route::post('/kanban/projects/{project}/labels', [KanbanLabelController::class, 'store']);
+    Route::put('/kanban/labels/{label}', [KanbanLabelController::class, 'update']);
+    Route::delete('/kanban/labels/{label}', [KanbanLabelController::class, 'destroy']);
+
+    // Kanban Card Management
+    Route::get('/kanban/cards/{card}', [KanbanCardController::class, 'show']);
+    Route::post('/kanban/projects/{project}/cards', [KanbanCardController::class, 'store']);
+    Route::put('/kanban/cards/{card}', [KanbanCardController::class, 'update']);
+    Route::delete('/kanban/cards/{card}', [KanbanCardController::class, 'destroy']);
+    Route::post('/kanban/cards/{card}/move', [KanbanCardController::class, 'move']);
+    Route::get('/kanban/projects/{project}/archived', [KanbanProjectController::class, 'archivedCards']);
+    Route::post('/kanban/cards/{card}/archive', [KanbanCardController::class, 'archiveCard']);
+    Route::post('/kanban/cards/{card}/restore', [KanbanCardController::class, 'restoreCard']);
+    Route::get('/kanban/cards/{card}/activity', [KanbanCardController::class, 'activity']);
+
+    // Kanban Comment Management
+    Route::post('/kanban/cards/{card}/comments', [KanbanCommentController::class, 'store']);
+    Route::delete('/kanban/comments/{comment}', [KanbanCommentController::class, 'destroy']);
+
+    // Kanban Subtask Management
+    Route::post('/kanban/cards/{card}/subtasks', [KanbanSubtaskController::class, 'store']);
+    Route::put('/kanban/subtasks/{subtask}', [KanbanSubtaskController::class, 'update']);
+    Route::delete('/kanban/subtasks/{subtask}', [KanbanSubtaskController::class, 'destroy']);
+    Route::put('/kanban/cards/{card}/subtasks/reorder', [KanbanSubtaskController::class, 'reorder']);
 });

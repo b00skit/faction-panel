@@ -242,4 +242,9 @@ class Faction extends Model
     {
         return $this->hasMany(GtawSyncLog::class);
     }
+
+    public function kanbanProjects()
+    {
+        return $this->hasMany(KanbanProject::class, 'faction_id');
+    }
 }

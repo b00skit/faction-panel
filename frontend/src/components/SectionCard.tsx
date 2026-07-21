@@ -363,7 +363,7 @@ export const SectionCard: React.FC<SectionCardProps> = ({
         </div>
         
         {/* Rows for master/subsection/dynamic */}
-        {(section.contents?.length > 0 || (editMode && !isDynamic) || !section.children || section.children.length === 0) && (
+        {((section.contents?.length ?? 0) > 0 || (editMode && !isDynamic) || !section.children || section.children.length === 0) && (
             <RosterTable 
                 sectionId={section.id}
                 contents={section.contents || []} 
@@ -471,7 +471,7 @@ export const SectionCard: React.FC<SectionCardProps> = ({
       </div>
 
       {/* Main Section Content / Rows */}
-      {section.type !== 'content' && (section.contents?.length > 0 || (editMode && !isDynamic) || !section.children || section.children.length === 0) && (
+      {section.type !== 'content' && ((section.contents?.length ?? 0) > 0 || (editMode && !isDynamic) || !section.children || section.children.length === 0) && (
         <RosterTable 
           sectionId={section.id}
           contents={section.contents || []} 

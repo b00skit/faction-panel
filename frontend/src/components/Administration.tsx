@@ -108,7 +108,7 @@ const Administration: React.FC<{ faction: any; user: any; permissions: string[] 
             title: 'Synchronize Roster Data',
             message: 'This will re-evaluate all auto-applied checkboxes and tags across all rosters based on the latest data in your record databases. This process may take a few moments.',
             confirmText: 'Sync All Data',
-            variant: 'accent'
+            variant: 'info'
         });
 
         if (!confirmed) return;

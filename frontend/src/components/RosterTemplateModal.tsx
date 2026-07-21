@@ -416,7 +416,7 @@ export const RosterTemplateModal: React.FC<RosterTemplateModalProps> = ({ shortn
                                                                                     <button 
                                                                                         onClick={() => {
                                                                                             setAddingItem({ idx, type: 'checkbox' });
-                                                                                            setNewItem({ label: '', color: '#3b82f6', auto_apply_field: '' });
+                                                                                            setNewItem({ label: '', color: '#3b82f6', auto_apply_field: '', auto_apply_value: '' });
                                                                                         }} 
                                                                                         className="px-2 py-1 border border-dashed border-border rounded text-[8px] font-bold uppercase text-muted hover:border-accent transition-all"
                                                                                     >+ Add</button>
@@ -442,7 +442,7 @@ export const RosterTemplateModal: React.FC<RosterTemplateModalProps> = ({ shortn
                                                                                     <button 
                                                                                         onClick={() => {
                                                                                             setAddingItem({ idx, type: 'tag' });
-                                                                                            setNewItem({ label: '', color: '#3b82f6', auto_apply_field: '' });
+                                                                                            setNewItem({ label: '', color: '#3b82f6', auto_apply_field: '', auto_apply_value: '' });
                                                                                         }} 
                                                                                         className="px-2 py-1 border border-dashed border-accent/30 rounded text-[8px] font-bold uppercase text-accent/50 hover:border-accent transition-all"
                                                                                     >+ Add</button>

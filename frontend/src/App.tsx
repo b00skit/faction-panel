@@ -34,6 +34,7 @@ import Credits from './components/Credits';
 import Changelog from './components/Changelog';
 import FactionForms from './components/FactionForms';
 import FactionNotifications from './components/FactionNotifications';
+import { FactionKanban } from './components/FactionKanban';
 import GlobalLayout from './layouts/GlobalLayout';
 import FactionLayout from './layouts/FactionLayout';
 import { ConfirmationProvider } from './components/ConfirmationProvider';
@@ -239,6 +240,7 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
   const canViewSandboxRoster = user?.is_superadmin || permissions.includes('utilize_sandbox_rosters');
   const canViewFactionHierarchy = user?.is_superadmin || permissions.includes('view_faction_hierarchy') || permissions.includes('global_hierarchy_moderation');
   const canViewNotifications = user?.is_superadmin || permissions.includes('view_notifications') || permissions.includes('configure_notifications') || permissions.includes('administrator');
+  const canViewKanban = user?.is_superadmin || permissions.includes('view_faction_projects') || permissions.includes('global_kanban_moderation');
 
   if (location.pathname === `/${shortname}`) {
     return <Navigate to={`/${shortname}/roster`} replace />;
@@ -265,6 +267,7 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
       canViewSandboxRoster={canViewSandboxRoster}
       canViewFactionHierarchy={canViewFactionHierarchy}
       canViewNotifications={canViewNotifications}
+      canViewKanban={canViewKanban}
       siteVersion={siteVersion}
     >
       <Routes>
@@ -321,6 +324,13 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
               rosters={rosters}
               factionId={factionData?.id}
             />
+          ) : <Navigate to={`/${shortname}/roster`} />
+        } />
+        <Route path="kanban/*" element={
+          canViewKanban ? (
+            <main className="main flex-1 overflow-auto">
+              <FactionKanban user={user} permissions={permissions} />
+            </main>
           ) : <Navigate to={`/${shortname}/roster`} />
         } />
         <Route path="forms/*" element={
@@ -440,7 +450,8 @@ const TitleUpdater = ({ user }: { user: any }) => {
       'admin': 'Administration',
       'roster': 'Roster',
       'diagrams': 'Faction Diagrams',
-      'hierarchy': 'Faction Diagrams'
+      'hierarchy': 'Faction Diagrams',
+      'kanban': 'Faction Kanban'
     };
     const displayPage = pageMap[page] || (page.charAt(0).toUpperCase() + page.slice(1));
     document.title = `${shortname} · ${displayPage}`;
