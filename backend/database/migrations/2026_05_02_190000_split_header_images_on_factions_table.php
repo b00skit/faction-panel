@@ -12,8 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('factions', function (Blueprint $table) {
-            $table->renameColumn('header_image', 'header_image_dark');
             $table->string('header_image_light')->nullable()->after('header_image');
+            $table->renameColumn('header_image', 'header_image_dark');
         });
     }
 

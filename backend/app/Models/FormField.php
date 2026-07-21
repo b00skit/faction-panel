@@ -31,6 +31,10 @@ class FormField extends Model
         'width',
     ];
 
+    protected $hidden = [
+        'correct_answer',
+    ];
+
     protected $casts = [
         'options' => 'array',
         'validation_rules' => 'array',

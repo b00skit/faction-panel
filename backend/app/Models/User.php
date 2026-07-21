@@ -754,7 +754,7 @@ class User extends Authenticatable
             // Public permissions (group_id and role_id are null)
             $publicPerms = $form->formPermissions->whereNull('group_id')->whereNull('role_id')->first();
             if ($publicPerms) {
-                $permissionSets->push($publicPerms->permissions);
+                $permissionSets->push(json_decode($publicPerms->permissions));
             }
 
             if ($user) {

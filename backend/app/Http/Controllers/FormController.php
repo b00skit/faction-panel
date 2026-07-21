@@ -90,11 +90,29 @@ class FormController extends Controller
     {
         if (! User::hasFormPermission(Auth::user(), $form, 'view_form')) {
             return response()->json(['message' => 'Forbidden'], 403);
-        }
-
+        }   
+        
         $this->audit('form.show', "Viewed form '{$form->name}'", null, $form);
+        $form->load(['creator:id,username', 'statuses.stages', 'stages.sections.fields']);
 
-        return response()->json($form->load(['creator:id,username', 'statuses.stages', 'stages.sections.fields']));
+        $extendedAccess = (
+            User::hasFormPermission(Auth::user(), $form, 'form_editor') ||
+            User::hasFormPermission(Auth::user(), $form, 'view_submissions')
+        ); 
+
+        // See in detail all sections, including correct answers
+        // It could also be used that you can only see fields from your active stage
+        if($extendedAccess) {
+            $form->stages->each(function ($st) {
+                $st->sections->each(function ($sec) {
+                    $sec->fields->each(function ($f) {
+                        $f->makeVisible("correct_answer");
+                    });
+                });
+            });
+        };
+
+        return response()->json($form);
     }
 
     public function update(Request $request, string $shortname, Form $form)
