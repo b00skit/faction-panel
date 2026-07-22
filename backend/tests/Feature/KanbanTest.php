@@ -541,5 +541,146 @@ test('cards receive independent per-project count values', function () {
     expect($card3->count)->toBe(2);
 });
 
+test('assignees endpoint filters users by view_card_details permission', function () {
+    $regularUser1 = User::factory()->create(['is_superadmin' => false]);
+    $regularUser2 = User::factory()->create(['is_superadmin' => false]);
+    $this->faction->users()->attach([$regularUser1->id, $regularUser2->id]);
+
+    $projectOwner = User::factory()->create(['is_superadmin' => false]);
+    $this->faction->users()->attach($projectOwner->id);
+
+    $project = KanbanProject::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Restricted Project',
+        'created_by' => $projectOwner->id,
+    ]);
+
+    // Give regularUser1 only view_project permission
+    KanbanProjectPermission::create([
+        'project_id' => $project->id,
+        'group_id' => null,
+        'role_id' => null,
+        'permissions' => ['view_project'],
+    ]);
+
+    // Give regularUser2 view_card_details permission via explicit role or group
+    $role = \App\Models\Role::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Test Role',
+        'hierarchy_order' => 1,
+    ]);
+    $regularUser2->roles()->attach($role->id);
+    KanbanProjectPermission::create([
+        'project_id' => $project->id,
+        'group_id' => null,
+        'role_id' => $role->id,
+        'permissions' => ['view_project', 'view_card_details'],
+    ]);
+
+    $res = $this->actingAs($projectOwner)
+        ->getJson("/api/kanban/projects/{$project->id}/assignees");
+
+    $res->assertStatus(200);
+    $assigneeIds = collect($res->json())->pluck('id')->toArray();
+
+    // projectOwner is creator -> included
+    expect($assigneeIds)->toContain($projectOwner->id);
+    // regularUser2 has view_card_details -> included
+    expect($assigneeIds)->toContain($regularUser2->id);
+    // regularUser1 only has view_project -> NOT included
+    expect($assigneeIds)->not->toContain($regularUser1->id);
+});
+
+test('can link and unlink cards between each other', function () {
+    $project = KanbanProject::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Linked Cards Project',
+        'created_by' => $this->user->id,
+    ]);
+    $status = KanbanStatus::create(['project_id' => $project->id, 'name' => 'To Do', 'order' => 0]);
+
+    $card1 = KanbanCard::create([
+        'project_id' => $project->id,
+        'status_id' => $status->id,
+        'card_type_id' => $this->cardType->id,
+        'title' => 'Card 1',
+    ]);
+    $card2 = KanbanCard::create([
+        'project_id' => $project->id,
+        'status_id' => $status->id,
+        'card_type_id' => $this->cardType->id,
+        'title' => 'Card 2',
+    ]);
+
+    // Link card2 to card1
+    $response = $this->actingAs($this->user)
+        ->postJson("/api/kanban/cards/{$card1->id}/links", [
+            'linked_card_id' => $card2->id,
+        ]);
+
+    $response->assertStatus(200);
+    $this->assertDatabaseHas('kanban_card_links', [
+        'card_id' => $card1->id,
+        'linked_card_id' => $card2->id,
+    ]);
+
+    // Unlink card
+    $unlinkRes = $this->actingAs($this->user)
+        ->deleteJson("/api/kanban/cards/{$card1->id}/links/{$card2->id}");
+
+    $unlinkRes->assertStatus(200);
+    $this->assertDatabaseMissing('kanban_card_links', [
+        'card_id' => $card1->id,
+        'linked_card_id' => $card2->id,
+    ]);
+});
+
+test('user mentions generate notifications and card mentions auto-link cards', function () {
+    $mentionedUser = User::factory()->create(['username' => 'JaneDoe', 'is_superadmin' => false]);
+    $this->faction->users()->attach($mentionedUser->id);
+
+    $project = KanbanProject::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Mention Project',
+        'prefix' => 'MTN',
+        'created_by' => $this->user->id,
+    ]);
+    $status = KanbanStatus::create(['project_id' => $project->id, 'name' => 'To Do', 'order' => 0]);
+
+    $card1 = KanbanCard::create([
+        'project_id' => $project->id,
+        'status_id' => $status->id,
+        'card_type_id' => $this->cardType->id,
+        'title' => 'First Card',
+    ]);
+    $card2 = KanbanCard::create([
+        'project_id' => $project->id,
+        'status_id' => $status->id,
+        'card_type_id' => $this->cardType->id,
+        'title' => 'Second Card',
+    ]);
+
+    // Post comment mentioning @JaneDoe and #(card1->count)
+    $response = $this->actingAs($this->user)
+        ->postJson("/api/kanban/cards/{$card2->id}/comments", [
+            'comment' => "Hey @JaneDoe check out #({$card1->count}) for details!",
+        ]);
+
+    $response->assertStatus(201);
+
+    // Notification created for JaneDoe
+    $this->assertDatabaseHas('notifications', [
+        'user_id' => $mentionedUser->id,
+        'type' => 'kanban_mention',
+    ]);
+
+    // Card 1 and Card 2 auto-linked
+    $this->assertDatabaseHas('kanban_card_links', [
+        'card_id' => $card2->id,
+        'linked_card_id' => $card1->id,
+    ]);
+});
+
+
 
 

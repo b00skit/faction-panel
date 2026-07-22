@@ -47,6 +47,8 @@ class KanbanCommentController extends Controller
             'comment' => $validated['comment'],
         ]);
 
+        \App\Services\KanbanMentionService::processText($card, $validated['comment'], Auth::user());
+
         $project = $card->project;
         $this->audit('kanban.comment.create', "Commented on card '{$card->title}' in project '{$project->name}'", null, $project, null, $comment->getAttributes());
 

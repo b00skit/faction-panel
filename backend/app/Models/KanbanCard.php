@@ -106,4 +106,14 @@ class KanbanCard extends Model
     {
         return $this->hasMany(KanbanComment::class, 'card_id')->orderBy('created_at', 'desc');
     }
+
+    public function linkedCards()
+    {
+        return $this->belongsToMany(KanbanCard::class, 'kanban_card_links', 'card_id', 'linked_card_id')->withTimestamps();
+    }
+
+    public function linkedByCards()
+    {
+        return $this->belongsToMany(KanbanCard::class, 'kanban_card_links', 'linked_card_id', 'card_id')->withTimestamps();
+    }
 }

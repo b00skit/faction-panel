@@ -609,6 +609,7 @@ export interface KanbanCard {
   labels?: KanbanLabel[];
   subtasks?: KanbanSubtask[] | { completed: number; total: number } | null;
   comments?: KanbanComment[] | number | null;
+  linked_cards?: KanbanCard[];
   created_at?: string;
   updated_at?: string;
 }

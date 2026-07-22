@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
@@ -13,7 +13,8 @@ import {
   CheckSquare, Bookmark, ShieldAlert, Users, Trash, Award,
   Circle, Square, Triangle, Hexagon, Star, Heart, Flame, Target,
   ArrowUp, ArrowDown, ArrowRight, ChevronsUp, ChevronsDown,
-  Eye, EyeOff, FolderKanban, SlidersHorizontal, Layers, Kanban
+  Eye, EyeOff, FolderKanban, SlidersHorizontal, Layers, Kanban,
+  Link as LinkIcon, Unlink
 } from 'lucide-react';
 import { KanbanProject, KanbanCard, KanbanCardType, KanbanLabel, KanbanStatus, KanbanPriority } from '../types';
 
@@ -159,6 +160,12 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
   const [selectedCardDetails, setSelectedCardDetails] = useState<KanbanCard | null>(null);
   const [assigneesList, setAssigneesList] = useState<any[]>([]);
   const [assigneeSearch, setAssigneeSearch] = useState('');
+
+  // Card linking & mention states
+  const [showLinkPopover, setShowLinkPopover] = useState(false);
+  const [linkSearchQuery, setLinkSearchQuery] = useState('');
+  const [commentMentionState, setCommentMentionState] = useState<{ type: 'user' | 'card' | null; query: string }>({ type: null, query: '' });
+  const [descMentionState, setDescMentionState] = useState<{ type: 'user' | 'card' | null; query: string }>({ type: null, query: '' });
 
   // Card title inline editing state (only save on Enter/blur)
   const [editingCardTitle, setEditingCardTitle] = useState<string | null>(null);
@@ -480,6 +487,183 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       fetchArchivedCards();
     }
   }, [viewMode, activeProject]);
+
+  // Card Linking Handlers
+  const handleLinkCard = async (targetCardId: number) => {
+    if (!selectedCardDetails) return;
+    try {
+      const res = await api.post(`/kanban/cards/${selectedCardDetails.id}/links`, {
+        linked_card_id: targetCardId,
+      });
+      setSelectedCardDetails(res.data);
+      setShowLinkPopover(false);
+      setLinkSearchQuery('');
+      toast.success('Card linked');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to link card');
+    }
+  };
+
+  const handleUnlinkCard = async (linkedCardId: number) => {
+    if (!selectedCardDetails) return;
+    try {
+      const res = await api.delete(`/kanban/cards/${selectedCardDetails.id}/links/${linkedCardId}`);
+      setSelectedCardDetails(res.data);
+      toast.success('Card unlinked');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to unlink card');
+    }
+  };
+
+  const handleNavigateToCard = (projectKeyOrId: number | string, cardId: number) => {
+    navigate(`/${shortname}/kanban/projects/${projectKeyOrId}/cards/${cardId}`);
+    fetchCardDetails(cardId);
+    fetchActivity(1);
+  };
+
+  const availableCardsToLink = useMemo(() => {
+    if (!activeProject || !selectedCardDetails) return [];
+    const linkedIds = (selectedCardDetails.linked_cards || []).map((c: any) => c.id);
+    const allProjCards = activeProject.statuses?.flatMap((s: any) => s.cards || []) || [];
+    return allProjCards.filter(
+      (c: any) =>
+        c.id !== selectedCardDetails.id &&
+        !linkedIds.includes(c.id) &&
+        (c.title.toLowerCase().includes(linkSearchQuery.toLowerCase()) ||
+          String(c.count).includes(linkSearchQuery) ||
+          String(c.id).includes(linkSearchQuery))
+    );
+  }, [activeProject, selectedCardDetails, linkSearchQuery]);
+
+  const renderMentionText = (text: string) => {
+    if (!text) return null;
+    const regex = /(@[a-zA-Z0-9_.\-]+)|(#(?:\(?([A-Za-z0-9_#-]+)\)?))/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index));
+      }
+
+      const fullMatch = match[0];
+      const userMention = match[1];
+      const cardToken = match[3];
+
+      if (userMention) {
+        parts.push(
+          <span
+            key={match.index}
+            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-accent/15 text-accent font-semibold text-[11px] select-none"
+          >
+            {userMention}
+          </span>
+        );
+      } else if (cardToken) {
+        let displayLabel = fullMatch;
+        let targetCardId: number | null = null;
+        let targetProjectId: number | string | null = null;
+
+        if (cardToken.includes('-')) {
+          const [prefix, countStr] = cardToken.split('-');
+          const count = parseInt(countStr, 10);
+          const proj = projects.find((p) => p.prefix === prefix);
+          if (proj && proj.statuses) {
+            const found = proj.statuses.flatMap((s) => s.cards || []).find((c) => c.count === count);
+            if (found) {
+              targetCardId = found.id;
+              targetProjectId = proj.prefix || proj.id;
+              displayLabel = `#${proj.prefix || ''}-${found.count ?? found.id}`;
+            }
+          }
+        } else if (!isNaN(Number(cardToken))) {
+          const num = parseInt(cardToken, 10);
+          const foundActive = activeProject?.statuses?.flatMap((s) => s.cards || []).find((c) => c.count === num || c.id === num);
+          if (foundActive) {
+            targetCardId = foundActive.id;
+            targetProjectId = activeProject?.prefix || activeProject?.id || null;
+            displayLabel = `#${activeProject?.prefix ? activeProject.prefix + '-' : ''}${foundActive.count ?? foundActive.id}`;
+          } else {
+            for (const p of projects) {
+              const f = p.statuses?.flatMap((s) => s.cards || []).find((c) => c.id === num || c.count === num);
+              if (f) {
+                targetCardId = f.id;
+                targetProjectId = p.prefix || p.id;
+                displayLabel = `#${p.prefix ? p.prefix + '-' : ''}${f.count ?? f.id}`;
+                break;
+              }
+            }
+          }
+        }
+
+        if (targetCardId && targetProjectId) {
+          parts.push(
+            <button
+              key={match.index}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleNavigateToCard(targetProjectId!, targetCardId!);
+              }}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-surface border border-border text-accent font-mono font-bold text-[10px] hover:border-accent hover:bg-accent/10 transition-colors cursor-pointer shadow-sm mx-0.5"
+            >
+              <LinkIcon size={10} />
+              {displayLabel}
+            </button>
+          );
+        } else {
+          parts.push(
+            <span
+              key={match.index}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-surface border border-border text-text font-mono font-bold text-[10px] mx-0.5"
+            >
+              {fullMatch}
+            </span>
+          );
+        }
+      }
+
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return parts;
+  };
+
+  const handleTextareaChangeWithMentions = (
+    val: string,
+    setText: (v: string) => void,
+    setSuggestionState: (state: { type: 'user' | 'card' | null; query: string }) => void
+  ) => {
+    setText(val);
+    const userMatch = val.match(/@([a-zA-Z0-9_.\-]*)$/);
+    const cardMatch = val.match(/#([a-zA-Z0-9_.\-]*)$/);
+
+    if (userMatch) {
+      setSuggestionState({ type: 'user', query: userMatch[1] });
+    } else if (cardMatch) {
+      setSuggestionState({ type: 'card', query: cardMatch[1] });
+    } else {
+      setSuggestionState({ type: null, query: '' });
+    }
+  };
+
+  const insertMentionIntoText = (
+    currentText: string,
+    setText: (v: string) => void,
+    mentionType: 'user' | 'card',
+    insertValue: string,
+    setSuggestionState: (state: { type: 'user' | 'card' | null; query: string }) => void
+  ) => {
+    const regex = mentionType === 'user' ? /@([a-zA-Z0-9_.\-]*)$/ : /#([a-zA-Z0-9_.\-]*)$/;
+    const newText = currentText.replace(regex, mentionType === 'user' ? `@${insertValue} ` : `#(${insertValue}) `);
+    setText(newText);
+    setSuggestionState({ type: null, query: '' });
+  };
 
   // Project CRUD
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -3336,23 +3520,66 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                         <FileText size={12} /> Description
                       </h4>
                       {projectPerms.modify_card ? (
-                        <div className="space-y-2">
+                        <div className="space-y-2 relative">
                           <textarea
                             value={cardDescription}
-                            onChange={(e) => setCardDescription(e.target.value)}
-                            placeholder="Add a detailed description..."
+                            onChange={(e) => handleTextareaChangeWithMentions(e.target.value, setCardDescription, setDescMentionState)}
+                            placeholder="Add a detailed description... (Use @ for users, # for cards)"
                             className="w-full bg-surface border border-border rounded-xl p-3 text-xs focus:outline-none focus:border-accent text-text h-24 font-medium"
                           />
+                          {/* Mention Suggestions Popup for Description */}
+                          {descMentionState.type && (
+                            <div className="absolute left-0 bottom-full mb-1 w-64 bg-surface border border-border rounded-xl shadow-xl p-1 z-50 max-h-40 overflow-y-auto scrollbar-thin">
+                              <div className="px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-muted border-b border-border/50">
+                                {descMentionState.type === 'user' ? 'Mention User' : 'Mention Card'}
+                              </div>
+                              {descMentionState.type === 'user' ? (
+                                assigneesList
+                                  .filter((u: any) => u.username.toLowerCase().includes(descMentionState.query.toLowerCase()))
+                                  .map((u: any) => (
+                                    <button
+                                      key={u.id}
+                                      type="button"
+                                      onClick={() => insertMentionIntoText(cardDescription, setCardDescription, 'user', u.username, setDescMentionState)}
+                                      className="w-full text-left px-2 py-1 hover:bg-accent/10 rounded-lg text-xs font-semibold text-text hover:text-accent flex items-center gap-2"
+                                    >
+                                      <User size={12} className="text-muted" />
+                                      <span>@{u.username}</span>
+                                    </button>
+                                  ))
+                              ) : (
+                                (activeProject?.statuses?.flatMap((s: any) => s.cards || []) || [])
+                                  .filter((c: any) => c.title.toLowerCase().includes(descMentionState.query.toLowerCase()) || String(c.count).includes(descMentionState.query))
+                                  .map((c: any) => (
+                                    <button
+                                      key={c.id}
+                                      type="button"
+                                      onClick={() => insertMentionIntoText(cardDescription, setCardDescription, 'card', `${activeProject?.prefix ? activeProject.prefix + '-' : ''}${c.count ?? c.id}`, setDescMentionState)}
+                                      className="w-full text-left px-2 py-1 hover:bg-accent/10 rounded-lg text-xs font-semibold text-text hover:text-accent flex items-center justify-between truncate"
+                                    >
+                                      <span className="font-mono font-bold text-accent">#{activeProject?.prefix ? `${activeProject.prefix}-` : ''}{c.count ?? c.id}</span>
+                                      <span className="truncate ml-2 text-muted">{c.title}</span>
+                                    </button>
+                                  ))
+                              )}
+                            </div>
+                          )}
                           {cardDescription !== (selectedCardDetails.description || '') && (
                             <div className="flex gap-1.5 justify-end">
                               <button
-                                onClick={() => handleUpdateCardFields({ description: cardDescription })}
+                                onClick={() => {
+                                  setDescMentionState({ type: null, query: '' });
+                                  handleUpdateCardFields({ description: cardDescription });
+                                }}
                                 className="px-3 py-1.5 bg-accent hover:bg-accent/90 text-white rounded text-[10px] font-bold uppercase tracking-wider cursor-pointer"
                               >
                                 Save Description
                               </button>
                               <button
-                                onClick={() => setCardDescription(selectedCardDetails.description || '')}
+                                onClick={() => {
+                                  setDescMentionState({ type: null, query: '' });
+                                  setCardDescription(selectedCardDetails.description || '');
+                                }}
                                 className="px-3 py-1.5 bg-surface text-text hover:bg-surface-hover border border-border rounded text-[10px] font-bold uppercase tracking-wider cursor-pointer"
                               >
                                 Cancel
@@ -3361,9 +3588,9 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                           )}
                         </div>
                       ) : (
-                        <p className="text-xs bg-surface/30 p-3 rounded-xl border border-border font-medium text-text-light whitespace-pre-wrap">
-                          {selectedCardDetails.description || 'No description provided.'}
-                        </p>
+                        <div className="text-xs bg-surface/30 p-3 rounded-xl border border-border font-medium text-text-light whitespace-pre-wrap leading-relaxed">
+                          {selectedCardDetails.description ? renderMentionText(selectedCardDetails.description) : 'No description provided.'}
+                        </div>
                       )}
                     </div>
                   )}
@@ -3459,14 +3686,59 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                       </h4>
 
                       {/* Add Comment */}
-                      <form onSubmit={handleAddComment} className="flex gap-2 items-start">
-                        <textarea
-                          required
-                          placeholder="Write a comment..."
-                          value={newCommentText}
-                          onChange={(e) => setNewCommentText(e.target.value)}
-                          className="flex-1 bg-surface border border-border rounded-xl p-3 text-xs focus:outline-none focus:border-accent text-text h-16 font-medium"
-                        />
+                      <form
+                        onSubmit={(e) => {
+                          setCommentMentionState({ type: null, query: '' });
+                          handleAddComment(e);
+                        }}
+                        className="flex gap-2 items-start relative"
+                      >
+                        <div className="flex-1 relative">
+                          <textarea
+                            required
+                            placeholder="Write a comment... (Use @ for users, # for cards)"
+                            value={newCommentText}
+                            onChange={(e) => handleTextareaChangeWithMentions(e.target.value, setNewCommentText, setCommentMentionState)}
+                            className="w-full bg-surface border border-border rounded-xl p-3 text-xs focus:outline-none focus:border-accent text-text h-16 font-medium"
+                          />
+                          {/* Mention Suggestions Popup for Comment */}
+                          {commentMentionState.type && (
+                            <div className="absolute left-0 bottom-full mb-1 w-64 bg-surface border border-border rounded-xl shadow-xl p-1 z-50 max-h-40 overflow-y-auto scrollbar-thin">
+                              <div className="px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-muted border-b border-border/50">
+                                {commentMentionState.type === 'user' ? 'Mention User' : 'Mention Card'}
+                              </div>
+                              {commentMentionState.type === 'user' ? (
+                                assigneesList
+                                  .filter((u: any) => u.username.toLowerCase().includes(commentMentionState.query.toLowerCase()))
+                                  .map((u: any) => (
+                                    <button
+                                      key={u.id}
+                                      type="button"
+                                      onClick={() => insertMentionIntoText(newCommentText, setNewCommentText, 'user', u.username, setCommentMentionState)}
+                                      className="w-full text-left px-2 py-1 hover:bg-accent/10 rounded-lg text-xs font-semibold text-text hover:text-accent flex items-center gap-2"
+                                    >
+                                      <User size={12} className="text-muted" />
+                                      <span>@{u.username}</span>
+                                    </button>
+                                  ))
+                              ) : (
+                                (activeProject?.statuses?.flatMap((s: any) => s.cards || []) || [])
+                                  .filter((c: any) => c.title.toLowerCase().includes(commentMentionState.query.toLowerCase()) || String(c.count).includes(commentMentionState.query))
+                                  .map((c: any) => (
+                                    <button
+                                      key={c.id}
+                                      type="button"
+                                      onClick={() => insertMentionIntoText(newCommentText, setNewCommentText, 'card', `${activeProject?.prefix ? activeProject.prefix + '-' : ''}${c.count ?? c.id}`, setCommentMentionState)}
+                                      className="w-full text-left px-2 py-1 hover:bg-accent/10 rounded-lg text-xs font-semibold text-text hover:text-accent flex items-center justify-between truncate"
+                                    >
+                                      <span className="font-mono font-bold text-accent">#{activeProject?.prefix ? `${activeProject.prefix}-` : ''}{c.count ?? c.id}</span>
+                                      <span className="truncate ml-2 text-muted">{c.title}</span>
+                                    </button>
+                                  ))
+                              )}
+                            </div>
+                          )}
+                        </div>
                         <button
                           type="submit"
                           className="px-4 py-2 bg-accent hover:bg-accent/90 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest shrink-0 cursor-pointer"
@@ -3503,9 +3775,9 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                                         {new Date(item.created_at).toLocaleDateString()} at {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                       </span>
                                     </div>
-                                    <p className="text-xs text-text font-medium leading-relaxed whitespace-pre-wrap">
-                                      {item.comment}
-                                    </p>
+                                    <div className="text-xs text-text font-medium leading-relaxed whitespace-pre-wrap">
+                                      {renderMentionText(item.comment)}
+                                    </div>
                                   </div>
                                   {canDeleteComment && (
                                     <button
@@ -3728,6 +4000,103 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                       </div>
                     </div>
                   )}
+
+                  {/* Linked Cards Section */}
+                  <div className="space-y-2 border-b border-border pb-4">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted flex items-center gap-1">
+                        <LinkIcon size={11} /> Linked Cards
+                      </label>
+                      {projectPerms.modify_card && (
+                        <button
+                          type="button"
+                          onClick={() => setShowLinkPopover(!showLinkPopover)}
+                          className="text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-border bg-surface text-muted hover:border-accent hover:text-accent transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <Plus size={10} /> Link Card
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Popover to search & link a card */}
+                    {showLinkPopover && (
+                      <div className="p-2 border border-border bg-surface rounded-xl space-y-2 shadow-lg">
+                        <input
+                          type="text"
+                          placeholder="Search card title or #count..."
+                          value={linkSearchQuery}
+                          onChange={(e) => setLinkSearchQuery(e.target.value)}
+                          className="w-full bg-surface/50 border border-border rounded-lg px-2.5 py-1 text-xs font-medium text-text focus:outline-none focus:border-accent"
+                        />
+                        <div className="max-h-36 overflow-y-auto space-y-1 scrollbar-thin">
+                          {availableCardsToLink.length === 0 ? (
+                            <p className="text-[9px] text-muted font-bold tracking-wider uppercase py-1 text-center">
+                              No matching cards available.
+                            </p>
+                          ) : (
+                            availableCardsToLink.map((c: any) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => handleLinkCard(c.id)}
+                                className="w-full text-left flex items-center justify-between p-1.5 hover:bg-accent/10 rounded-lg text-xs transition-colors cursor-pointer group"
+                              >
+                                <div className="truncate flex items-center gap-1.5">
+                                  <span className="text-[9px] font-mono font-bold text-accent bg-accent/10 px-1 rounded">
+                                    #{c.prefix || activeProject?.prefix || ''}-{c.count ?? c.id}
+                                  </span>
+                                  <span className="font-medium text-text truncate group-hover:text-accent">{c.title}</span>
+                                </div>
+                                <Plus size={12} className="text-muted group-hover:text-accent shrink-0" />
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* List of currently linked cards */}
+                    <div className="space-y-1">
+                      {selectedCardDetails.linked_cards && selectedCardDetails.linked_cards.length > 0 ? (
+                        selectedCardDetails.linked_cards.map((linkedCard: any) => {
+                          const linkedProjPrefix = linkedCard.project?.prefix || activeProject?.prefix || '';
+                          return (
+                            <div
+                              key={linkedCard.id}
+                              className="flex items-center justify-between p-2 bg-surface/30 border border-border rounded-xl hover:border-border/80 transition-colors group"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => handleNavigateToCard(linkedCard.project?.prefix || linkedCard.project_id || activeProject?.id, linkedCard.id)}
+                                className="flex items-center gap-2 truncate text-left cursor-pointer"
+                              >
+                                <span className="text-[9px] font-mono font-black text-accent bg-accent/15 px-1.5 py-0.5 rounded-md shrink-0">
+                                  #{linkedProjPrefix ? `${linkedProjPrefix}-` : ''}{linkedCard.count ?? linkedCard.id}
+                                </span>
+                                <span className="text-xs font-semibold text-text truncate group-hover:text-accent">
+                                  {linkedCard.title}
+                                </span>
+                              </button>
+                              {projectPerms.modify_card && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUnlinkCard(linkedCard.id)}
+                                  className="text-muted hover:text-danger p-1 hover:bg-danger/10 rounded-lg shrink-0 cursor-pointer transition-colors"
+                                  title="Unlink card"
+                                >
+                                  <X size={12} />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-[9px] text-muted font-bold uppercase tracking-wider p-2 border border-dashed border-border/50 rounded-xl text-center">
+                          No cards linked yet.
+                        </p>
+                      )}
+                    </div>
+                  </div>
 
                   {/* Assignees Selection */}
                   {selectedCardDetails.card_type?.settings.assignee && (

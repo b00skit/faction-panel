@@ -65,7 +65,9 @@ class KanbanCardController extends Controller
             'assignees',
             'labels',
             'cardType',
-            'priority'
+            'priority',
+            'linkedCards.project',
+            'linkedCards.status',
         ]);
 
         return response()->json($card);
@@ -115,7 +117,7 @@ class KanbanCardController extends Controller
 
         KanbanBoardUpdated::dispatch($project->faction_id, $project->id, $card->id, 'card_created');
 
-        return response()->json($card->load(['assignees', 'labels', 'cardType', 'priority', 'row']), 201);
+        return response()->json($card->load(['assignees', 'labels', 'cardType', 'priority', 'row', 'linkedCards.project', 'linkedCards.status']), 201);
     }
 
     public function update(Request $request, KanbanCard $card)
@@ -146,6 +148,10 @@ class KanbanCardController extends Controller
             $card->update($cardFields);
         }
 
+        if ($request->has('description') && !empty($validated['description'])) {
+            \App\Services\KanbanMentionService::processText($card, $validated['description'], Auth::user());
+        }
+
         // Sync assignees
         if ($request->has('assignees')) {
             // Filter superadmins out (Requirement: Skip superadmins)
@@ -166,7 +172,51 @@ class KanbanCardController extends Controller
 
         KanbanBoardUpdated::dispatch($project->faction_id, $project->id, $card->id, 'card_updated');
 
-        return response()->json($card->load(['subtasks', 'comments.user', 'assignees', 'labels', 'cardType', 'priority']));
+        return response()->json($card->load(['subtasks', 'comments.user', 'assignees', 'labels', 'cardType', 'priority', 'linkedCards.project', 'linkedCards.status']));
+    }
+
+    public function linkCard(Request $request, KanbanCard $card)
+    {
+        if (!$this->canModifyCard($card, 'modify_card')) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $validated = $request->validate([
+            'linked_card_id' => 'required|integer|exists:kanban_cards,id',
+        ]);
+
+        $linkedCard = KanbanCard::findOrFail($validated['linked_card_id']);
+
+        if ($linkedCard->id === $card->id) {
+            return response()->json(['message' => 'Cannot link card to itself'], 422);
+        }
+
+        $card->linkedCards()->syncWithoutDetaching([$linkedCard->id]);
+        $linkedCard->linkedCards()->syncWithoutDetaching([$card->id]);
+
+        $project = $card->project;
+        $this->audit('kanban.card.link', "Linked card '{$card->title}' to card '{$linkedCard->title}'", null, $project);
+
+        KanbanBoardUpdated::dispatch($project->faction_id, $project->id, $card->id, 'card_updated');
+
+        return response()->json($card->load(['subtasks', 'comments.user', 'assignees', 'labels', 'cardType', 'priority', 'linkedCards.project', 'linkedCards.status']));
+    }
+
+    public function unlinkCard(KanbanCard $card, KanbanCard $linkedCard)
+    {
+        if (!$this->canModifyCard($card, 'modify_card')) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $card->linkedCards()->detach($linkedCard->id);
+        $linkedCard->linkedCards()->detach($card->id);
+
+        $project = $card->project;
+        $this->audit('kanban.card.unlink', "Unlinked card '{$card->title}' from card '{$linkedCard->title}'", null, $project);
+
+        KanbanBoardUpdated::dispatch($project->faction_id, $project->id, $card->id, 'card_updated');
+
+        return response()->json($card->load(['subtasks', 'comments.user', 'assignees', 'labels', 'cardType', 'priority', 'linkedCards.project', 'linkedCards.status']));
     }
 
     public function destroy(KanbanCard $card)

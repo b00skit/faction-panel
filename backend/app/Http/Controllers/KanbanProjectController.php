@@ -202,7 +202,7 @@ class KanbanProjectController extends Controller
                 return true;
             }
 
-            return User::canViewProject($member, $project);
+            return User::hasProjectPermission($member, $project, 'view_card_details');
         })->map(function ($member) {
             return [
                 'id' => $member->id,

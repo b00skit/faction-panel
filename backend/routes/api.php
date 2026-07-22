@@ -445,6 +445,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/kanban/cards/{card}', [KanbanCardController::class, 'update']);
     Route::delete('/kanban/cards/{card}', [KanbanCardController::class, 'destroy']);
     Route::post('/kanban/cards/{card}/move', [KanbanCardController::class, 'move']);
+    Route::post('/kanban/cards/{card}/links', [KanbanCardController::class, 'linkCard']);
+    Route::delete('/kanban/cards/{card}/links/{linkedCard}', [KanbanCardController::class, 'unlinkCard']);
     Route::get('/kanban/projects/{project}/archived', [KanbanProjectController::class, 'archivedCards']);
     Route::post('/kanban/cards/{card}/archive', [KanbanCardController::class, 'archiveCard']);
     Route::post('/kanban/cards/{card}/restore', [KanbanCardController::class, 'restoreCard']);
