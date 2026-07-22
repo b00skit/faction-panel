@@ -87,6 +87,7 @@ class KanbanCardController extends Controller
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'status_id' => 'required|integer|exists:kanban_statuses,id',
+            'row_id' => 'nullable|integer|exists:kanban_rows,id',
             'card_type_id' => 'required|integer|exists:kanban_card_types,id',
             'priority_id' => 'nullable|integer|exists:kanban_priorities,id',
         ]);
@@ -97,10 +98,12 @@ class KanbanCardController extends Controller
         $maxOrder = $status->cards()->max('order') ?? -1;
 
         $priorityId = $validated['priority_id'] ?? (\App\Models\KanbanPriority::where('is_default', true)->value('id') ?? \App\Models\KanbanPriority::value('id'));
+        $rowId = $validated['row_id'] ?? ($project->rows()->where('is_default', true)->value('id') ?? $project->rows()->value('id'));
 
         $card = KanbanCard::create([
             'project_id' => $project->id,
             'status_id' => $status->id,
+            'row_id' => $rowId,
             'card_type_id' => $validated['card_type_id'],
             'priority_id' => $priorityId,
             'title' => $validated['title'],
@@ -112,7 +115,7 @@ class KanbanCardController extends Controller
 
         KanbanBoardUpdated::dispatch($project->faction_id, $project->id, $card->id, 'card_created');
 
-        return response()->json($card->load(['assignees', 'labels', 'cardType', 'priority']), 201);
+        return response()->json($card->load(['assignees', 'labels', 'cardType', 'priority', 'row']), 201);
     }
 
     public function update(Request $request, KanbanCard $card)
@@ -127,6 +130,7 @@ class KanbanCardController extends Controller
             'color' => ['nullable', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'card_type_id' => 'sometimes|required|integer|exists:kanban_card_types,id',
             'priority_id' => 'sometimes|nullable|integer|exists:kanban_priorities,id',
+            'row_id' => 'sometimes|nullable|integer|exists:kanban_rows,id',
             'assignees' => 'sometimes|array',
             'assignees.*' => 'integer|exists:users,id',
             'labels' => 'sometimes|array',
@@ -137,7 +141,7 @@ class KanbanCardController extends Controller
         $oldValues = $card->getOriginal();
 
         // Update card attributes
-        $cardFields = $request->only(['title', 'description', 'color', 'card_type_id', 'priority_id']);
+        $cardFields = $request->only(['title', 'description', 'color', 'card_type_id', 'priority_id', 'row_id']);
         if (!empty($cardFields)) {
             $card->update($cardFields);
         }
@@ -190,8 +194,9 @@ class KanbanCardController extends Controller
         }
 
         $validated = $request->validate([
-            'status_id' => 'required|integer|exists:kanban_statuses,id',
-            'card_order' => 'required|array',
+            'status_id' => 'sometimes|required|integer|exists:kanban_statuses,id',
+            'row_id' => 'sometimes|nullable|integer|exists:kanban_rows,id',
+            'card_order' => 'sometimes|required|array',
             'card_order.*' => 'required|integer|exists:kanban_cards,id',
             'source_card_order' => 'nullable|array',
             'source_card_order.*' => 'required|integer|exists:kanban_cards,id',
@@ -199,19 +204,33 @@ class KanbanCardController extends Controller
 
         $project = $card->project;
 
-        // Ensure status belongs to project
-        $targetStatus = $project->statuses()->findOrFail($validated['status_id']);
-
-        // Update status of this card if it changed
-        $oldStatusId = $card->status_id;
-        if ($card->status_id !== $targetStatus->id) {
-            $card->status_id = $targetStatus->id;
+        if (isset($validated['row_id']) && $card->row_id !== $validated['row_id']) {
+            $card->row_id = $validated['row_id'];
             $card->save();
         }
 
-        // Apply new orders in target column
-        foreach ($validated['card_order'] as $index => $id) {
-            KanbanCard::where('id', $id)->update(['order' => $index, 'status_id' => $targetStatus->id]);
+        if (isset($validated['status_id'])) {
+            $targetStatus = $project->statuses()->findOrFail($validated['status_id']);
+
+            // Update status of this card if it changed
+            $oldStatusId = $card->status_id;
+            if ($card->status_id !== $targetStatus->id) {
+                $card->status_id = $targetStatus->id;
+                $card->save();
+            }
+
+            if (isset($validated['card_order'])) {
+                // Apply new orders in target column
+                foreach ($validated['card_order'] as $index => $id) {
+                    KanbanCard::where('id', $id)->update(['order' => $index, 'status_id' => $targetStatus->id]);
+                }
+            }
+
+            if ($oldStatusId !== $targetStatus->id && !empty($validated['source_card_order'])) {
+                foreach ($validated['source_card_order'] as $index => $id) {
+                    KanbanCard::where('id', $id)->update(['order' => $index, 'status_id' => $oldStatusId]);
+                }
+            }
         }
 
         // Apply source column reorder if provided (when moving between columns)

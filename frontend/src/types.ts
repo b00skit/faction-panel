@@ -577,21 +577,34 @@ export interface KanbanComment {
   };
 }
 
+export interface KanbanRow {
+  id: number;
+  project_id: number;
+  name: string;
+  order: number;
+  is_visible?: boolean;
+  is_default?: boolean;
+  cards?: KanbanCard[];
+}
+
 export interface KanbanCard {
   id: number;
   project_id: number;
   status_id: number;
+  row_id?: number | null;
   card_type_id: number;
   priority_id: number | null;
   title: string;
   description: string | null;
   color: string | null;
   order: number;
+  count?: number | null;
   created_by: number | null;
   is_archived?: boolean;
   card_type?: KanbanCardType;
   priority?: KanbanPriority | null;
   status?: KanbanStatus;
+  row?: KanbanRow | null;
   assignees?: User[];
   labels?: KanbanLabel[];
   subtasks?: KanbanSubtask[];
@@ -610,7 +623,9 @@ export interface KanbanProject {
   created_by: number | null;
   prefix?: string | null;
   show_prefix?: boolean;
+  enable_project_management?: boolean;
   statuses?: KanbanStatus[];
+  rows?: KanbanRow[];
   labels?: KanbanLabel[];
   permissions?: any[];
   user_permissions?: {
@@ -629,5 +644,7 @@ export interface KanbanStatus {
   project_id: number;
   name: string;
   order: number;
+  is_visible?: boolean;
+  is_default?: boolean;
   cards?: KanbanCard[];
 }

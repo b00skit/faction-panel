@@ -19,14 +19,17 @@ class KanbanProject extends Model
         'created_by',
         'prefix',
         'show_prefix',
+        'enable_project_management',
     ];
 
     protected $casts = [
         'show_prefix' => 'boolean',
+        'enable_project_management' => 'boolean',
     ];
 
     protected $attributes = [
         'show_prefix' => true,
+        'enable_project_management' => false,
     ];
 
     public function faction()
@@ -44,6 +47,11 @@ class KanbanProject extends Model
         return $this->hasMany(KanbanStatus::class, 'project_id')->orderBy('order')->orderBy('id');
     }
 
+    public function rows()
+    {
+        return $this->hasMany(KanbanRow::class, 'project_id')->orderBy('order')->orderBy('id');
+    }
+
     public function labels()
     {
         return $this->hasMany(KanbanLabel::class, 'project_id');
@@ -57,5 +65,12 @@ class KanbanProject extends Model
     public function permissions()
     {
         return $this->hasMany(KanbanProjectPermission::class, 'project_id');
+    }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->where('id', $value)
+            ->orWhere('prefix', $value)
+            ->first();
     }
 }

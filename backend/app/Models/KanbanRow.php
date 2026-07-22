@@ -6,11 +6,11 @@ use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class KanbanStatus extends Model
+class KanbanRow extends Model
 {
     use Auditable, SoftDeletes;
 
-    protected $table = 'kanban_statuses';
+    protected $table = 'kanban_rows';
 
     protected $fillable = [
         'project_id',
@@ -37,6 +37,6 @@ class KanbanStatus extends Model
 
     public function cards()
     {
-        return $this->hasMany(KanbanCard::class, 'status_id')->where('is_archived', false)->orderBy('order')->orderBy('id');
+        return $this->hasMany(KanbanCard::class, 'row_id')->where('is_archived', false)->orderBy('order')->orderBy('id');
     }
 }

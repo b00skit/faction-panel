@@ -48,6 +48,7 @@ use App\Http\Controllers\KanbanProjectController;
 use App\Http\Controllers\KanbanProjectPermissionController;
 use App\Http\Controllers\KanbanCardTypeController;
 use App\Http\Controllers\KanbanStatusController;
+use App\Http\Controllers\KanbanRowController;
 use App\Http\Controllers\KanbanLabelController;
 use App\Http\Controllers\KanbanCardController;
 use App\Http\Controllers\KanbanCommentController;
@@ -425,6 +426,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/kanban/statuses/{status}', [KanbanStatusController::class, 'update']);
     Route::delete('/kanban/statuses/{status}', [KanbanStatusController::class, 'destroy']);
     Route::put('/kanban/projects/{project}/statuses/reorder', [KanbanStatusController::class, 'reorder']);
+
+    // Kanban Row Management
+    Route::post('/kanban/projects/{project}/rows', [KanbanRowController::class, 'store']);
+    Route::put('/kanban/rows/{row}', [KanbanRowController::class, 'update']);
+    Route::delete('/kanban/rows/{row}', [KanbanRowController::class, 'destroy']);
+    Route::put('/kanban/projects/{project}/rows/reorder', [KanbanRowController::class, 'reorder']);
 
     // Kanban Label Management
     Route::get('/kanban/projects/{project}/labels', [KanbanLabelController::class, 'index']);

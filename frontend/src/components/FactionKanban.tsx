@@ -12,7 +12,8 @@ import {
   MessageSquare, User, Tag, ChevronDown, ListTodo, FileText, 
   CheckSquare, Bookmark, ShieldAlert, Users, Trash, Award,
   Circle, Square, Triangle, Hexagon, Star, Heart, Flame, Target,
-  ArrowUp, ArrowDown, ArrowRight, ChevronsUp, ChevronsDown
+  ArrowUp, ArrowDown, ArrowRight, ChevronsUp, ChevronsDown,
+  Eye, EyeOff, FolderKanban, SlidersHorizontal, Layers, Kanban
 } from 'lucide-react';
 import { KanbanProject, KanbanCard, KanbanCardType, KanbanLabel, KanbanStatus, KanbanPriority } from '../types';
 
@@ -101,25 +102,50 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
   // - /:shortname/kanban/projects/:projectId
   // - /:shortname/kanban/projects/:projectId/cards/:cardId
   // - /:shortname/kanban/projects/:projectId/archive
+  // Parsing Sub-routes:
+  // - /:shortname/kanban
+  // - /:shortname/kanban/projects/:projectParam
+  // - /:shortname/kanban/projects/:projectParam/cards/:cardId
+  // - /:shortname/kanban/projects/:projectParam/archive
+  // - /:shortname/kanban/projects/:projectParam/archive/cards/:cardId
+  // - /:shortname/kanban/projects/:projectParam/management
+  // - /:shortname/kanban/projects/:projectParam/management/cards/:cardId
   const pathParts = location.pathname.split('/');
   const projIndex = pathParts.indexOf('projects');
   
-  let projectIdFromUrl: number | null = null;
+  let projectParamFromUrl: string | null = null;
   let cardIdFromUrl: number | null = null;
-  let viewMode: 'board' | 'archive' = 'board';
+  let viewMode: 'board' | 'archive' | 'management' = 'board';
 
   if (projIndex !== -1 && pathParts[projIndex + 1]) {
-    projectIdFromUrl = parseInt(pathParts[projIndex + 1], 10);
+    projectParamFromUrl = pathParts[projIndex + 1];
     if (pathParts[projIndex + 2] === 'cards' && pathParts[projIndex + 3]) {
       cardIdFromUrl = parseInt(pathParts[projIndex + 3], 10);
     } else if (pathParts[projIndex + 2] === 'archive') {
       viewMode = 'archive';
+      if (pathParts[projIndex + 3] === 'cards' && pathParts[projIndex + 4]) {
+        cardIdFromUrl = parseInt(pathParts[projIndex + 4], 10);
+      }
+    } else if (pathParts[projIndex + 2] === 'management') {
+      viewMode = 'management';
+      if (pathParts[projIndex + 3] === 'cards' && pathParts[projIndex + 4]) {
+        cardIdFromUrl = parseInt(pathParts[projIndex + 4], 10);
+      }
     }
   }
+
+  const getProjectKey = (p: KanbanProject) => {
+    if (p && p.prefix && p.prefix.trim() !== '') {
+      return p.prefix;
+    }
+    return p ? String(p.id) : '';
+  };
 
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<KanbanProject[]>([]);
   const [cardTypes, setCardTypes] = useState<KanbanCardType[]>([]);
+  const [mgmtSearchQuery, setMgmtSearchQuery] = useState('');
+  const [newColumnIsVisible, setNewColumnIsVisible] = useState(true);
 
   // Modals
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
@@ -160,7 +186,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
   const [editingCardTypeId, setEditingCardTypeId] = useState<number | null>(null);
   const [editingPriorityId, setEditingPriorityId] = useState<number | null>(null);
   const [newProject, setNewProject] = useState({ name: '', color: '#3b82f6', description: '', prefix: '' });
-  const [projectSettings, setProjectSettings] = useState({ id: 0, name: '', color: '', description: '', prefix: '', show_prefix: true });
+  const [projectSettings, setProjectSettings] = useState({ id: 0, name: '', color: '', description: '', prefix: '', show_prefix: true, enable_project_management: false });
   
   // Card Types Form States
   const [newCardType, setNewCardType] = useState({
@@ -193,6 +219,14 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
   const [editingColumnId, setEditingColumnId] = useState<number | null>(null);
   const [editingColumnName, setEditingColumnName] = useState('');
 
+  // Row State
+  const [newRowName, setNewRowName] = useState('');
+  const [newRowIsVisible, setNewRowIsVisible] = useState(true);
+  const [showNewRowInput, setShowNewRowInput] = useState(false);
+  const [editingRowId, setEditingRowId] = useState<number | null>(null);
+  const [editingRowName, setEditingRowName] = useState('');
+  const [activeQuickCreateRowId, setActiveQuickCreateRowId] = useState<number | null>(null);
+
   // Card Quick Create State
   const [activeQuickCreateColId, setActiveQuickCreateColId] = useState<number | null>(null);
   const [newCardTitle, setNewCardTitle] = useState('');
@@ -209,7 +243,29 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
   const [activeCardTypeDropdownColId, setActiveCardTypeDropdownColId] = useState<number | null>(null);
   const [activeCardTypeDetailsDropdownOpen, setActiveCardTypeDetailsDropdownOpen] = useState(false);
 
-  const activeProject = projects.find(p => p.id === projectIdFromUrl) || null;
+  const activeProject = projects.find(p => 
+    (p.prefix && p.prefix.toLowerCase() === projectParamFromUrl?.toLowerCase()) || 
+    String(p.id) === projectParamFromUrl
+  ) || null;
+
+  const getProjectRouteKey = (proj: KanbanProject | null = activeProject) => {
+    if (proj) {
+      return getProjectKey(proj);
+    }
+    return projectParamFromUrl || '';
+  };
+
+  const getReturnRoute = (proj: KanbanProject | null = activeProject) => {
+    const projKey = getProjectRouteKey(proj);
+    if (viewMode === 'management') {
+      return `/${shortname}/kanban/projects/${projKey}/management`;
+    }
+    if (viewMode === 'archive') {
+      return `/${shortname}/kanban/projects/${projKey}/archive`;
+    }
+    return `/${shortname}/kanban/projects/${projKey}`;
+  };
+
   const isGlobalMod = user?.is_superadmin || permissions.includes('global_kanban_moderation');
   const projectPerms = activeProject?.user_permissions || {
     view_project: false,
@@ -221,15 +277,18 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
     modify_project: false,
   };
 
-  const fetchProjects = async (selectId: number | null = null) => {
+  const fetchProjects = async (selectKeyOrId: string | number | null = null) => {
     try {
       const res = await api.get(`/factions/${shortname}/kanban/projects`);
       setProjects(res.data);
       if (res.data.length > 0) {
-        const targetId = selectId || projectIdFromUrl;
-        if (!targetId || !res.data.find((p: any) => p.id === targetId)) {
-          // If no active projectId or not in the projects list, default to first project via router redirection
-          navigate(`/${shortname}/kanban/projects/${res.data[0].id}`, { replace: true });
+        const targetParam = selectKeyOrId ? String(selectKeyOrId) : projectParamFromUrl;
+        const found = res.data.find((p: any) => 
+          (p.prefix && p.prefix.toLowerCase() === targetParam?.toLowerCase()) || 
+          String(p.id) === targetParam
+        );
+        if (!targetParam || !found) {
+          navigate(`/${shortname}/kanban/projects/${getProjectKey(res.data[0])}`, { replace: true });
         }
       }
     } catch (err) {
@@ -277,19 +336,34 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
     }
   }, [shortname]);
 
-  // Redirect to first project if no project ID is in the URL and loading has finished
+  // Redirect to first project if no project identifier is in the URL and loading has finished
   useEffect(() => {
-    if (!loading && projects.length > 0 && projectIdFromUrl === null) {
-      navigate(`/${shortname}/kanban/projects/${projects[0].id}`, { replace: true });
+    if (!loading && projects.length > 0 && !projectParamFromUrl) {
+      navigate(`/${shortname}/kanban/projects/${getProjectKey(projects[0])}`, { replace: true });
     }
-  }, [loading, projects, projectIdFromUrl, shortname, navigate]);
+  }, [loading, projects, projectParamFromUrl, shortname, navigate]);
+
+  // Sync URL to use shortcode prefix if available
+  useEffect(() => {
+    if (!loading && projects.length > 0 && projectParamFromUrl && activeProject) {
+      const canonicalKey = String(getProjectKey(activeProject));
+      if (projectParamFromUrl !== canonicalKey) {
+        const prefixPath = `/projects/${projectParamFromUrl}`;
+        const idx = location.pathname.indexOf(prefixPath);
+        if (idx !== -1) {
+          const subPath = location.pathname.substring(idx + prefixPath.length);
+          navigate(`/${shortname}/kanban/projects/${canonicalKey}${subPath}`, { replace: true });
+        }
+      }
+    }
+  }, [loading, projects, activeProject, projectParamFromUrl, shortname, location.pathname, navigate]);
 
   // WebSocket Live Updates
   useEffect(() => {
     if (!activeProject?.faction_id) return;
     
     const handler = (e: any) => {
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectKey(activeProject));
       if (cardIdFromUrl && e.card_id === cardIdFromUrl) {
         fetchCardDetails(cardIdFromUrl);
         fetchActivity(activityPage);
@@ -302,7 +376,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
     return () => {
       echo.leave(`faction.${activeProject.faction_id}.kanban`);
     };
-  }, [projectIdFromUrl, activeProject?.faction_id, cardIdFromUrl, activityPage]);
+  }, [projectParamFromUrl, activeProject, cardIdFromUrl, activityPage]);
 
   // Project Permission Helpers
   const fetchPermissionData = async (project: KanbanProject) => {
@@ -342,7 +416,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       }
     } catch (err) {
       toast.error('Failed to fetch card details');
-      navigate(`/${shortname}/kanban/projects/${projectIdFromUrl}`);
+      navigate(getReturnRoute());
     }
   };
 
@@ -388,13 +462,13 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       setSelectedCardDetails(null);
       setActivityFeed([]);
     }
-  }, [cardIdFromUrl, projectIdFromUrl]);
+  }, [cardIdFromUrl, projectParamFromUrl]);
 
   // Fetch archived cards
   const fetchArchivedCards = async () => {
-    if (!projectIdFromUrl) return;
+    if (!activeProject) return;
     try {
-      const res = await api.get(`/kanban/projects/${projectIdFromUrl}/archived`);
+      const res = await api.get(`/kanban/projects/${activeProject.id}/archived`);
       setArchivedCards(res.data);
     } catch (err) {
       toast.error('Failed to fetch archived cards');
@@ -402,10 +476,10 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
   };
 
   useEffect(() => {
-    if (viewMode === 'archive' && projectIdFromUrl) {
+    if (viewMode === 'archive' && activeProject) {
       fetchArchivedCards();
     }
-  }, [viewMode, projectIdFromUrl]);
+  }, [viewMode, activeProject]);
 
   // Project CRUD
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -416,8 +490,9 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       toast.success('Project created successfully', { id: loadToast });
       setShowCreateProjectModal(false);
       setNewProject({ name: '', color: '#3b82f6', description: '', prefix: '' });
-      fetchProjects(res.data.id);
-      navigate(`/${shortname}/kanban/projects/${res.data.id}`);
+      const projKey = getProjectKey(res.data);
+      fetchProjects(projKey);
+      navigate(`/${shortname}/kanban/projects/${projKey}`);
     } catch (err) {
       toast.error('Failed to create project', { id: loadToast });
     }
@@ -433,10 +508,12 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
         description: projectSettings.description,
         prefix: projectSettings.prefix,
         show_prefix: projectSettings.show_prefix,
+        enable_project_management: projectSettings.enable_project_management,
       });
       toast.success('Project updated successfully', { id: loadToast });
       setShowProjectSettingsModal(false);
-      fetchProjects(projectIdFromUrl);
+      const projKey = projectSettings.prefix && projectSettings.prefix.trim() !== '' ? projectSettings.prefix : projectSettings.id;
+      fetchProjects(projKey);
     } catch (err) {
       toast.error('Failed to update project', { id: loadToast });
     }
@@ -594,21 +671,65 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
     }
   };
 
-  // Column CRUD
-  const handleCreateColumn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newColumnName.trim() || !projectIdFromUrl) return;
+  // Column / Status Row CRUD & Visibility
+  const handleCreateColumn = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newColumnName.trim() || !activeProject) return;
     const loadToast = toast.loading('Adding column...');
     try {
-      await api.post(`/kanban/projects/${projectIdFromUrl}/statuses`, {
+      await api.post(`/kanban/projects/${activeProject.id}/statuses`, {
         name: newColumnName,
+        is_visible: newColumnIsVisible,
       });
       toast.success('Column added', { id: loadToast });
       setNewColumnName('');
+      setNewColumnIsVisible(true);
       setShowNewColumnInput(false);
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to add column', { id: loadToast });
+    }
+  };
+
+  const handleToggleStatusVisibility = async (statusId: number, currentVisibility: boolean, isDefault?: boolean) => {
+    if (isDefault && currentVisibility) {
+      toast.error('The default status column must remain visible on the board');
+      return;
+    }
+    const loadToast = toast.loading('Updating column visibility...');
+    try {
+      await api.put(`/kanban/statuses/${statusId}`, {
+        is_visible: !currentVisibility,
+      });
+      toast.success(!currentVisibility ? 'Column is now visible on Kanban Board' : 'Column hidden from Kanban Board', { id: loadToast });
+      fetchProjects(getProjectRouteKey());
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update column visibility', { id: loadToast });
+    }
+  };
+
+  const handleMoveStatusRow = async (statusId: number, direction: 'up' | 'down') => {
+    if (!activeProject?.statuses) return;
+    const statuses = [...activeProject.statuses];
+    const currentIndex = statuses.findIndex(s => s.id === statusId);
+    if (currentIndex === -1) return;
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= statuses.length) return;
+
+    const temp = statuses[currentIndex];
+    statuses[currentIndex] = statuses[targetIndex];
+    statuses[targetIndex] = temp;
+
+    const status_order = statuses.map(s => s.id);
+    const loadToast = toast.loading('Reordering columns...');
+    try {
+      await api.put(`/kanban/projects/${activeProject.id}/statuses/reorder`, {
+        status_order,
+      });
+      toast.success('Columns reordered', { id: loadToast });
+      fetchProjects(getProjectRouteKey());
+    } catch (err) {
+      toast.error('Failed to reorder columns', { id: loadToast });
     }
   };
 
@@ -621,34 +742,151 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       });
       toast.success('Column updated', { id: loadToast });
       setEditingColumnId(null);
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to rename column', { id: loadToast });
     }
   };
 
-  const handleDeleteColumn = async (statusId: number, name: string) => {
+  const handleDeleteColumn = async (statusId: number, name: string, isDefault?: boolean) => {
+    if (isDefault) {
+      toast.error('The default status column cannot be deleted');
+      return;
+    }
     if (!window.confirm(`Are you sure you want to delete column "${name}"? All cards inside it will be permanently deleted.`)) return;
     const loadToast = toast.loading('Deleting column...');
     try {
       await api.delete(`/kanban/statuses/${statusId}`);
       toast.success('Column deleted', { id: loadToast });
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete column', { id: loadToast });
+    }
+  };
+
+  // Row CRUD & Visibility
+  const handleCreateRow = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newRowName.trim() || !activeProject) return;
+    const loadToast = toast.loading('Adding row...');
+    try {
+      await api.post(`/kanban/projects/${activeProject.id}/rows`, {
+        name: newRowName,
+        is_visible: newRowIsVisible,
+      });
+      toast.success('Row added', { id: loadToast });
+      setNewRowName('');
+      setNewRowIsVisible(true);
+      setShowNewRowInput(false);
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
-      toast.error('Failed to delete column', { id: loadToast });
+      toast.error('Failed to add row', { id: loadToast });
+    }
+  };
+
+  const handleToggleRowVisibility = async (rowId: number, currentVisibility: boolean) => {
+    const loadToast = toast.loading('Updating row visibility...');
+    try {
+      await api.put(`/kanban/rows/${rowId}`, {
+        is_visible: !currentVisibility,
+      });
+      toast.success(!currentVisibility ? 'Row is now visible on Kanban Board' : 'Row hidden from Kanban Board (Invisible Backlog)', { id: loadToast });
+      fetchProjects(getProjectRouteKey());
+    } catch (err) {
+      toast.error('Failed to update row visibility', { id: loadToast });
+    }
+  };
+
+  const handleMoveRow = async (rowId: number, direction: 'up' | 'down') => {
+    if (!activeProject?.rows) return;
+    const rows = [...activeProject.rows];
+    const currentIndex = rows.findIndex(r => r.id === rowId);
+    if (currentIndex === -1) return;
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= rows.length) return;
+
+    const temp = rows[currentIndex];
+    rows[currentIndex] = rows[targetIndex];
+    rows[targetIndex] = temp;
+
+    const row_order = rows.map(r => r.id);
+    const loadToast = toast.loading('Reordering rows...');
+    try {
+      await api.put(`/kanban/projects/${activeProject.id}/rows/reorder`, {
+        row_order,
+      });
+      toast.success('Rows reordered', { id: loadToast });
+      fetchProjects(getProjectRouteKey());
+    } catch (err) {
+      toast.error('Failed to reorder rows', { id: loadToast });
+    }
+  };
+
+  const handleUpdateRowName = async (rowId: number) => {
+    if (!editingRowName.trim()) return;
+    const loadToast = toast.loading('Saving...');
+    try {
+      await api.put(`/kanban/rows/${rowId}`, {
+        name: editingRowName,
+      });
+      toast.success('Row updated', { id: loadToast });
+      setEditingRowId(null);
+      fetchProjects(getProjectRouteKey());
+    } catch (err) {
+      toast.error('Failed to rename row', { id: loadToast });
+    }
+  };
+
+  const handleDeleteRow = async (rowId: number, name: string, isDefault?: boolean) => {
+    if (isDefault) {
+      toast.error('The default row cannot be deleted');
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to delete row "${name}"?`)) return;
+    const loadToast = toast.loading('Deleting row...');
+    try {
+      await api.delete(`/kanban/rows/${rowId}`);
+      toast.success('Row deleted', { id: loadToast });
+      fetchProjects(getProjectRouteKey());
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete row', { id: loadToast });
+    }
+  };
+
+  const handleQuickCreateCardInRow = async (rowId: number) => {
+    if (!newCardTitle.trim() || !activeProject) return;
+    const defaultStatusId = activeProject?.statuses?.[0]?.id;
+    if (!defaultStatusId) {
+      toast.error('No status column available');
+      return;
+    }
+    const loadToast = toast.loading('Creating card...');
+    try {
+      await api.post(`/kanban/projects/${activeProject.id}/cards`, {
+        title: newCardTitle,
+        status_id: defaultStatusId,
+        row_id: rowId,
+        card_type_id: newCardTypeId,
+      });
+      toast.success('Card created', { id: loadToast });
+      setNewCardTitle('');
+      setActiveQuickCreateRowId(null);
+      fetchProjects(getProjectRouteKey());
+    } catch (err) {
+      toast.error('Failed to create card', { id: loadToast });
     }
   };
 
   // Labels CRUD
   const handleCreateLabel = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newLabel.name.trim() || !projectIdFromUrl) return;
+    if (!newLabel.name.trim() || !activeProject) return;
     const loadToast = toast.loading('Creating label...');
     try {
-      await api.post(`/kanban/projects/${projectIdFromUrl}/labels`, newLabel);
+      await api.post(`/kanban/projects/${activeProject.id}/labels`, newLabel);
       toast.success('Label created', { id: loadToast });
       setNewLabel({ name: '', color: '#10b981' });
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to create label', { id: loadToast });
     }
@@ -660,7 +898,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
     try {
       await api.delete(`/kanban/labels/${labelId}`);
       toast.success('Label deleted', { id: loadToast });
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to delete label', { id: loadToast });
     }
@@ -668,10 +906,10 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
 
   // Card CRUD & Movement
   const handleQuickCreateCard = async (statusId: number) => {
-    if (!newCardTitle.trim() || !projectIdFromUrl) return;
+    if (!newCardTitle.trim() || !activeProject) return;
     const loadToast = toast.loading('Creating card...');
     try {
-      await api.post(`/kanban/projects/${projectIdFromUrl}/cards`, {
+      await api.post(`/kanban/projects/${activeProject.id}/cards`, {
         title: newCardTitle,
         status_id: statusId,
         card_type_id: newCardTypeId,
@@ -679,7 +917,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       toast.success('Card created', { id: loadToast });
       setNewCardTitle('');
       setActiveQuickCreateColId(null);
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to create card', { id: loadToast });
     }
@@ -697,7 +935,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       if (currentUrlCardId === cardId) {
         setSelectedCardDetails(res.data);
       }
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to update card details');
     }
@@ -710,8 +948,8 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
     try {
       await api.delete(`/kanban/cards/${selectedCardDetails.id}`);
       toast.success('Card deleted successfully', { id: loadToast });
-      navigate(`/${shortname}/kanban/projects/${projectIdFromUrl}`);
-      fetchProjects(projectIdFromUrl);
+      navigate(getReturnRoute());
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to delete card', { id: loadToast });
     }
@@ -724,8 +962,8 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
     try {
       await api.post(`/kanban/cards/${selectedCardDetails.id}/archive`);
       toast.success('Card archived successfully', { id: loadToast });
-      navigate(`/${shortname}/kanban/projects/${projectIdFromUrl}`);
-      fetchProjects(projectIdFromUrl);
+      navigate(getReturnRoute());
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to archive card', { id: loadToast });
     }
@@ -737,7 +975,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       await api.post(`/kanban/cards/${cardId}/restore`);
       toast.success('Card restored successfully', { id: loadToast });
       fetchArchivedCards();
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to restore card', { id: loadToast });
     }
@@ -779,7 +1017,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       }
 
       fetchCardDetails(selectedCardDetails.id);
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to move card', { id: loadToast });
     }
@@ -795,7 +1033,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       });
       setNewSubtaskTitle('');
       fetchCardDetails(selectedCardDetails.id);
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to add subtask');
     }
@@ -808,7 +1046,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       });
       if (selectedCardDetails) {
         fetchCardDetails(selectedCardDetails.id);
-        fetchProjects(projectIdFromUrl);
+        fetchProjects(getProjectRouteKey());
       }
     } catch (err) {
       toast.error('Failed to update subtask');
@@ -820,7 +1058,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       await api.delete(`/kanban/subtasks/${subtaskId}`);
       if (selectedCardDetails) {
         fetchCardDetails(selectedCardDetails.id);
-        fetchProjects(projectIdFromUrl);
+        fetchProjects(getProjectRouteKey());
       }
     } catch (err) {
       toast.error('Failed to delete subtask');
@@ -837,7 +1075,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       });
       setNewCommentText('');
       fetchActivity(1);
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to add comment');
     }
@@ -848,7 +1086,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
     try {
       await api.delete(`/kanban/comments/${commentId}`);
       fetchActivity(activityPage);
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to delete comment');
     }
@@ -950,16 +1188,16 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
     const [removed] = currentStatuses.splice(draggedIndex, 1);
     currentStatuses.splice(targetIndex, 0, removed);
 
-    setProjects(prev => prev.map(p => p.id === projectIdFromUrl ? { ...p, statuses: currentStatuses } : p));
+    setProjects(prev => prev.map(p => p.id === activeProject?.id ? { ...p, statuses: currentStatuses } : p));
 
     try {
-      await api.put(`/kanban/projects/${projectIdFromUrl}/statuses/reorder`, {
+      await api.put(`/kanban/projects/${activeProject!.id}/statuses/reorder`, {
         status_order: currentStatuses.map(s => s.id)
       });
       toast.success('Column reordered');
     } catch (err) {
       toast.error('Failed to reorder columns');
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     }
   };
 
@@ -1032,7 +1270,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       return s;
     });
 
-    setProjects(prev => prev.map(p => p.id === projectIdFromUrl ? { ...p, statuses: updatedStatuses } : p));
+    setProjects(prev => prev.map(p => p.id === activeProject?.id ? { ...p, statuses: updatedStatuses } : p));
 
     try {
       await api.post(`/kanban/cards/${cardId}/move`, {
@@ -1049,10 +1287,10 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       }
 
       toast.success('Card moved');
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to move card');
-      fetchProjects(projectIdFromUrl);
+      fetchProjects(getProjectRouteKey());
     }
   };
 
@@ -1127,7 +1365,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
 
   const filteredArchivedCards = archivedCards.filter(card =>
     card.title.toLowerCase().includes(archiveSearchQuery.toLowerCase()) ||
-    (activeProject?.prefix && `${activeProject.prefix}-${card.id}`.toLowerCase().includes(archiveSearchQuery.toLowerCase()))
+    (activeProject?.prefix && `${activeProject.prefix}-${card.count ?? card.id}`.toLowerCase().includes(archiveSearchQuery.toLowerCase()))
   );
 
   if (loading) return <Loading message="Loading Kanban Boards..." />;
@@ -1146,6 +1384,34 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
               {activeProject.description || 'No description defined.'}
             </p>
           </div>
+          <div className="flex items-center gap-2">
+            {activeProject.enable_project_management && (projectPerms.modify_card || isGlobalMod || projectPerms.modify_project) && (
+              <button
+                onClick={() => {
+                  if (viewMode === 'management') {
+                    navigate(`/${shortname}/kanban/projects/${getProjectRouteKey()}`);
+                  } else {
+                    navigate(`/${shortname}/kanban/projects/${getProjectRouteKey()}/management`);
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border transition-all cursor-pointer shadow-sm ${
+                  viewMode === 'management'
+                    ? 'bg-accent text-white border-accent shadow-accent/20'
+                    : 'bg-surface hover:bg-surface-hover text-text border-border'
+                }`}
+              >
+                {viewMode === 'management' ? (
+                  <>
+                    <Kanban size={14} /> Kanban Board
+                  </>
+                ) : (
+                  <>
+                    <ListTodo size={14} /> Project Management
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -1162,7 +1428,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
               </p>
             </div>
             <button
-              onClick={() => navigate(`/${shortname}/kanban/projects/${projectIdFromUrl}`)}
+              onClick={() => navigate(`/${shortname}/kanban/projects/${getProjectRouteKey()}`)}
               className="px-4 py-2 bg-surface hover:bg-surface-hover text-text border border-border rounded-lg text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-2 cursor-pointer"
             >
               Back to Board
@@ -1203,7 +1469,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                       <td className="p-4 font-mono font-black text-text">
                         {activeProject.prefix && (
                           <span className={`px-1.5 py-0.5 bg-surface border border-border text-[9px] text-text font-mono font-black rounded-md tracking-wider shadow-sm ${isFinalCol ? 'line-through opacity-50' : ''}`}>
-                            {activeProject.prefix}-{card.id}
+                            {activeProject.prefix}-{card.count ?? card.id}
                           </span>
                         )}
                       </td>
@@ -1276,11 +1542,475 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
         </main>
       )}
 
+      {/* Project Management View */}
+      {activeProject && viewMode === 'management' && (
+        <main className="flex-1 overflow-auto p-6 space-y-6 max-w-7xl mx-auto w-full select-none">
+          <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-border pb-4 gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-black uppercase tracking-wider text-text flex items-center gap-2">
+                  <ListTodo className="text-accent" size={20} /> Project Management
+                </h2>
+                <span className="px-2.5 py-0.5 bg-accent/10 border border-accent/30 text-accent rounded-full text-[10px] font-black uppercase tracking-widest">
+                  {activeProject.name}
+                </span>
+              </div>
+              <p className="text-xs text-muted font-medium mt-1">
+                Configure project rows, define visibility on the main Kanban board, and organize project tasks.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate(`/${shortname}/kanban/projects/${getProjectRouteKey()}`)}
+                className="px-4 py-2 bg-surface hover:bg-surface-hover text-text border border-border rounded-xl text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
+              >
+                <Kanban size={14} /> Back to Board
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 bg-card/60 border border-border/80 rounded-2xl p-4 shadow-sm">
+            <div className="flex-1 max-w-md">
+              <input
+                type="text"
+                placeholder="Search rows or card titles..."
+                value={mgmtSearchQuery}
+                onChange={(e) => setMgmtSearchQuery(e.target.value)}
+                className="w-full bg-surface border border-border rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:border-accent text-text"
+              />
+            </div>
+            
+            {(projectPerms.manage_statuses || projectPerms.modify_card || isGlobalMod) && (
+              <button
+                onClick={() => setShowNewRowInput(true)}
+                className="px-4 py-2 bg-accent hover:bg-accent/90 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-accent/20"
+              >
+                <Plus size={14} /> Add Row
+              </button>
+            )}
+          </div>
+
+          <AnimatePresence>
+            {showNewRowInput && (
+              <motion.form
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                onSubmit={handleCreateRow}
+                className="bg-card border border-accent/50 rounded-2xl p-4 space-y-3 shadow-lg"
+              >
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-accent flex items-center gap-1.5">
+                    <Plus size={14} /> Create New Row
+                  </h4>
+                  <button type="button" onClick={() => setShowNewRowInput(false)} className="text-muted hover:text-text cursor-pointer">
+                    <X size={14} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-muted mb-1">
+                      Row Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Backlog, Feature A, Ideas..."
+                      value={newRowName}
+                      onChange={(e) => setNewRowName(e.target.value)}
+                      className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs font-bold focus:outline-none focus:border-accent text-text"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 pt-5">
+                    <input
+                      type="checkbox"
+                      id="new_row_visible"
+                      checked={newRowIsVisible}
+                      onChange={(e) => setNewRowIsVisible(e.target.checked)}
+                      className="rounded border-border bg-surface text-accent focus:ring-0 w-4 h-4 cursor-pointer"
+                    />
+                    <label htmlFor="new_row_visible" className="text-xs font-bold uppercase tracking-wider text-text cursor-pointer select-none">
+                      Show on Main Kanban Board
+                    </label>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowNewRowInput(false)}
+                    className="px-3 py-1.5 bg-surface text-muted hover:text-text rounded-lg text-xs font-bold uppercase tracking-wider cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 bg-accent hover:bg-accent/90 text-white rounded-lg text-xs font-bold uppercase tracking-wider cursor-pointer"
+                  >
+                    Create Row
+                  </button>
+                </div>
+              </motion.form>
+            )}
+          </AnimatePresence>
+
+          <div className="space-y-4">
+            {activeProject.rows?.map((row: any, index: number) => {
+              const isVisibleOnBoard = row.is_visible !== false;
+              // Collect cards belonging to this row (or default row if card has no row_id)
+              const cardsInRow = (activeProject.statuses?.flatMap((s: any) => s.cards || []) || []).filter((c: any) =>
+                row.is_default ? (!c.row_id || c.row_id === row.id) : (c.row_id === row.id)
+              );
+              const cards = cardsInRow.filter((c: any) =>
+                mgmtSearchQuery
+                  ? c.title.toLowerCase().includes(mgmtSearchQuery.toLowerCase()) ||
+                    (activeProject.prefix && `${activeProject.prefix}-${c.count ?? c.id}`.toLowerCase().includes(mgmtSearchQuery.toLowerCase()))
+                  : true
+              );
+
+              return (
+                <div
+                  key={row.id}
+                  className={`bg-card/70 border rounded-2xl overflow-hidden shadow-sm transition-all ${
+                    isVisibleOnBoard ? 'border-border' : 'border-purple-500/30 bg-purple-950/10'
+                  }`}
+                >
+                  <div className="p-4 border-b border-border/80 flex flex-wrap items-center justify-between gap-3 bg-surface/30">
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-lg bg-surface border border-border text-[10px] font-black text-muted flex items-center justify-center">
+                        #{index + 1}
+                      </span>
+
+                      {editingRowId === row.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={editingRowName}
+                            onChange={(e) => setEditingRowName(e.target.value)}
+                            className="bg-bg text-text text-xs border border-accent rounded px-2 py-1 font-bold uppercase tracking-wide focus:outline-none"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleUpdateRowName(row.id);
+                              if (e.key === 'Escape') setEditingRowId(null);
+                            }}
+                          />
+                          <button onClick={() => handleUpdateRowName(row.id)} className="p-1 text-success hover:bg-success/10 rounded cursor-pointer">
+                            <Check size={14} />
+                          </button>
+                          <button onClick={() => setEditingRowId(null)} className="p-1 text-danger hover:bg-danger/10 rounded cursor-pointer">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <h3
+                            onClick={() => {
+                              if (projectPerms.manage_statuses || projectPerms.modify_card || isGlobalMod) {
+                                setEditingRowId(row.id);
+                                setEditingRowName(row.name);
+                              }
+                            }}
+                            className="text-sm font-black uppercase tracking-wider text-text hover:text-accent cursor-pointer transition-colors"
+                          >
+                            {row.name}
+                          </h3>
+                          {row.is_default && (
+                            <span className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded text-[9px] font-black uppercase tracking-wider">
+                              Default Row
+                            </span>
+                          )}
+                          {(projectPerms.manage_statuses || projectPerms.modify_card || isGlobalMod) && (
+                            <button
+                              onClick={() => {
+                                setEditingRowId(row.id);
+                                setEditingRowName(row.name);
+                              }}
+                              className="text-muted hover:text-text cursor-pointer opacity-80"
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 ${
+                          isVisibleOnBoard
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-purple-500/10 text-purple-400 border border-purple-500/30'
+                        }`}
+                      >
+                        {isVisibleOnBoard ? (
+                          <>
+                            <Eye size={12} /> Visible on Board
+                          </>
+                        ) : (
+                          <>
+                            <EyeOff size={12} /> Invisible Backlog
+                          </>
+                        )}
+                      </span>
+
+                      <span className="px-2 py-0.5 bg-surface border border-border rounded-md text-[10px] font-bold text-muted uppercase">
+                        {cards.length} {cards.length === 1 ? 'card' : 'cards'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {(projectPerms.manage_statuses || projectPerms.modify_card || isGlobalMod) && (
+                        <button
+                          onClick={() => handleToggleRowVisibility(row.id, isVisibleOnBoard)}
+                          title={isVisibleOnBoard ? 'Hide from Kanban Board (Make Invisible Backlog)' : 'Make Visible on Kanban Board'}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border transition-all cursor-pointer ${
+                            isVisibleOnBoard
+                              ? 'bg-surface hover:bg-surface-hover text-muted border-border'
+                              : 'bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border-purple-500/40'
+                          }`}
+                        >
+                          {isVisibleOnBoard ? <EyeOff size={13} /> : <Eye size={13} />}
+                          {isVisibleOnBoard ? 'Hide from Board' : 'Show on Board'}
+                        </button>
+                      )}
+
+                      {(projectPerms.manage_statuses || projectPerms.modify_card || isGlobalMod) && (
+                        <div className="flex items-center border border-border rounded-lg bg-surface overflow-hidden">
+                          <button
+                            disabled={index === 0}
+                            onClick={() => handleMoveRow(row.id, 'up')}
+                            className="p-1.5 text-muted hover:text-text hover:bg-card disabled:opacity-30 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                            title="Move Row Up"
+                          >
+                            <ArrowUp size={13} />
+                          </button>
+                          <button
+                            disabled={index === (activeProject.rows?.length || 1) - 1}
+                            onClick={() => handleMoveRow(row.id, 'down')}
+                            className="p-1.5 text-muted hover:text-text hover:bg-card disabled:opacity-30 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                            title="Move Row Down"
+                          >
+                            <ArrowDown size={13} />
+                          </button>
+                        </div>
+                      )}
+
+                      {(projectPerms.add_card || projectPerms.modify_card || isGlobalMod) && (
+                        <button
+                          onClick={() => {
+                            if (activeQuickCreateRowId === row.id) {
+                              setActiveQuickCreateRowId(null);
+                            } else {
+                              setActiveQuickCreateRowId(row.id);
+                              setNewCardTitle('');
+                            }
+                          }}
+                          className="px-2.5 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <Plus size={13} /> Add Card
+                        </button>
+                      )}
+
+                      {(projectPerms.manage_statuses || isGlobalMod) && !row.is_default && (
+                        <button
+                          onClick={() => handleDeleteRow(row.id, row.name, row.is_default)}
+                          className="p-1.5 text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer"
+                          title="Delete Row"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <AnimatePresence>
+                    {activeQuickCreateRowId === row.id && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="p-3 border-b border-border/60 bg-accent/5 flex items-center gap-2"
+                      >
+                        <input
+                          type="text"
+                          placeholder="Card title..."
+                          value={newCardTitle}
+                          onChange={(e) => setNewCardTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleQuickCreateCardInRow(row.id);
+                            if (e.key === 'Escape') setActiveQuickCreateRowId(null);
+                          }}
+                          className="flex-1 bg-card border border-accent/50 rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none text-text"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleQuickCreateCardInRow(row.id)}
+                          className="px-3 py-1.5 bg-accent hover:bg-accent/90 text-white rounded-lg text-xs font-bold uppercase tracking-wider cursor-pointer"
+                        >
+                          Create
+                        </button>
+                        <button
+                          onClick={() => setActiveQuickCreateRowId(null)}
+                          className="px-2 py-1.5 text-muted hover:text-text cursor-pointer"
+                        >
+                          <X size={14} />
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {cards.length === 0 ? (
+                    <div className="p-6 text-center text-muted text-xs font-bold uppercase tracking-wider">
+                      No cards in this row
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border/40">
+                      {cards.map((card: any) => {
+                        const cardType = card.card_type;
+                        const statusObj = activeProject.statuses?.find((s: any) => s.id === card.status_id);
+
+                        return (
+                          <div
+                            key={card.id}
+                            className="p-3 hover:bg-surface/30 transition-colors flex items-center justify-between gap-3 group"
+                          >
+                            <div
+                              className="flex items-center gap-3 flex-1 cursor-pointer min-w-0"
+                              onClick={() => navigate(`/${shortname}/kanban/projects/${getProjectRouteKey()}/management/cards/${card.id}`)}
+                            >
+                              {activeProject.prefix && (
+                                <span className="px-2 py-0.5 bg-surface border border-border text-[10px] text-text font-mono font-black rounded-md tracking-wider shrink-0 shadow-sm">
+                                  {activeProject.prefix}-{card.count ?? card.id}
+                                </span>
+                              )}
+
+                              <span className="text-xs font-bold text-text-light truncate group-hover:text-accent transition-colors">
+                                {card.title}
+                              </span>
+
+                              {statusObj && (
+                                <span className="px-2 py-0.5 bg-surface border border-border text-muted rounded text-[9px] font-bold uppercase tracking-wider shrink-0">
+                                  Column: {statusObj.name}
+                                </span>
+                              )}
+
+                              {cardType && (
+                                <span
+                                  className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider text-white flex items-center gap-1 shrink-0"
+                                  style={{ backgroundColor: cardType.color }}
+                                >
+                                  {getCardTypeIcon(cardType.icon, 10)}
+                                  {cardType.name}
+                                </span>
+                              )}
+
+                              {card.priority && (
+                                <span
+                                  style={{ color: card.priority.color }}
+                                  className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0"
+                                >
+                                  {getCardTypeIcon(card.priority.icon ?? 'ArrowUp', 10)}
+                                  {card.priority.name}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {card.assignees && card.assignees.length > 0 && (
+                                <div className="flex -space-x-1">
+                                  {card.assignees.map((u: any) => (
+                                    <div
+                                      key={u.id}
+                                      className="w-5 h-5 rounded-full border border-card bg-surface flex items-center justify-center text-[8px] font-bold text-text uppercase overflow-hidden shrink-0"
+                                      title={u.username}
+                                    >
+                                      {u.avatar_url ? (
+                                        <img src={u.avatar_url} alt={u.username} className="w-full h-full object-cover" />
+                                      ) : (
+                                        u.username.slice(0, 2)
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Move Status Column Select */}
+                              {(projectPerms.modify_card || isGlobalMod) && (
+                                <select
+                                  value={card.status_id}
+                                  onChange={async (e) => {
+                                    const targetStatusId = parseInt(e.target.value, 10);
+                                    if (targetStatusId && targetStatusId !== card.status_id) {
+                                      const loadToast = toast.loading('Updating column...');
+                                      try {
+                                        await api.post(`/kanban/cards/${card.id}/move`, {
+                                          status_id: targetStatusId,
+                                        });
+                                        toast.success('Column updated', { id: loadToast });
+                                        fetchProjects(getProjectRouteKey());
+                                      } catch (err) {
+                                        toast.error('Failed to update column', { id: loadToast });
+                                      }
+                                    }
+                                  }}
+                                  className="bg-surface border border-border text-[10px] font-bold uppercase tracking-wider rounded-lg px-2 py-1 focus:outline-none text-text cursor-pointer"
+                                >
+                                  {activeProject.statuses?.map((s: any) => (
+                                    <option key={s.id} value={s.id}>
+                                      Col: {s.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+
+                              {/* Move Row Select */}
+                              {(projectPerms.modify_card || isGlobalMod) && activeProject.rows && activeProject.rows.length > 1 && (
+                                <select
+                                  value={card.row_id || ''}
+                                  onChange={async (e) => {
+                                    const targetRowId = parseInt(e.target.value, 10);
+                                    if (targetRowId && targetRowId !== card.row_id) {
+                                      const loadToast = toast.loading('Moving row...');
+                                      try {
+                                        await api.post(`/kanban/cards/${card.id}/move`, {
+                                          row_id: targetRowId,
+                                        });
+                                        toast.success('Row updated', { id: loadToast });
+                                        fetchProjects(getProjectRouteKey());
+                                      } catch (err) {
+                                        toast.error('Failed to move row', { id: loadToast });
+                                      }
+                                    }
+                                  }}
+                                  className="bg-surface border border-border text-[10px] font-bold uppercase tracking-wider rounded-lg px-2 py-1 focus:outline-none text-text cursor-pointer"
+                                >
+                                  {activeProject.rows.map((r: any) => (
+                                    <option key={r.id} value={r.id}>
+                                      Row: {r.name} {r.is_visible === false ? '(Invisible)' : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </main>
+      )}
+
       {/* Main Board View */}
       {activeProject && viewMode === 'board' && (
         <main className="flex-1 overflow-x-auto overflow-y-hidden p-6 flex items-start gap-4 scrollbar-thin select-none">
           <>
-            {activeProject.statuses?.map((col: any) => (
+            {activeProject.statuses?.filter((col: any) => col.is_visible !== false).map((col: any) => {
+              const visibleRowIds = new Set((activeProject.rows || []).filter((r: any) => r.is_visible !== false).map((r: any) => r.id));
+              const visibleCards = (col.cards || []).filter((c: any) => !c.row_id || visibleRowIds.has(c.row_id));
+
+              return (
               <div 
                 key={col.id}
                 draggable={projectPerms.manage_statuses}
@@ -1367,7 +2097,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                 <div 
                   onDragOver={handleCardDragOver}
                   className={`overflow-y-auto p-2 scrollbar-thin transition-all duration-200 ${
-                    col.cards && col.cards.length > 0
+                    visibleCards && visibleCards.length > 0
                       ? 'flex-1 min-h-[100px] max-h-[calc(100vh-270px)] space-y-2'
                       : isDraggingCard
                         ? draggedOverColId === col.id
@@ -1376,8 +2106,8 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                         : 'h-3 border border-transparent'
                   }`}
                 >
-                  {col.cards && col.cards.length > 0 ? (
-                    col.cards.map((card: any) => {
+                  {visibleCards && visibleCards.length > 0 ? (
+                    visibleCards.map((card: any) => {
                       const cardType = card.card_type || cardTypes.find((t: any) => t.id === card.card_type_id);
                       const completedSubtasks = card.subtasks?.filter((s: any) => s.is_completed).length || 0;
                       const totalSubtasks = card.subtasks?.length || 0;
@@ -1397,7 +2127,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                           onDrop={(e) => handleCardDrop(e, col.id, card.id)}
                           onClick={() => {
                             if (projectPerms.view_card_details) {
-                              navigate(`/${shortname}/kanban/projects/${projectIdFromUrl}/cards/${card.id}`);
+                              navigate(`/${shortname}/kanban/projects/${getProjectRouteKey()}/cards/${card.id}`);
                             } else {
                               toast.error('You do not have access to view card details');
                             }
@@ -1441,7 +2171,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                           <h4 className="text-xs font-bold text-text-light leading-snug w-full flex items-start gap-1 flex-wrap">
                             {activeProject?.show_prefix && activeProject?.prefix && (
                               <span className={`px-1.5 py-0.5 bg-surface border border-border text-[9px] text-text font-mono font-black rounded-md tracking-wider shadow-sm shrink-0 ${isFinalColumn ? 'line-through opacity-50' : ''}`}>
-                                {activeProject.prefix}-{card.id}
+                                {activeProject.prefix}-{card.count ?? card.id}
                               </span>
                             )}
                             <span className="capitalize">{card.title}</span>
@@ -1609,7 +2339,8 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                   </div>
                 )}
               </div>
-            ))}
+            );
+            })}
 
             {/* Add Status/Column Column */}
             {projectPerms.manage_statuses && (
@@ -1657,11 +2388,14 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       {/* Bottom Tabs Bar */}
       <BottomTabBar
         items={projects}
-        activeId={projectIdFromUrl}
+        activeId={activeProject?.id || null}
         onSelect={(id) => {
           setActiveQuickCreateColId(null);
           setEditingColumnId(null);
-          navigate(`/${shortname}/kanban/projects/${id}`);
+          const selectedProj = projects.find(p => p.id === id);
+          if (selectedProj) {
+            navigate(`/${shortname}/kanban/projects/${getProjectKey(selectedProj)}`);
+          }
         }}
         onReorder={handleReorderProjects}
         canReorder={isGlobalMod}
@@ -1738,7 +2472,8 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                       color: item.color || '#3b82f6',
                       description: item.description || '',
                       prefix: item.prefix || '',
-                      show_prefix: item.show_prefix ?? true
+                      show_prefix: item.show_prefix ?? true,
+                      enable_project_management: item.enable_project_management ?? false
                     });
                     setShowProjectSettingsModal(true);
                   }}
@@ -1751,7 +2486,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                 <button
                   onClick={() => {
                     closeMenu();
-                    navigate(`/${shortname}/kanban/projects/${item.id}/archive`);
+                    navigate(`/${shortname}/kanban/projects/${getProjectKey(item as KanbanProject)}/archive`);
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors text-left cursor-pointer"
                 >
@@ -1980,6 +2715,24 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                     </div>
                   </div>
 
+                  <div className="p-3 bg-surface/50 border border-border rounded-xl space-y-1">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="enable_project_management"
+                        checked={projectSettings.enable_project_management}
+                        onChange={(e) => setProjectSettings({ ...projectSettings, enable_project_management: e.target.checked })}
+                        className="rounded border-border bg-surface text-accent focus:ring-0 w-4 h-4 cursor-pointer"
+                      />
+                      <label htmlFor="enable_project_management" className="text-[10px] font-black uppercase tracking-wider text-text select-none cursor-pointer flex items-center gap-1.5">
+                        <ListTodo size={12} className="text-accent" /> Enable Project Management
+                      </label>
+                    </div>
+                    <p className="text-[9px] text-muted font-medium pl-6">
+                      Adds a Project Management button for card modifiers to configure project rows and maintain an invisible backlog hidden from the main board.
+                    </p>
+                  </div>
+
                   <div>
                     <label className="block text-[9px] font-bold uppercase tracking-wider text-muted mb-1">
                       Description
@@ -2111,7 +2864,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
               }
             }}
             onProjectUpdated={() => {
-              fetchProjects(projectIdFromUrl);
+              fetchProjects(getProjectRouteKey());
             }}
           />
         )}
@@ -2524,7 +3277,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {activeProject?.show_prefix && activeProject?.prefix && (
                         <span className={`px-1.5 py-0.5 bg-surface border border-border text-[10px] text-text font-mono font-black rounded-md tracking-wider shadow-sm ${activeProject.statuses && activeProject.statuses.length > 1 && selectedCardDetails.status_id === activeProject.statuses[activeProject.statuses.length - 1].id ? 'line-through opacity-50' : ''}`}>
-                          {activeProject.prefix}-{selectedCardDetails.id}
+                          {activeProject.prefix}-{selectedCardDetails.count ?? selectedCardDetails.id}
                         </span>
                       )}
                       <input
@@ -2557,11 +3310,11 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                       />
                     </div>
                     <p className="text-[9px] text-muted font-bold tracking-wider uppercase mt-0.5 px-1">
-                      in column: <span className="text-text-light">{selectedCardDetails.status?.name}</span>
+                      in project: <span className="text-text-light">{activeProject?.name || 'Project'}</span>
                     </p>
                   </div>
                 </div>
-                <button type="button" onClick={() => navigate(`/${shortname}/kanban/projects/${projectIdFromUrl}`)} className="text-muted hover:text-text p-1.5 rounded-lg hover:bg-surface cursor-pointer">
+                <button type="button" onClick={() => navigate(getReturnRoute())} className="text-muted hover:text-text p-1.5 rounded-lg hover:bg-surface cursor-pointer">
                   <X size={16} />
                 </button>
               </div>

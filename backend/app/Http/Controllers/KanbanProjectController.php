@@ -17,7 +17,11 @@ class KanbanProjectController extends Controller
         $user = Auth::guard('sanctum')->user();
 
         $projects = $faction->kanbanProjects()
-            ->with(['permissions', 'labels', 'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments'])
+            ->with([
+                'permissions', 'labels', 
+                'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments',
+                'rows.cards.assignees', 'rows.cards.labels', 'rows.cards.cardType', 'rows.cards.priority', 'rows.cards.subtasks', 'rows.cards.comments'
+            ])
             ->orderBy('order')
             ->orderBy('id')
             ->get();
@@ -52,6 +56,7 @@ class KanbanProjectController extends Controller
             'description' => 'nullable|string|max:1000',
             'prefix' => 'nullable|string|max:10',
             'show_prefix' => 'sometimes|boolean',
+            'enable_project_management' => 'sometimes|boolean',
         ]);
 
         $maxOrder = $faction->kanbanProjects()->max('order') ?? -1;
@@ -62,20 +67,33 @@ class KanbanProjectController extends Controller
             'description' => $validated['description'] ?? null,
             'prefix' => $validated['prefix'] ?? null,
             'show_prefix' => $validated['show_prefix'] ?? true,
+            'enable_project_management' => $validated['enable_project_management'] ?? false,
             'order' => $maxOrder + 1,
             'created_by' => $user->id,
         ]);
 
         // Automatically create default columns/statuses
         $project->statuses()->createMany([
-            ['name' => 'To Do', 'order' => 0],
-            ['name' => 'In Progress', 'order' => 1],
-            ['name' => 'Done', 'order' => 2],
+            ['name' => 'To Do', 'order' => 0, 'is_default' => true],
+            ['name' => 'In Progress', 'order' => 1, 'is_default' => false],
+            ['name' => 'Done', 'order' => 2, 'is_default' => false],
+        ]);
+
+        // Automatically create default row
+        $project->rows()->create([
+            'name' => 'Default',
+            'order' => 0,
+            'is_visible' => true,
+            'is_default' => true,
         ]);
 
         $this->audit('kanban.project.create', "Created Kanban project '{$project->name}' for faction '{$faction->name}'", null, $project, null, $project->getAttributes());
 
-        return response()->json($this->sanitizeProjectForUser($project->load(['permissions', 'labels', 'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments']), $user), 201);
+        return response()->json($this->sanitizeProjectForUser($project->load([
+            'permissions', 'labels', 
+            'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments',
+            'rows.cards.assignees', 'rows.cards.labels', 'rows.cards.cardType', 'rows.cards.priority', 'rows.cards.subtasks', 'rows.cards.comments'
+        ]), $user), 201);
     }
 
     public function update(Request $request, KanbanProject $project)
@@ -97,6 +115,7 @@ class KanbanProjectController extends Controller
             'description' => 'sometimes|nullable|string|max:1000',
             'prefix' => 'sometimes|nullable|string|max:10',
             'show_prefix' => 'sometimes|boolean',
+            'enable_project_management' => 'sometimes|boolean',
             'created_by' => 'sometimes|nullable|integer|exists:users,id',
         ]);
 
@@ -242,13 +261,22 @@ class KanbanProjectController extends Controller
     private function sanitizeProjectForUser($project, $user)
     {
         // First make sure we load everything needed if not loaded
-        if (!$project->relationLoaded('statuses')) {
-            $project->load(['permissions', 'labels', 'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments']);
+        if (!$project->relationLoaded('statuses') || !$project->relationLoaded('rows')) {
+            $project->load([
+                'permissions', 'labels', 
+                'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments',
+                'rows.cards.assignees', 'rows.cards.labels', 'rows.cards.cardType', 'rows.cards.priority', 'rows.cards.subtasks', 'rows.cards.comments'
+            ]);
         } else {
             // Ensure cards relations are loaded for status columns
             foreach ($project->statuses as $status) {
                 if (!$status->relationLoaded('cards')) {
                     $status->load('cards.assignees', 'cards.labels', 'cards.cardType', 'cards.priority', 'cards.subtasks', 'cards.comments');
+                }
+            }
+            foreach ($project->rows as $row) {
+                if (!$row->relationLoaded('cards')) {
+                    $row->load('cards.assignees', 'cards.labels', 'cards.cardType', 'cards.priority', 'cards.subtasks', 'cards.comments');
                 }
             }
         }
@@ -277,6 +305,16 @@ class KanbanProjectController extends Controller
             foreach ($project->statuses as $status) {
                 if (isset($status->cards)) {
                     foreach ($status->cards as $card) {
+                        $this->sanitizeCardForUser($card, $user, $hasViewCardDetails);
+                    }
+                }
+            }
+        }
+
+        if (isset($project->rows)) {
+            foreach ($project->rows as $row) {
+                if (isset($row->cards)) {
+                    foreach ($row->cards as $card) {
                         $this->sanitizeCardForUser($card, $user, $hasViewCardDetails);
                     }
                 }

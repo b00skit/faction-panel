@@ -13,23 +13,49 @@ class KanbanCard extends Model
     protected $fillable = [
         'project_id',
         'status_id',
+        'row_id',
         'card_type_id',
         'priority_id',
         'title',
         'description',
         'color',
         'order',
+        'count',
         'created_by',
         'is_archived',
     ];
 
     protected $casts = [
+        'count' => 'integer',
         'is_archived' => 'boolean',
     ];
 
     protected $attributes = [
         'is_archived' => false,
     ];
+
+    protected static function booted()
+    {
+        static::creating(function ($card) {
+            if (is_null($card->count)) {
+                $maxCount = static::withTrashed()
+                    ->where('project_id', $card->project_id)
+                    ->max('count') ?? 0;
+                $card->count = $maxCount + 1;
+            }
+        });
+
+        static::retrieved(function ($card) {
+            if (is_null($card->count)) {
+                $count = static::withTrashed()
+                    ->where('project_id', $card->project_id)
+                    ->where('id', '<=', $card->id)
+                    ->count();
+                $card->count = $count > 0 ? $count : 1;
+                $card->saveQuietly();
+            }
+        });
+    }
 
     public function project()
     {
@@ -39,6 +65,11 @@ class KanbanCard extends Model
     public function status()
     {
         return $this->belongsTo(KanbanStatus::class, 'status_id');
+    }
+
+    public function row()
+    {
+        return $this->belongsTo(KanbanRow::class, 'row_id');
     }
 
     public function cardType()

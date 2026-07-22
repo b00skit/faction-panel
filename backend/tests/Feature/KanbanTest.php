@@ -275,6 +275,12 @@ test('can create project with prefix and toggle show prefix settings', function 
         'prefix' => 'UPD',
         'show_prefix' => true,
     ]);
+
+    // Can access project endpoint using shortcode prefix instead of ID
+    $prefixResponse = $this->actingAs($this->user)
+        ->getJson("/api/kanban/projects/UPD/assignees");
+
+    $prefixResponse->assertStatus(200);
 });
 
 test('can archive, restore and fetch archived cards', function () {
@@ -422,4 +428,112 @@ test('obfuscates comments and descriptions when user lacks view details permissi
     // Comments should be integer/count, not the comment records array
     $this->assertEquals(1, $cardData['comments']);
 });
+
+test('can create and manage kanban rows and respects default status column protection', function () {
+    $project = KanbanProject::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Project Row Board',
+        'created_by' => $this->user->id,
+        'enable_project_management' => true,
+    ]);
+
+    $defaultStatus = KanbanStatus::create([
+        'project_id' => $project->id,
+        'name' => 'To Do',
+        'order' => 0,
+        'is_visible' => true,
+        'is_default' => true,
+    ]);
+
+    $defaultRow = \App\Models\KanbanRow::create([
+        'project_id' => $project->id,
+        'name' => 'Default Row',
+        'order' => 0,
+        'is_visible' => true,
+        'is_default' => true,
+    ]);
+
+    // Attempting to delete default status column should fail with 422
+    $deleteStatusResponse = $this->actingAs($this->user)
+        ->deleteJson("/api/kanban/statuses/{$defaultStatus->id}");
+    $deleteStatusResponse->assertStatus(422);
+
+    // Attempting to hide default status column should fail with 422
+    $hideStatusResponse = $this->actingAs($this->user)
+        ->putJson("/api/kanban/statuses/{$defaultStatus->id}", ['is_visible' => false]);
+    $hideStatusResponse->assertStatus(422);
+
+    // Create custom Kanban Row
+    $rowResponse = $this->actingAs($this->user)
+        ->postJson("/api/kanban/projects/{$project->id}/rows", [
+            'name' => 'Invisible Backlog Row',
+            'is_visible' => false,
+        ]);
+    $rowResponse->assertStatus(201)
+        ->assertJsonPath('name', 'Invisible Backlog Row')
+        ->assertJsonPath('is_visible', false);
+
+    $rowId = $rowResponse->json('id');
+
+    // Toggle row visibility
+    $toggleResponse = $this->actingAs($this->user)
+        ->putJson("/api/kanban/rows/{$rowId}", [
+            'is_visible' => true,
+        ]);
+    $toggleResponse->assertStatus(200)
+        ->assertJsonPath('is_visible', true);
+
+    // Attempt to delete default row should fail with 422
+    $deleteRowResponse = $this->actingAs($this->user)
+        ->deleteJson("/api/kanban/rows/{$defaultRow->id}");
+    $deleteRowResponse->assertStatus(422);
+
+    // Delete custom row should succeed
+    $deleteCustomRow = $this->actingAs($this->user)
+        ->deleteJson("/api/kanban/rows/{$rowId}");
+    $deleteCustomRow->assertStatus(200);
+});
+
+test('cards receive independent per-project count values', function () {
+    $project1 = KanbanProject::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Project Alpha',
+        'created_by' => $this->user->id,
+    ]);
+    $status1 = KanbanStatus::create(['project_id' => $project1->id, 'name' => 'To Do', 'order' => 0]);
+
+    $project2 = KanbanProject::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Project Beta',
+        'created_by' => $this->user->id,
+    ]);
+    $status2 = KanbanStatus::create(['project_id' => $project2->id, 'name' => 'To Do', 'order' => 0]);
+
+    $card1 = KanbanCard::create([
+        'project_id' => $project1->id,
+        'status_id' => $status1->id,
+        'card_type_id' => $this->cardType->id,
+        'title' => 'Alpha Card 1',
+    ]);
+
+    $card2 = KanbanCard::create([
+        'project_id' => $project2->id,
+        'status_id' => $status2->id,
+        'card_type_id' => $this->cardType->id,
+        'title' => 'Beta Card 1',
+    ]);
+
+    $card3 = KanbanCard::create([
+        'project_id' => $project1->id,
+        'status_id' => $status1->id,
+        'card_type_id' => $this->cardType->id,
+        'title' => 'Alpha Card 2',
+    ]);
+
+    expect($card1->count)->toBe(1);
+    expect($card2->count)->toBe(1);
+    expect($card3->count)->toBe(2);
+});
+
+
 

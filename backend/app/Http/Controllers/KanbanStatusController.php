@@ -31,7 +31,7 @@ class KanbanStatusController extends Controller
             return true;
         }
 
-        return User::hasProjectPermission($user, $project, $permissionKey);
+        return User::hasProjectPermission($user, $project, $permissionKey) || User::hasProjectPermission($user, $project, 'modify_card');
     }
 
     public function store(Request $request, KanbanProject $project)
@@ -42,12 +42,14 @@ class KanbanStatusController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'is_visible' => 'sometimes|boolean',
         ]);
 
         $maxOrder = $project->statuses()->max('order') ?? -1;
 
         $status = $project->statuses()->create([
             'name' => $validated['name'],
+            'is_visible' => $validated['is_visible'] ?? true,
             'order' => $maxOrder + 1,
         ]);
 
@@ -66,13 +68,18 @@ class KanbanStatusController extends Controller
         }
 
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => 'sometimes|required|string|max:255',
+            'is_visible' => 'sometimes|boolean',
         ]);
+
+        if ($status->is_default && isset($validated['is_visible']) && ! $validated['is_visible']) {
+            return response()->json(['message' => 'The default status column must remain visible on the board.'], 422);
+        }
 
         $oldValues = $status->getOriginal();
         $status->update($validated);
 
-        $this->audit('kanban.status.update', "Updated status name to '{$status->name}' in project '{$project->name}'", null, $project, $oldValues, $status->getDirty());
+        $this->audit('kanban.status.update', "Updated status '{$status->name}' in project '{$project->name}'", null, $project, $oldValues, $status->getDirty());
 
         KanbanBoardUpdated::dispatch($project->faction_id, $project->id, null, 'status_updated');
 
@@ -84,6 +91,10 @@ class KanbanStatusController extends Controller
         $project = $status->project;
         if (!$this->checkAccess($project, 'manage_statuses')) {
             return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        if ($status->is_default) {
+            return response()->json(['message' => 'The default status column cannot be deleted.'], 422);
         }
 
         $this->audit('kanban.status.delete', "Deleted status '{$status->name}' in project '{$project->name}'", null, $project, $status->getAttributes());
