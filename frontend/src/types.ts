@@ -607,8 +607,8 @@ export interface KanbanCard {
   row?: KanbanRow | null;
   assignees?: User[];
   labels?: KanbanLabel[];
-  subtasks?: KanbanSubtask[];
-  comments?: KanbanComment[];
+  subtasks?: KanbanSubtask[] | { completed: number; total: number } | null;
+  comments?: KanbanComment[] | number | null;
   created_at?: string;
   updated_at?: string;
 }

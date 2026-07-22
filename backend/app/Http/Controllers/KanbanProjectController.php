@@ -231,7 +231,7 @@ class KanbanProjectController extends Controller
 
         $cards = $project->cards()
             ->where('is_archived', true)
-            ->with(['assignees', 'labels', 'cardType', 'priority', 'status', 'comments'])
+            ->with(['assignees', 'labels', 'cardType', 'priority', 'status', 'comments', 'subtasks'])
             ->orderBy('updated_at', 'desc')
             ->get();
 
@@ -252,8 +252,10 @@ class KanbanProjectController extends Controller
             $card->unsetRelation('comments');
             $card->setAttribute('comments', $commentsCount > 0 ? $commentsCount : null);
 
+            $totalSubtasks = $card->subtasks ? $card->subtasks->count() : 0;
+            $completedSubtasks = $card->subtasks ? $card->subtasks->where('is_completed', true)->count() : 0;
             $card->unsetRelation('subtasks');
-            $card->setAttribute('subtasks', []);
+            $card->setAttribute('subtasks', $totalSubtasks > 0 ? ['completed' => $completedSubtasks, 'total' => $totalSubtasks] : null);
         }
         return $card;
     }

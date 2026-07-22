@@ -2109,8 +2109,12 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                   {visibleCards && visibleCards.length > 0 ? (
                     visibleCards.map((card: any) => {
                       const cardType = card.card_type || cardTypes.find((t: any) => t.id === card.card_type_id);
-                      const completedSubtasks = card.subtasks?.filter((s: any) => s.is_completed).length || 0;
-                      const totalSubtasks = card.subtasks?.length || 0;
+                      const completedSubtasks = Array.isArray(card.subtasks)
+                        ? card.subtasks.filter((s: any) => s.is_completed).length
+                        : (typeof card.subtasks === 'object' && card.subtasks !== null ? (card.subtasks.completed ?? 0) : 0);
+                      const totalSubtasks = Array.isArray(card.subtasks)
+                        ? card.subtasks.length
+                        : (typeof card.subtasks === 'object' && card.subtasks !== null ? (card.subtasks.total ?? 0) : 0);
                       const commentCount = typeof card.comments === 'number' ? card.comments : (Array.isArray(card.comments) ? card.comments.length : 0);
                       const isFinalColumn = activeProject.statuses && activeProject.statuses.length > 1 && col.id === activeProject.statuses[activeProject.statuses.length - 1].id;
 
@@ -3371,7 +3375,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                         <ListTodo size={12} /> Checklist / Sub-Tasks
                       </h4>
 
-                      {selectedCardDetails.subtasks && selectedCardDetails.subtasks.length > 0 && (
+                      {Array.isArray(selectedCardDetails.subtasks) && selectedCardDetails.subtasks.length > 0 && (
                         <div className="space-y-1">
                           <div className="flex justify-between items-center text-[9px] font-bold text-muted uppercase tracking-wider">
                             <span>Progress</span>
@@ -3397,7 +3401,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                       )}
 
                       <div className="space-y-1.5">
-                        {selectedCardDetails.subtasks?.map((subtask) => (
+                        {Array.isArray(selectedCardDetails.subtasks) && selectedCardDetails.subtasks.map((subtask: any) => (
                           <div
                             key={subtask.id}
                             className="flex items-center justify-between gap-3 p-2 rounded-lg bg-surface/40 hover:bg-surface/60 border border-border/40 group/sub"

@@ -402,6 +402,9 @@ test('obfuscates comments and descriptions when user lacks view details permissi
         'comment' => 'Secret comment contents',
     ]);
 
+    $card->subtasks()->create(['title' => 'Subtask 1', 'is_completed' => true]);
+    $card->subtasks()->create(['title' => 'Subtask 2', 'is_completed' => false]);
+
     KanbanProjectPermission::create([
         'project_id' => $project->id,
         'role_id' => null,
@@ -427,6 +430,9 @@ test('obfuscates comments and descriptions when user lacks view details permissi
 
     // Comments should be integer/count, not the comment records array
     $this->assertEquals(1, $cardData['comments']);
+
+    // Subtasks should be an object with completed and total numbers, not the subtask records array
+    $this->assertEquals(['completed' => 1, 'total' => 2], $cardData['subtasks']);
 });
 
 test('can create and manage kanban rows and respects default status column protection', function () {
