@@ -2329,6 +2329,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                               <div
                                 className="w-4 h-4 rounded flex items-center justify-center text-white shrink-0 shadow-sm"
                                 style={{ backgroundColor: cardType.color }}
+                                title={`Card Type: ${cardType.name}`}
                               >
                                 {getCardTypeIcon(cardType.icon, 8)}
                               </div>
@@ -2338,6 +2339,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                               <span
                                 className="text-[7px] font-black uppercase tracking-wider flex items-center gap-0.5 shrink-0"
                                 style={{ color: card.priority.color }}
+                                title={`Priority: ${card.priority.name}`}
                               >
                                 {getCardTypeIcon(card.priority.icon, 8, '', 3)}
                                 {card.priority.name}
@@ -2349,6 +2351,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                                 key={label.id}
                                 className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded"
                                 style={{ backgroundColor: `${label.color}15`, color: label.color, border: `1px solid ${label.color}25` }}
+                                title={`Label: ${label.name}`}
                               >
                                 {label.name}
                               </span>
@@ -2356,13 +2359,20 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                           </div>
 
                           {/* Title - directly below the icon */}
-                          <h4 className="text-xs font-bold text-text-light leading-snug w-full flex items-start gap-1 flex-wrap">
-                            {activeProject?.show_prefix && activeProject?.prefix && (
-                              <span className={`px-1.5 py-0.5 bg-surface border border-border text-[9px] text-text font-mono font-black rounded-md tracking-wider shadow-sm shrink-0 ${isFinalColumn ? 'line-through opacity-50' : ''}`}>
-                                {activeProject.prefix}-{card.count ?? card.id}
+                          <h4 className="text-xs font-bold text-text-light leading-snug w-full flex items-center justify-between gap-1 flex-wrap">
+                            <span className="flex items-center gap-1 flex-wrap min-w-0">
+                              {activeProject?.show_prefix && activeProject?.prefix && (
+                                <span className={`px-1.5 py-0.5 bg-surface border border-border text-[9px] text-text font-mono font-black rounded-md tracking-wider shadow-sm shrink-0 ${isFinalColumn ? 'line-through opacity-50' : ''}`}>
+                                  {activeProject.prefix}-{card.count ?? card.id}
+                                </span>
+                              )}
+                              <span className="capitalize">{card.title}</span>
+                            </span>
+                            {isFinalColumn && (
+                              <span className="inline-flex items-center justify-center p-0.5 bg-emerald-500/15 border border-emerald-500/30 rounded-full text-emerald-500 shrink-0 ml-auto" title="Done">
+                                <Check size={10} strokeWidth={3} />
                               </span>
                             )}
-                            <span className="capitalize">{card.title}</span>
                           </h4>
 
                           {/* Card Footer Indicators */}
@@ -2374,13 +2384,13 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                                 </div>
                               )}
                               {totalSubtasks > 0 && (
-                                <div className="flex items-center gap-0.5 text-accent" title="Subtasks">
+                                <div className="flex items-center gap-0.5 text-accent" title={`Subtasks (${completedSubtasks}/${totalSubtasks} completed)`}>
                                   <ListTodo size={10} />
                                   <span>{completedSubtasks}/{totalSubtasks}</span>
                                 </div>
                               )}
                               {commentCount > 0 && (
-                                <div className="flex items-center gap-0.5" title="Comments">
+                                <div className="flex items-center gap-0.5" title={`Comments (${commentCount})`}>
                                   <MessageSquare size={10} />
                                   <span>{commentCount}</span>
                                 </div>
@@ -3454,55 +3464,86 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
             >
               {/* Header */}
               <div className="p-4 border-b border-border flex items-center justify-between shrink-0 bg-surface/10">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
                   <div 
-                    className="w-6 h-6 rounded flex items-center justify-center text-white font-bold"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold shrink-0 shadow-sm"
                     style={{ backgroundColor: selectedCardDetails.card_type?.color || 'var(--accent)' }}
+                    title={`Card Type: ${selectedCardDetails.card_type?.name || 'Card'}`}
                   >
                     {getCardTypeIcon(selectedCardDetails.card_type?.icon || 'ListTodo', 14)}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {activeProject?.show_prefix && activeProject?.prefix && (
-                        <span className={`px-1.5 py-0.5 bg-surface border border-border text-[10px] text-text font-mono font-black rounded-md tracking-wider shadow-sm ${activeProject.statuses && activeProject.statuses.length > 1 && selectedCardDetails.status_id === activeProject.statuses[activeProject.statuses.length - 1].id ? 'line-through opacity-50' : ''}`}>
-                          {activeProject.prefix}-{selectedCardDetails.count ?? selectedCardDetails.id}
-                        </span>
-                      )}
-                      <input
-                        type="text"
-                        value={editingCardTitle !== null ? editingCardTitle : selectedCardDetails.title}
-                        onChange={(e) => setEditingCardTitle(e.target.value)}
-                        onFocus={() => setEditingCardTitle(selectedCardDetails.title)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (editingCardTitle !== null && editingCardTitle.trim() && editingCardTitle !== selectedCardDetails.title) {
+
+                  {/* Prefix Badge - ALWAYS visible in top left of card modal header */}
+                  <span
+                    className={`px-2 py-0.5 bg-surface border border-border text-[11px] text-text font-mono font-black rounded-md tracking-wider shadow-sm shrink-0 ${
+                      activeProject?.statuses && activeProject.statuses.length > 1 && selectedCardDetails.status_id === activeProject.statuses[activeProject.statuses.length - 1].id
+                        ? 'line-through opacity-50'
+                        : ''
+                    }`}
+                    title="Card Prefix"
+                  >
+                    {activeProject?.prefix ? `${activeProject.prefix}-${selectedCardDetails.count ?? selectedCardDetails.id}` : `#${selectedCardDetails.count ?? selectedCardDetails.id}`}
+                  </span>
+
+                  <div className="flex flex-col justify-center min-w-0 flex-1">
+                    {/* Title / Name Row with Click-to-Edit & Done Checkmark */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {editingCardTitle !== null ? (
+                        <input
+                          type="text"
+                          value={editingCardTitle}
+                          onChange={(e) => setEditingCardTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (editingCardTitle.trim() && editingCardTitle !== selectedCardDetails.title) {
+                                handleUpdateCardFields({ title: editingCardTitle.trim() });
+                              }
+                              setEditingCardTitle(null);
+                            }
+                            if (e.key === 'Escape') {
+                              setEditingCardTitle(null);
+                            }
+                          }}
+                          onBlur={() => {
+                            if (editingCardTitle.trim() && editingCardTitle !== selectedCardDetails.title) {
                               handleUpdateCardFields({ title: editingCardTitle.trim() });
                             }
                             setEditingCardTitle(null);
-                            (e.target as HTMLInputElement).blur();
-                          }
-                          if (e.key === 'Escape') {
-                            setEditingCardTitle(null);
-                            (e.target as HTMLInputElement).blur();
-                          }
-                        }}
-                        onBlur={() => {
-                          if (editingCardTitle !== null && editingCardTitle.trim() && editingCardTitle !== selectedCardDetails.title) {
-                            handleUpdateCardFields({ title: editingCardTitle.trim() });
-                          }
-                          setEditingCardTitle(null);
-                        }}
-                        className="bg-transparent border-b border-transparent hover:border-border focus:border-accent font-black uppercase text-xs text-text py-0.5 px-1 focus:outline-none tracking-widest max-w-[400px]"
-                        disabled={!projectPerms.modify_card}
-                      />
+                          }}
+                          className="bg-surface border border-accent rounded-lg px-3 py-1.5 text-sm sm:text-base font-black uppercase text-text tracking-wider focus:outline-none shadow-sm w-full max-w-[480px]"
+                          autoFocus
+                        />
+                      ) : (
+                        <h3
+                          onClick={() => {
+                            if (projectPerms.modify_card) {
+                              setEditingCardTitle(selectedCardDetails.title);
+                            }
+                          }}
+                          className={`font-black uppercase text-sm sm:text-base text-text tracking-wider py-0.5 px-1 rounded transition-colors ${
+                            projectPerms.modify_card ? 'hover:bg-surface/60 hover:text-accent cursor-pointer' : ''
+                          }`}
+                          title={projectPerms.modify_card ? "Click to edit title" : undefined}
+                        >
+                          {selectedCardDetails.title}
+                        </h3>
+                      )}
+
+                      {/* Done checkmark if in final column */}
+                      {activeProject?.statuses && activeProject.statuses.length > 1 && selectedCardDetails.status_id === activeProject.statuses[activeProject.statuses.length - 1].id && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 text-[10px] font-black tracking-wider uppercase shrink-0" title="Done">
+                          <Check size={12} strokeWidth={3} />
+                          Done
+                        </span>
+                      )}
                     </div>
                     <p className="text-[9px] text-muted font-bold tracking-wider uppercase mt-0.5 px-1">
                       in project: <span className="text-text-light">{activeProject?.name || 'Project'}</span>
                     </p>
                   </div>
                 </div>
-                <button type="button" onClick={() => navigate(getReturnRoute())} className="text-muted hover:text-text p-1.5 rounded-lg hover:bg-surface cursor-pointer">
+                <button type="button" onClick={() => navigate(getReturnRoute())} className="text-muted hover:text-text p-1.5 rounded-lg hover:bg-surface cursor-pointer" title="Close">
                   <X size={16} />
                 </button>
               </div>
@@ -3516,7 +3557,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                   {/* Description */}
                   {selectedCardDetails.card_type?.settings.description && (
                     <div className="space-y-2">
-                      <h4 className="text-[10px] font-black uppercase tracking-wider text-muted flex items-center gap-1.5">
+                      <h4 className="text-[10px] font-black uppercase tracking-wider text-muted flex items-center gap-1.5" title="Description">
                         <FileText size={12} /> Description
                       </h4>
                       {projectPerms.modify_card ? (
@@ -3598,7 +3639,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                   {/* Subtasks */}
                   {selectedCardDetails.card_type?.settings.subtasks && (
                     <div className="space-y-3">
-                      <h4 className="text-[10px] font-black uppercase tracking-wider text-muted flex items-center gap-1.5">
+                      <h4 className="text-[10px] font-black uppercase tracking-wider text-muted flex items-center gap-1.5" title="Checklist / Sub-Tasks">
                         <ListTodo size={12} /> Checklist / Sub-Tasks
                       </h4>
 
@@ -3681,7 +3722,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                   {/* Comments & Activity Log section */}
                   {selectedCardDetails.card_type?.settings.comments && (
                     <div className="space-y-3 border-t border-border pt-4">
-                      <h4 className="text-[10px] font-black uppercase tracking-wider text-muted flex items-center gap-1.5">
+                      <h4 className="text-[10px] font-black uppercase tracking-wider text-muted flex items-center gap-1.5" title="Comments & Activity">
                         <MessageSquare size={12} /> Comments & Activity
                       </h4>
 
@@ -4004,7 +4045,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                   {/* Linked Cards Section */}
                   <div className="space-y-2 border-b border-border pb-4">
                     <div className="flex items-center justify-between">
-                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted flex items-center gap-1">
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted flex items-center gap-1" title="Linked Cards">
                         <LinkIcon size={11} /> Linked Cards
                       </label>
                       {projectPerms.modify_card && (
@@ -4102,7 +4143,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                   {selectedCardDetails.card_type?.settings.assignee && (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <label className="block text-[9px] font-bold uppercase tracking-wider text-muted flex items-center gap-1">
+                        <label className="block text-[9px] font-bold uppercase tracking-wider text-muted flex items-center gap-1" title="Assignees">
                           <Users size={11} /> Assignees
                         </label>
                         {projectPerms.modify_card && (() => {
@@ -4192,7 +4233,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
 
                   {/* Labels / Tags Checklist */}
                   <div className="space-y-2">
-                    <label className="block text-[9px] font-bold uppercase tracking-wider text-muted flex items-center gap-1">
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-muted flex items-center gap-1" title="Labels / Tags">
                       <Tag size={11} /> Labels / Tags
                     </label>
                     <div className="border border-border rounded-xl bg-surface/30 p-2.5 max-h-40 overflow-y-auto space-y-1.5 scrollbar-thin">
