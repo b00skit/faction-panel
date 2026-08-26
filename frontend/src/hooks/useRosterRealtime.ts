@@ -11,6 +11,7 @@ interface PresenceUser {
 interface UseRosterRealtimeProps {
     factionId?: number;
     rosterId?: number;
+    user?: any;
     onRowUpdated?: (row: RosterContent) => void;
     onRowAdded?: (row: RosterContent) => void;
     onRowDeleted?: (rowId: number) => void;
@@ -21,6 +22,7 @@ interface UseRosterRealtimeProps {
 export const useRosterRealtime = ({
     factionId,
     rosterId,
+    user,
     onRowUpdated,
     onRowAdded,
     onRowDeleted,
@@ -45,7 +47,7 @@ export const useRosterRealtime = ({
     });
 
     useEffect(() => {
-        if (!factionId || !rosterId || !localStorage.getItem('access_token')) return;
+        if (!factionId || !rosterId || !user || !localStorage.getItem('access_token')) return;
 
         const rosterChannel = `faction.${factionId}.roster.${rosterId}`;
         const updatesChannel = `faction.${factionId}.updates`;
@@ -89,7 +91,7 @@ export const useRosterRealtime = ({
             echo.leave(rosterChannel);
             echo.leave(updatesChannel);
         };
-    }, [factionId, rosterId]);
+    }, [factionId, rosterId, user]);
 
     return { presenceUsers };
 };

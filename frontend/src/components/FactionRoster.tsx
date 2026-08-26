@@ -122,6 +122,7 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
   const { presenceUsers } = useRosterRealtime({
     factionId: activeDivision?.faction_id,
     rosterId: activeDivision?.id,
+    user,
     onRowUpdated: (updatedRow) => {
         setRosters(prevRosters => {
             return prevRosters.map(roster => {

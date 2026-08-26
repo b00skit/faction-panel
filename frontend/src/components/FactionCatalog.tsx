@@ -25,7 +25,7 @@ const FactionCatalog: React.FC<FactionCatalogProps> = ({ isDark, toggleTheme, us
     const fetchData = async () => {
         try {
             const [myRes, allRes] = await Promise.all([
-                api.get('/factions'),
+                user ? api.get('/factions') : Promise.resolve({ data: [] }),
                 api.get('/factions/all')
             ]);
             setMyFactions(myRes.data);
