@@ -16,13 +16,16 @@ if (!reverbKey) {
     console.warn('Reverb App Key is missing. Real-time features will be disabled.');
 }
 
+const port = import.meta.env.VITE_REVERB_PORT ? Number(import.meta.env.VITE_REVERB_PORT) : 443;
+const scheme = import.meta.env.VITE_REVERB_SCHEME ?? 'https';
+
 const echo = new Echo({
     broadcaster: 'reverb',
     key: reverbKey || 'missing-key',
     wsHost: import.meta.env.VITE_REVERB_HOST || window.location.hostname,
-    wsPort: import.meta.env.VITE_REVERB_PORT ?? 80,
-    wssPort: import.meta.env.VITE_REVERB_PORT ?? 443,
-    forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'https') === 'https',
+    wsPort: port,
+    wssPort: port,
+    forceTLS: scheme === 'https',
     enabledTransports: ['ws', 'wss'],
     authEndpoint: (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000') + '/broadcasting/auth',
     auth: {

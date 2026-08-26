@@ -6,11 +6,11 @@ use App\Models\RosterContent;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class RosterRowUpdated implements ShouldBroadcast
+class RosterRowUpdated implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
@@ -62,13 +62,13 @@ class RosterRowUpdated implements ShouldBroadcast
             'color' => $this->content->color,
             'notes' => $this->content->notes,
             'editing_by' => $this->content->editing_by,
-            'editing_at' => $this->content->editing_at?->toIso8601String(),
+            'editing_at' => $this->content->editing_at ? ($this->content->editing_at instanceof \DateTimeInterface ? $this->content->editing_at->toIso8601String() : (string) $this->content->editing_at) : null,
             'editing_col' => $this->content->editing_col,
             'editor' => $this->content->editor ? [
                 'id' => $this->content->editor->id,
                 'username' => $this->content->editor->username,
             ] : null,
-            'updated_at' => $this->content->updated_at?->toIso8601String(),
+            'updated_at' => $this->content->updated_at ? ($this->content->updated_at instanceof \DateTimeInterface ? $this->content->updated_at->toIso8601String() : (string) $this->content->updated_at) : null,
         ];
     }
 }
