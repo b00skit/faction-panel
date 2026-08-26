@@ -141,7 +141,7 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
   }, [factionData]);
 
   useEffect(() => {
-    if (!factionData?.id) return;
+    if (!factionData?.id || !user || !localStorage.getItem('access_token')) return;
 
     const updatesChannel = `faction.${factionData.id}.updates`;
 
@@ -162,7 +162,7 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
     return () => {
       echo.leave(updatesChannel);
     };
-  }, [factionData?.id]);
+  }, [factionData?.id, user]);
 
   const handleSetActiveDivId = (id: number | null) => {
     setActiveDivId(id);

@@ -367,7 +367,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
 
   // WebSocket Live Updates
   useEffect(() => {
-    if (!activeProject?.faction_id) return;
+    if (!activeProject?.faction_id || !user || !localStorage.getItem('access_token')) return;
     
     const handler = (e: any) => {
       fetchProjects(getProjectKey(activeProject));
@@ -383,7 +383,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
     return () => {
       echo.leave(`faction.${activeProject.faction_id}.kanban`);
     };
-  }, [projectParamFromUrl, activeProject, cardIdFromUrl, activityPage]);
+  }, [projectParamFromUrl, activeProject, cardIdFromUrl, activityPage, user]);
 
   // Project Permission Helpers
   const fetchPermissionData = async (project: KanbanProject) => {
