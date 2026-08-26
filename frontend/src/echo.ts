@@ -43,6 +43,7 @@ const echo = new Echo({
     authEndpoint: (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000') + '/broadcasting/auth',
     auth: {
         headers: {
+            Accept: 'application/json',
             get Authorization() {
                 return `Bearer ${localStorage.getItem('access_token')}`;
             },

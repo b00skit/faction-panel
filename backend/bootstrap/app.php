@@ -21,7 +21,13 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->redirectTo(
-            guests: '/admin/login'
+            guests: function (Request $request) {
+                if ($request->expectsJson() || $request->is('api/*') || $request->is('broadcasting/*')) {
+                    return null;
+                }
+
+                return '/admin/login';
+            }
         );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
