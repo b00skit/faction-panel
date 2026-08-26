@@ -22,13 +22,18 @@ class RosterResolutionService
             return '-';
         }
 
+        // 0. Prefer pre-computed linked_display if present
+        if (is_array($content->linked_display) && isset($content->linked_display[$colId]) && $content->linked_display[$colId] !== '') {
+            return (string) $content->linked_display[$colId];
+        }
+
         $section = $content->section;
         if (! $section) {
-            return $content->content[$colId] ?? '';
+            return is_scalar($content->content[$colId] ?? '') ? (string) ($content->content[$colId] ?? '') : '';
         }
         $roster = $section->roster;
         if (! $roster) {
-            return $content->content[$colId] ?? '';
+            return is_scalar($content->content[$colId] ?? '') ? (string) ($content->content[$colId] ?? '') : '';
         }
 
         $columns = $section->use_roster_columns ? ($roster->columns ?? []) : ($section->columns ?: ($roster->columns ?? []));

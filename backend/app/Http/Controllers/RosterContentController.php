@@ -85,6 +85,8 @@ class RosterContentController extends Controller
             'type' => 'sometimes|string|in:predefined,defined,spacer',
             'color' => 'sometimes|nullable|string',
             'content' => 'sometimes|array',
+            'linked_id' => 'sometimes|nullable|array',
+            'linked_display' => 'sometimes|nullable|array',
             'order' => 'sometimes|integer',
             'last_updated_at' => 'sometimes|string',
             'force' => 'sometimes|boolean',

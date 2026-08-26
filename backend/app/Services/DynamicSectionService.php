@@ -159,6 +159,31 @@ class DynamicSectionService
 
             $content->content = $mappedData;
 
+            // Populate linked_id and linked_display for linked columns
+            $columns = $section->use_roster_columns ? ($roster->columns ?? []) : ($section->columns ?: ($roster->columns ?? []));
+            $linkedIdMap = [];
+            $linkedDisplayMap = [];
+            if (is_array($columns)) {
+                foreach ($columns as $col) {
+                    $colId = $col['id'] ?? null;
+                    if (! $colId) {
+                        continue;
+                    }
+                    if (isset($col['linked_database_id']) || isset($col['dataset_id'])) {
+                        if (isset($item['entry_id'])) {
+                            $linkedIdMap[$colId] = $item['entry_id'];
+                        } elseif (isset($item['id']) && is_numeric($item['id'])) {
+                            $linkedIdMap[$colId] = (int) $item['id'];
+                        }
+                        if (isset($mappedData[$colId]) && ! is_array($mappedData[$colId])) {
+                            $linkedDisplayMap[$colId] = (string) $mappedData[$colId];
+                        }
+                    }
+                }
+            }
+            $content->linked_id = $linkedIdMap;
+            $content->linked_display = $linkedDisplayMap;
+
             // Apply Customization (Checkboxes/Tags based on conditions)
             if (isset($config['customization'])) {
                 $this->applyCustomization($content, $config['customization'], $item);

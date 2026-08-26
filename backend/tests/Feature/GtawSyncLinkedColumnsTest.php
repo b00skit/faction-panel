@@ -165,7 +165,8 @@ test('syncing gtaw correctly updates linked roster column values and auto-applie
 
     // 5. Verify the roster content row is now linked to entry_id and auto-applied rules are triggered
     $updatedRow = RosterContent::find($this->contentRow->id);
-    expect($updatedRow->content['name'])->toBe((int) $dbEntry->entry_id);
+    expect($updatedRow->linked_id['name'])->toBe((int) $dbEntry->entry_id);
+    expect($updatedRow->content['name'])->toBe('John Doe');
     expect($updatedRow->content['name_cb'])->toContain('Acting Officer');
     expect($updatedRow->content['name_tags'])->toContain('Command');
 });
@@ -325,8 +326,9 @@ test('syncing gtaw does not crash when linked roster column contains array repre
     expect($dbEntry)->not->toBeNull();
 
     $updatedLinkedRow = RosterContent::find($linkedRow->id);
-    expect($updatedLinkedRow->content['name'])->toBeArray();
-    expect($updatedLinkedRow->content['name']['row_id'])->toBe($primaryRow->id);
+    expect($updatedLinkedRow->linked_id['name'])->toBeArray();
+    expect($updatedLinkedRow->linked_id['name']['row_id'])->toBe($primaryRow->id);
+    expect($updatedLinkedRow->content['name'])->toBe('John Doe');
     expect($updatedLinkedRow->content['name_cb'])->toContain('Acting Officer');
 });
 
@@ -395,6 +397,7 @@ test('syncing gtaw auto-heals roster entry IDs pointing to old database entries 
 
     // 6. Verify that the roster row value got auto-healed to the new entry ID!
     $updatedRow = RosterContent::find($decimalRow->id);
-    expect($updatedRow->content['name'])->toBe((int) $activeEntry->entry_id);
+    expect($updatedRow->linked_id['name'])->toBe((int) $activeEntry->entry_id);
+    expect($updatedRow->content['name'])->toBe('John Doe');
     expect($updatedRow->content['name_cb'])->toContain('Acting Officer');
 });

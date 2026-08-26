@@ -50,6 +50,8 @@ export interface RosterContent {
   type: 'predefined' | 'defined' | 'spacer';
   color?: string | null;
   content: any;
+  linked_id?: Record<string, any> | null;
+  linked_display?: Record<string, any> | null;
   notes?: Record<string, string> | null;
   updated_at?: string;
   editing_by?: number | null;

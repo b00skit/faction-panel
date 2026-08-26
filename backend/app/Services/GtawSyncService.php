@@ -508,6 +508,8 @@ class GtawSyncService
                 continue;
             }
 
+            $linkedId = is_array($content->linked_id) ? $content->linked_id : [];
+            $linkedDisplay = is_array($content->linked_display) ? $content->linked_display : [];
             $changed = false;
 
             foreach ($columns as $col) {
@@ -531,19 +533,24 @@ class GtawSyncService
                     continue;
                 }
 
-                // Stored value in the content
-                $val = $data[$colId] ?? null;
+                // Stored value in the content or linked_id
+                $val = $data[$colId] ?? $linkedId[$colId] ?? $linkedDisplay[$colId] ?? null;
                 if ($val === null || $val === '') {
                     continue;
                 }
 
-                // If it is a linked roster data link, resolve it to its actual value
+                // If it is a linked roster data link, resolve it to its actual value while preserving pointer in linked_id
+                $pointerVal = null;
                 if (is_array($val) && isset($val['row_id']) && isset($val['col_id'])) {
+                    $pointerVal = $val;
                     $linkedContent = $contentsById->get($val['row_id']);
                     $val = ($linkedContent && is_array($linkedContent->content)) ? ($linkedContent->content[$val['col_id']] ?? null) : null;
                 }
 
                 if ($val === null || $val === '' || is_array($val)) {
+                    if ($pointerVal) {
+                        $linkedId[$colId] = $pointerVal;
+                    }
                     continue;
                 }
 
@@ -576,8 +583,7 @@ class GtawSyncService
 
                             // If we found a new active entry, update the stored value to the new active entry_id!
                             if ($matchingEntry) {
-                                $data[$colId] = $matchingEntry->entry_id;
-                                $changed = true;
+                                $val = $matchingEntry->entry_id;
                             }
                         }
                     }
@@ -596,8 +602,7 @@ class GtawSyncService
                                 });
 
                                 if ($matchingEntry) {
-                                    $data[$colId] = $matchingEntry->entry_id;
-                                    $changed = true;
+                                    $val = $matchingEntry->entry_id;
                                     Log::info("GTA:W Sync auto-healed roster entry ID {$val} to active entry ID {$matchingEntry->entry_id} via character name '{$charName}'");
                                 }
                             }
@@ -608,10 +613,33 @@ class GtawSyncService
                     $matchingEntry = $activeEntries->first(function ($e) use ($val) {
                         return strcasecmp(trim($e->data['name'] ?? ''), trim($val)) === 0;
                     });
+                }
 
-                    if ($matchingEntry) {
-                        $data[$colId] = $matchingEntry->entry_id;
+                if ($matchingEntry) {
+                    $charName = (string) ($matchingEntry->data['name'] ?? $matchingEntry->data['character_name'] ?? $matchingEntry->entry_id);
+                    $targetLinkedId = $pointerVal ?: $matchingEntry->entry_id;
+                    if (($linkedId[$colId] ?? null) !== $targetLinkedId || ($linkedDisplay[$colId] ?? null) !== $charName || ($data[$colId] ?? null) !== $charName) {
+                        $linkedId[$colId] = $targetLinkedId;
+                        $linkedDisplay[$colId] = $charName;
+                        $data[$colId] = $charName;
                         $changed = true;
+                    }
+                } else {
+                    // Entry not in active entries: preserve linked_display and content display string
+                    if ($pointerVal) {
+                        $linkedId[$colId] = $pointerVal;
+                    }
+                    if (isset($linkedDisplay[$colId]) && $linkedDisplay[$colId] !== '') {
+                        if (($data[$colId] ?? null) !== $linkedDisplay[$colId]) {
+                            $data[$colId] = $linkedDisplay[$colId];
+                            $changed = true;
+                        }
+                    } elseif (is_string($val) && ! is_numeric($val)) {
+                        $linkedDisplay[$colId] = $val;
+                        if (($data[$colId] ?? null) !== $val) {
+                            $data[$colId] = $val;
+                            $changed = true;
+                        }
                     }
                 }
 
@@ -733,7 +761,11 @@ class GtawSyncService
             }
 
             if ($changed) {
-                $content->updateQuietly(['content' => $data]);
+                $content->updateQuietly([
+                    'linked_id' => $linkedId,
+                    'linked_display' => $linkedDisplay,
+                    'content' => $data,
+                ]);
                 $modified++;
                 if (! in_array($roster->id, $modifiedRosterIds)) {
                     $modifiedRosterIds[] = $roster->id;

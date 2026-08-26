@@ -45,6 +45,8 @@ class RosterSyncService
 
                     $columns = $this->resolveColumns($roster, $section);
                     $data = is_array($content->content) ? $content->content : [];
+                    $linkedId = is_array($content->linked_id) ? $content->linked_id : [];
+                    $linkedDisplay = is_array($content->linked_display) ? $content->linked_display : [];
                     $changed = false;
 
                     foreach ($columns as $col) {
@@ -58,8 +60,8 @@ class RosterSyncService
                             continue;
                         }
 
-                        $value = $data[$colId] ?? null;
-                        if (! $value) {
+                        $value = $data[$colId] ?? $linkedId[$colId] ?? $linkedDisplay[$colId] ?? null;
+                        if ($value === null || $value === '') {
                             continue;
                         }
 
@@ -73,16 +75,29 @@ class RosterSyncService
                             }
 
                             $linkedContent = $linkedRowsCache[$targetRowId];
-                            $value = (is_array($linkedContent))
+                            $dispVal = (is_array($linkedContent))
                                 ? ($linkedContent[$value['col_id']] ?? null)
                                 : null;
-                        }
 
-                        if ($value === null || is_array($value)) {
+                            if ($dispVal !== null && ! is_array($dispVal)) {
+                                if (($linkedId[$colId] ?? null) !== $value || ($linkedDisplay[$colId] ?? null) !== (string) $dispVal || ($data[$colId] ?? null) !== (string) $dispVal) {
+                                    $linkedId[$colId] = $value;
+                                    $linkedDisplay[$colId] = (string) $dispVal;
+                                    $data[$colId] = (string) $dispVal;
+                                    $changed = true;
+                                }
+                            }
                             continue;
                         }
 
-                        $entry = $dbEntries[$dbId][$value] ?? null;
+                        if (is_array($value)) {
+                            continue;
+                        }
+
+                        // Look up entry by linked_id or stored value/name
+                        $lookupId = $linkedId[$colId] ?? $value;
+                        $entry = $dbEntries[$dbId][$lookupId] ?? null;
+
                         if (! $entry && isset($dbEntries[$dbId])) {
                             foreach ($dbEntries[$dbId] as $item) {
                                 $name = $item->data['name'] ?? $item->data['character_name'] ?? $item->data['Character Name'] ?? null;
@@ -92,13 +107,39 @@ class RosterSyncService
                                 }
                             }
                         }
-                        if (! $entry) {
-                            // \Log::info("Entry not found for dbId $dbId and value $value");
-                            continue;
+
+                        if ($entry) {
+                            $fieldId = $col['database_field_id'] ?? null;
+                            $disp = ($fieldId && $fieldId !== 'id')
+                                ? ($entry->data[$fieldId] ?? $entry->data['name'] ?? $entry->data['character_name'] ?? (string) $entry->entry_id)
+                                : ($entry->data['name'] ?? $entry->data['character_name'] ?? $entry->data['Character Name'] ?? (string) $entry->entry_id);
+                            
+                            $disp = (string) $disp;
+
+                            if (($linkedId[$colId] ?? null) !== $entry->entry_id || ($linkedDisplay[$colId] ?? null) !== $disp || ($data[$colId] ?? null) !== $disp) {
+                                $linkedId[$colId] = $entry->entry_id;
+                                $linkedDisplay[$colId] = $disp;
+                                $data[$colId] = $disp;
+                                $changed = true;
+                            }
+                        } else {
+                            // Entry not found in active entries: preserve existing linked_display / string value if present
+                            if (isset($linkedDisplay[$colId]) && $linkedDisplay[$colId] !== '') {
+                                if (($data[$colId] ?? null) !== $linkedDisplay[$colId]) {
+                                    $data[$colId] = $linkedDisplay[$colId];
+                                    $changed = true;
+                                }
+                            } elseif (is_string($value) && ! is_numeric($value)) {
+                                $linkedDisplay[$colId] = $value;
+                                if (($data[$colId] ?? null) !== $value) {
+                                    $data[$colId] = $value;
+                                    $changed = true;
+                                }
+                            }
                         }
 
                         // Re-evaluate Checkboxes
-                        if (isset($col['checkboxes']) && is_array($col['checkboxes'])) {
+                        if ($entry && isset($col['checkboxes']) && is_array($col['checkboxes'])) {
                             $key = "{$colId}_cb";
                             $current = is_array($data[$key] ?? null) ? $data[$key] : [];
                             $next = $this->evaluateAutoApplies($col['checkboxes'], $entry, $current);
@@ -110,7 +151,7 @@ class RosterSyncService
                         }
 
                         // Re-evaluate Tags
-                        if (isset($col['tags']) && is_array($col['tags'])) {
+                        if ($entry && isset($col['tags']) && is_array($col['tags'])) {
                             $key = "{$colId}_tags";
                             $current = is_array($data[$key] ?? null) ? $data[$key] : [];
                             $next = $this->evaluateAutoApplies($col['tags'], $entry, $current);
@@ -123,7 +164,11 @@ class RosterSyncService
                     }
 
                     if ($changed) {
-                        $content->updateQuietly(['content' => $data]);
+                        $content->updateQuietly([
+                            'linked_id' => $linkedId,
+                            'linked_display' => $linkedDisplay,
+                            'content' => $data,
+                        ]);
                         $modified++;
                         if (! in_array($roster->id, $modifiedRosterIds)) {
                             $modifiedRosterIds[] = $roster->id;

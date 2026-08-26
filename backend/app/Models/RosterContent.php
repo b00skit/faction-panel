@@ -78,6 +78,8 @@ class RosterContent extends Model
         'type',
         'color',
         'content',
+        'linked_id',
+        'linked_display',
         'notes',
         'created_by',
         'editing_by',
@@ -87,6 +89,8 @@ class RosterContent extends Model
 
     protected $casts = [
         'content' => 'array',
+        'linked_id' => 'array',
+        'linked_display' => 'array',
         'notes' => 'array',
         'editing_at' => 'datetime',
     ];
