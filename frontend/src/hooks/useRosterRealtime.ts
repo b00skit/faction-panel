@@ -45,7 +45,7 @@ export const useRosterRealtime = ({
     });
 
     useEffect(() => {
-        if (!factionId || !rosterId) return;
+        if (!factionId || !rosterId || !localStorage.getItem('access_token')) return;
 
         const rosterChannel = `faction.${factionId}.roster.${rosterId}`;
         const updatesChannel = `faction.${factionId}.updates`;

@@ -21,7 +21,7 @@ export const useDiagramRealtime = ({
     });
 
     useEffect(() => {
-        if (!factionId) return;
+        if (!factionId || !localStorage.getItem('access_token')) return;
 
         const diagramsChannel = `faction.${factionId}.diagrams`;
         const updatesChannel = `faction.${factionId}.updates`;
@@ -49,7 +49,7 @@ export const useDiagramRealtime = ({
 
     useEffect(() => {
         const ids = JSON.parse(rosterIdsStr) as number[];
-        if (!factionId || ids.length === 0) return;
+        if (!factionId || ids.length === 0 || !localStorage.getItem('access_token')) return;
 
         const activeChannels: string[] = [];
 
