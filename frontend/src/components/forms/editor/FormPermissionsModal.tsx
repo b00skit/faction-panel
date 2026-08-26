@@ -30,14 +30,16 @@ const FormPermissionsModal: React.FC<FormPermissionsModalProps> = ({ form, short
 
     const fetchData = async () => {
         try {
-            const [permsRes, rolesRes, groupsRes] = await Promise.all([
+            const [permsRes, rolesRes, groupsRes] = await Promise.allSettled([
                 api.get(`/factions/${shortname}/forms/${form.id}/permissions`),
                 api.get(`/factions/${shortname}/roles`),
                 api.get(`/factions/${shortname}/groups`)
             ]);
-            setPermissions(permsRes.data);
-            setRoles(rolesRes.data);
-            setGroups(groupsRes.data);
+            if (permsRes.status === 'fulfilled') setPermissions(permsRes.value.data);
+            else toast.error('Failed to fetch form permissions');
+
+            if (rolesRes.status === 'fulfilled') setRoles(rolesRes.value.data);
+            if (groupsRes.status === 'fulfilled') setGroups(groupsRes.value.data);
         } catch (err) {
             toast.error('Failed to fetch permissions');
         } finally {

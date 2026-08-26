@@ -396,6 +396,28 @@ class User extends Authenticatable
             ->exists();
     }
 
+    public static function canAccessFaction(?User $user, Faction $faction): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->is_superadmin || $faction->faction_leader === $user->id || $faction->created_by === $user->id) {
+            return true;
+        }
+
+        if ($user->factions()->where('faction_id', $faction->id)->exists()) {
+            return true;
+        }
+
+        if ($user->roles()->where('faction_id', $faction->id)->exists()) {
+            return true;
+        }
+
+        return count(self::getFactionPermissions($user, $faction)) > 0;
+    }
+
+
     public static function hasRosterPermission(?User $user, Roster $roster, string $permissionKey): bool
     {
         if ($roster->is_sandbox) {

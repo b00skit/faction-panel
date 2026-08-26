@@ -15,29 +15,13 @@ class GroupController extends Controller
         $faction = Faction::where('shortname', $shortname)->firstOrFail();
         $user = Auth::user();
 
-        $canManageAll = User::hasFactionPermission($user, $faction, 'view_groups');
-        $isGroupLeader = $user->isGroupLeaderInFaction($faction->id);
-
-        if (! $canManageAll && ! $isGroupLeader) {
+        if (! User::canAccessFaction($user, $faction)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        if ($canManageAll) {
-            $groups = $faction->groups()->with('members', 'leaders')->get();
+        $groups = $faction->groups()->with('members', 'leaders')->get();
 
-            $this->audit('group.list', "Viewed all groups for faction {$faction->name}");
-
-            return response()->json($groups);
-        }
-
-        // If not having global permission, check if user is a leader of any group in this faction
-        $groups = $user->groups()
-            ->where('faction_id', $faction->id)
-            ->wherePivot('is_leader', true)
-            ->with('members', 'leaders')
-            ->get();
-
-        $this->audit('group.list', "Viewed lead groups for faction {$faction->name}");
+        $this->audit('group.list', "Viewed all groups for faction {$faction->name}");
 
         return response()->json($groups);
     }

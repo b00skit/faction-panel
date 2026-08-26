@@ -33,16 +33,21 @@ export const KanbanPermissionsModal: React.FC<KanbanPermissionsModalProps> = ({ 
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [permRes, groupRes, roleRes, memberRes] = await Promise.all([
+            const [permRes, groupRes, roleRes, memberRes] = await Promise.allSettled([
                 api.get(`/kanban/projects/${project.id}/permissions`),
                 api.get(`/factions/${shortname}/groups`),
                 api.get(`/factions/${shortname}/roles`),
                 api.get(`/factions/${shortname}/users`)
             ]);
-            setPermissions(permRes.data);
-            setGroups(groupRes.data);
-            setRoles(roleRes.data);
-            setFactionMembers(Array.isArray(memberRes.data) ? memberRes.data : (memberRes.data.data || []));
+            if (permRes.status === 'fulfilled') setPermissions(permRes.value.data);
+            else toast.error('Failed to load project permissions');
+
+            if (groupRes.status === 'fulfilled') setGroups(groupRes.value.data);
+            if (roleRes.status === 'fulfilled') setRoles(roleRes.value.data);
+            if (memberRes.status === 'fulfilled') {
+                const data = memberRes.value.data;
+                setFactionMembers(Array.isArray(data) ? data : (data.data || []));
+            }
         } catch (err) {
             toast.error('Failed to load permissions');
         } finally {

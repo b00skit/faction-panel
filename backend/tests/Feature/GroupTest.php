@@ -134,3 +134,22 @@ test('can toggle leader status', function () {
     $memberPivot = $group->members()->where('user_id', $targetUser->id)->first();
     expect((bool) $memberPivot->pivot->is_leader)->toBeTrue();
 });
+
+test('regular faction member can list groups', function () {
+    $regularUser = User::factory()->create(['is_superadmin' => false]);
+    $regularUser->factions()->attach($this->faction->id);
+
+    Group::create([
+        'faction_id' => $this->faction->id,
+        'name' => 'Patrol Division',
+        'color' => '#00FF00',
+        'created_by' => $this->user->id,
+    ]);
+
+    $response = $this->actingAs($regularUser)
+        ->getJson("/api/factions/{$this->faction->shortname}/groups");
+
+    $response->assertStatus(200)
+        ->assertJsonFragment(['name' => 'Patrol Division']);
+});
+

@@ -36,18 +36,23 @@ export const RosterPermissionsModal: React.FC<RosterPermissionsModalProps> = ({ 
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [permRes, groupRes, roleRes, memberRes, exclusionRes] = await Promise.all([
+            const [permRes, groupRes, roleRes, memberRes, exclusionRes] = await Promise.allSettled([
                 api.get(`/rosters/${roster.id}/permissions`),
                 api.get(`/factions/${shortname}/groups`),
                 api.get(`/factions/${shortname}/roles`),
                 api.get(`/factions/${shortname}/users`),
                 api.get(`/rosters/${roster.id}/exclusions`)
             ]);
-            setPermissions(permRes.data);
-            setGroups(groupRes.data);
-            setRoles(roleRes.data);
-            setFactionMembers(Array.isArray(memberRes.data) ? memberRes.data : (memberRes.data.data || []));
-            setExclusions(exclusionRes.data);
+            if (permRes.status === 'fulfilled') setPermissions(permRes.value.data);
+            else toast.error('Failed to load roster permissions');
+
+            if (groupRes.status === 'fulfilled') setGroups(groupRes.value.data);
+            if (roleRes.status === 'fulfilled') setRoles(roleRes.value.data);
+            if (memberRes.status === 'fulfilled') {
+                const data = memberRes.value.data;
+                setFactionMembers(Array.isArray(data) ? data : (data.data || []));
+            }
+            if (exclusionRes.status === 'fulfilled') setExclusions(exclusionRes.value.data);
         } catch (err) {
             toast.error('Failed to load permissions');
         } finally {

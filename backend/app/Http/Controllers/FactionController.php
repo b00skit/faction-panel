@@ -1063,9 +1063,7 @@ class FactionController extends Controller
         $faction = Faction::where('shortname', $shortname)->firstOrFail();
         $user = Auth::user();
 
-        if (! User::hasFactionPermission($user, $faction, 'view_users') &&
-            ! User::hasFactionPermission($user, $faction, 'manage_group_members') &&
-            ! $user->isGroupLeaderInFaction($faction->id)) {
+        if (! User::canAccessFaction($user, $faction)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
