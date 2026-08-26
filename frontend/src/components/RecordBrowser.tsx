@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import api from '../api';
-import { Database, Plus, Search, Trash2, Layout, Info, ChevronLeft, MoreVertical, Edit2, Calendar, User, Filter, Download, X, Link as LinkIcon, Share2, CheckSquare, ExternalLink } from 'lucide-react';
+import { Database, Plus, Search, Trash2, Layout, Info, ChevronLeft, ChevronRight, MoreVertical, Edit2, Calendar, User, Filter, Download, X, Link as LinkIcon, Share2, CheckSquare, ExternalLink } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import Loading from './Loading';
 import { FactionRecordDatabase } from '../types';
@@ -26,6 +26,7 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
     const [selectedEntry, setSelectedEntry] = useState<any | null>(null);
     const [selectedEntryDetails, setSelectedEntryDetails] = useState<any | null>(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
 
     const hasDBPermission = (perm: string) => {
         if (permissions.includes('administrator') || permissions.includes('global_faction_record_moderation')) return true;
@@ -35,12 +36,13 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
     const fetchEntries = async () => {
         try {
             const res = await api.get(`/factions/${shortname}/records/${database.id}/entries`);
-            setEntries(res.data);
+            const loadedEntries = Array.isArray(res.data) ? res.data : (res.data.data || []);
+            setEntries(loadedEntries);
 
             // Sync with URL
             const recordParam = searchParams.get('record');
             if (recordParam && !selectedEntry) {
-                const targetEntry = res.data.find((e: any) => String(e.entry_id) === recordParam || String(e.id) === recordParam);
+                const targetEntry = loadedEntries.find((e: any) => String(e.entry_id) === recordParam || String(e.id) === recordParam);
                 if (targetEntry) {
                     fetchEntryDetails(targetEntry);
                 }
@@ -82,6 +84,10 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
     useEffect(() => {
         fetchEntries();
     }, [database.id]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, database.id]);
 
     useEffect(() => {
         if (entries.length > 0) {
@@ -200,12 +206,19 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
         return <Loading message={`Loading Record #${recordParam}...`} />;
     }
 
+    const pageSize = 500;
+
     const filteredEntries = entries.filter(entry => {
         const searchStr = searchQuery.toLowerCase();
         return Object.values(entry.data || {}).some(val => 
             String(val).toLowerCase().includes(searchStr)
         ) || String(entry.entry_id).includes(searchStr);
     });
+
+    const totalPages = Math.max(1, Math.ceil(filteredEntries.length / pageSize));
+    const safePage = Math.min(Math.max(1, currentPage), totalPages);
+    const startIndex = (safePage - 1) * pageSize;
+    const paginatedEntries = filteredEntries.slice(startIndex, startIndex + pageSize);
 
     const renderFieldValue = (field: any, value: any) => {
         if (value === null || value === undefined || value === '') return <span className="text-muted/40 italic">Empty</span>;
@@ -581,7 +594,7 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredEntries.map(entry => (
+                            {paginatedEntries.map(entry => (
                                 <tr 
                                     key={entry.id} 
                                     onClick={() => onEntryClick(entry)}
@@ -627,7 +640,7 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
         if (mode === 'rows') {
             return (
                 <div className="space-y-3">
-                    {filteredEntries.map(entry => (
+                    {paginatedEntries.map(entry => (
                         <div 
                             key={entry.id} 
                             onClick={() => onEntryClick(entry)}
@@ -669,7 +682,7 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
         const isDetailed = mode === 'detailed';
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredEntries.map(entry => (
+                {paginatedEntries.map(entry => (
                     <div 
                         key={entry.id} 
                         onClick={() => onEntryClick(entry)}
@@ -794,6 +807,39 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
                     <div className="py-20 flex flex-col items-center justify-center border-2 border-dashed border-border rounded-2xl bg-card/30">
                         <Database size={48} className="text-muted opacity-20 mb-4" />
                         <p className="text-sm font-bold text-muted uppercase tracking-widest">No records found</p>
+                    </div>
+                )}
+
+                {filteredEntries.length > 0 && (
+                    <div className="mt-6 pt-4 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-bold text-muted shrink-0">
+                        <div>
+                            Showing <span className="text-text font-black">{startIndex + 1}</span> to <span className="text-text font-black">{Math.min(startIndex + pageSize, filteredEntries.length)}</span> of <span className="text-text font-black">{filteredEntries.length}</span> records ({pageSize} per page)
+                        </div>
+                        {totalPages > 1 && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    disabled={safePage <= 1}
+                                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                    className="p-2 rounded-lg bg-card border border-border text-text hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                    title="Previous Page"
+                                >
+                                    <ChevronLeft size={16} />
+                                </button>
+                                <span className="px-3 py-1 bg-surface border border-border rounded-lg text-text text-xs font-black">
+                                    Page {safePage} of {totalPages}
+                                </span>
+                                <button
+                                    type="button"
+                                    disabled={safePage >= totalPages}
+                                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                    className="p-2 rounded-lg bg-card border border-border text-text hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                    title="Next Page"
+                                >
+                                    <ChevronRight size={16} />
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

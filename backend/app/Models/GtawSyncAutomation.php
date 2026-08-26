@@ -46,12 +46,9 @@ class GtawSyncAutomation extends Model
 
         // Determine interval hours based on frequency
         $intervalHours = match ($this->frequency) {
-            'twice_daily' => 12,
-            'every_8_hours' => 8,
-            'every_6_hours' => 6,
-            'every_4_hours' => 4,
-            'every_2_hours' => 2,
-            'hourly' => 1,
+            'every_2_days' => 48,
+            'every_3_days' => 72,
+            'weekly' => 168,
             default => 24, // daily
         };
 

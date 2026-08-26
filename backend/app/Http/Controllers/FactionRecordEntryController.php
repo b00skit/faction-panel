@@ -14,16 +14,21 @@ use Illuminate\Support\Facades\Auth;
 
 class FactionRecordEntryController extends Controller
 {
-    public function index(string $shortname, FactionRecordDatabase $database)
+    public function index(Request $request, string $shortname, FactionRecordDatabase $database)
     {
         if (! User::hasRecordPermission(Auth::user(), $database, 'view_database')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $entries = $database->entries()
+        $query = $database->entries()
             ->with('creator:id,username')
-            ->orderBy('entry_id', 'desc')
-            ->get();
+            ->orderBy('entry_id', 'desc');
+
+        if ($request->has('page') || $request->has('per_page')) {
+            $entries = $query->paginate($request->query('per_page', 500));
+        } else {
+            $entries = $query->get();
+        }
 
         $this->audit('record_entry.index', "Viewed entries for record database '{$database->name}'", $database->faction_id, $database);
 

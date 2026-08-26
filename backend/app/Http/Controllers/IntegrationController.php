@@ -175,7 +175,7 @@ class IntegrationController extends Controller
 
         $request->validate([
             'enabled' => 'required|boolean',
-            'frequency' => 'required|string|in:daily,twice_daily,every_8_hours,every_6_hours,every_4_hours,every_2_hours,hourly',
+            'frequency' => 'required|string|in:daily,every_2_days,every_3_days,weekly',
             'time_of_day' => 'required|string|regex:/^\d{2}:\d{2}$/',
         ]);
 

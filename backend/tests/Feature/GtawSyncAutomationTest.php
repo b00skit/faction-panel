@@ -116,8 +116,8 @@ test('scheduler command runs due syncs and records execution history', function 
     GtawSyncAutomation::create([
         'faction_id' => $this->faction->id,
         'enabled' => true,
-        'frequency' => 'twice_daily',
-        'time_of_day' => '10:00', // daily anchor. For 12h: runs at 10:00 and 22:00
+        'frequency' => 'every_2_days',
+        'time_of_day' => '10:00', // daily anchor. For 48h: runs every 2 days
         'next_run_at' => '2026-07-08 10:00:00', // overdue
         'created_by' => $this->leader->id,
     ]);
@@ -159,9 +159,9 @@ test('scheduler command runs due syncs and records execution history', function 
         'status' => 'success',
     ]);
 
-    // 6. Verify next_run_at got bumped to next 12h interval (22:00:00)
+    // 6. Verify next_run_at got bumped to next 48h interval (2026-07-10 10:00:00)
     $automation = GtawSyncAutomation::where('faction_id', $this->faction->id)->first();
-    expect($automation->next_run_at->toDateTimeString())->toBe('2026-07-08 22:00:00');
+    expect($automation->next_run_at->toDateTimeString())->toBe('2026-07-10 10:00:00');
 
     Carbon::setTestNow();
 });
@@ -176,7 +176,7 @@ test('scheduler command logs failure when leader has no GTA:W token', function (
     GtawSyncAutomation::create([
         'faction_id' => $this->faction->id,
         'enabled' => true,
-        'frequency' => 'hourly',
+        'frequency' => 'daily',
         'time_of_day' => '00:00',
         'next_run_at' => '2026-07-08 11:00:00',
         'created_by' => $this->leader->id,
@@ -195,9 +195,9 @@ test('scheduler command logs failure when leader has no GTA:W token', function (
         'error' => 'Faction leader has not linked their GTA:W account.',
     ]);
 
-    // 5. Verify next_run_at got updated to next hour (13:00)
+    // 5. Verify next_run_at got updated to next day (2026-07-09 00:00:00)
     $automation = GtawSyncAutomation::where('faction_id', $this->faction->id)->first();
-    expect($automation->next_run_at->toDateTimeString())->toBe('2026-07-08 13:00:00');
+    expect($automation->next_run_at->toDateTimeString())->toBe('2026-07-09 00:00:00');
 
     Carbon::setTestNow();
 });

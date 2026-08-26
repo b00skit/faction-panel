@@ -251,12 +251,9 @@ const GtawSync: React.FC<{ faction: any; user: any }> = ({ faction, user }) => {
                                         className="w-full bg-surface border border-border text-text rounded-xl p-3 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-accent disabled:opacity-40"
                                     >
                                         <option value="daily">Once a day (Daily)</option>
-                                        <option value="twice_daily">Twice a day (Every 12h)</option>
-                                        <option value="every_8_hours">Three times a day (Every 8h)</option>
-                                        <option value="every_6_hours">Four times a day (Every 6h)</option>
-                                        <option value="every_4_hours">Six times a day (Every 4h)</option>
-                                        <option value="every_2_hours">Twelve times a day (Every 2h)</option>
-                                        <option value="hourly">Once an hour (Hourly)</option>
+                                        <option value="every_2_days">Every 2 days (Every 48h)</option>
+                                        <option value="every_3_days">Every 3 days (Every 72h)</option>
+                                        <option value="weekly">Once a week (Weekly)</option>
                                     </select>
                                 </div>
 
