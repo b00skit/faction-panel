@@ -16,13 +16,26 @@ if (!reverbKey) {
     console.warn('Reverb App Key is missing. Real-time features will be disabled.');
 }
 
+const getFallbackHost = (): string => {
+    try {
+        if (import.meta.env.VITE_API_BASE_URL) {
+            return new URL(import.meta.env.VITE_API_BASE_URL).hostname;
+        }
+    } catch {
+        // Fall back to window location
+    }
+    return window.location.hostname;
+};
+
 const port = import.meta.env.VITE_REVERB_PORT ? Number(import.meta.env.VITE_REVERB_PORT) : 443;
 const scheme = import.meta.env.VITE_REVERB_SCHEME ?? 'https';
+const host = import.meta.env.VITE_REVERB_HOST || getFallbackHost();
 
 const echo = new Echo({
     broadcaster: 'reverb',
     key: reverbKey || 'missing-key',
-    wsHost: import.meta.env.VITE_REVERB_HOST || window.location.hostname,
+    wsHost: host,
+    wssHost: host,
     wsPort: port,
     wssPort: port,
     forceTLS: scheme === 'https',
