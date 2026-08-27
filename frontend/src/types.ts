@@ -670,6 +670,7 @@ export interface FactionPage {
   icon: string;
   show_in_sidebar: boolean;
   content: string;
+  allowed_databases?: (number | string)[] | null;
   sort_order: number;
   is_published: boolean;
   created_by?: number | null;

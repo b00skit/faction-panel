@@ -158,7 +158,8 @@ Antelope includes custom Handlebars helpers to manipulate, query, format, and fi
 - `{{#if (not a)}} ... {{/if}}`: Logical NOT.
 
 ### Formatting & Utility Helpers
-- `{{json data}}`: Pretty-prints JSON formatted inside `<pre><code>`.
+- `{{{json data}}}` or `{{toJson data}}`: Serializes context data or helper results to raw JSON string (safe for injecting directly into JavaScript `<script>` blocks or HTML attributes).
+- `{{jsonPretty data}}` or `{{json data pretty=true}}`: Formats and pretty-prints JSON inside `<pre className="..."><code>`.
 - `{{formatDate dateStr}}`: Converts ISO date string into readable local format.
 - `{{upper str}}` / `{{lower str}}` / `{{capitalize str}}`: String case transformers.
 - `{{default value fallback}}`: Returns `fallback` if `value` is empty/null.

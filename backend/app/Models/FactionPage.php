@@ -18,6 +18,7 @@ class FactionPage extends Model
         'icon',
         'show_in_sidebar',
         'content',
+        'allowed_databases',
         'sort_order',
         'is_published',
         'created_by',
@@ -28,6 +29,7 @@ class FactionPage extends Model
         'show_in_sidebar' => 'boolean',
         'is_published' => 'boolean',
         'sort_order' => 'integer',
+        'allowed_databases' => 'array',
     ];
 
     public function faction()

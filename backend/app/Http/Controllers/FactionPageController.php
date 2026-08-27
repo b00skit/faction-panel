@@ -67,6 +67,8 @@ class FactionPageController extends Controller
             'icon' => 'nullable|string|max:100',
             'show_in_sidebar' => 'boolean',
             'content' => 'nullable|string',
+            'allowed_databases' => 'nullable|array',
+            'allowed_databases.*' => 'nullable',
             'sort_order' => 'integer',
             'is_published' => 'boolean',
         ]);
@@ -87,6 +89,7 @@ class FactionPageController extends Controller
             'icon' => $validated['icon'] ?? 'FileText',
             'show_in_sidebar' => $validated['show_in_sidebar'] ?? true,
             'content' => $validated['content'] ?? '',
+            'allowed_databases' => $validated['allowed_databases'] ?? null,
             'sort_order' => $validated['sort_order'] ?? 0,
             'is_published' => $validated['is_published'] ?? true,
             'created_by' => Auth::id(),
@@ -147,6 +150,8 @@ class FactionPageController extends Controller
             'icon' => 'sometimes|string|max:100',
             'show_in_sidebar' => 'sometimes|boolean',
             'content' => 'nullable|string',
+            'allowed_databases' => 'nullable|array',
+            'allowed_databases.*' => 'nullable',
             'sort_order' => 'sometimes|integer',
             'is_published' => 'sometimes|boolean',
         ]);
@@ -306,15 +311,44 @@ class FactionPageController extends Controller
         $accessibleDatabases = [];
         $recordsMap = [];
 
+        // Determine configured allowed databases from target page (if set)
+        $configuredAllowedDatabases = ($targetPage && is_array($targetPage->allowed_databases))
+            ? array_map(fn ($v) => strtolower(trim((string) $v)), $targetPage->allowed_databases)
+            : null;
+
         // Determine if filtering of database entries is active (if page/content/databases filter is passed)
-        $isFilteredMode = ($pageContent !== null || ! empty($requestedDatabases));
+        $isFilteredMode = ($pageContent !== null || ! empty($requestedDatabases) || $configuredAllowedDatabases !== null);
 
         foreach ($databases as $db) {
             if (User::hasRecordPermission($user, $db, 'view_database')) {
-                // Check if this database is involved/queried in the page/request
+                $dbIdStr = (string) $db->id;
+                $dbNameLower = strtolower($db->name);
+                $dbShortcodeLower = $db->record_shortcode ? strtolower($db->record_shortcode) : null;
+                $dbApiTypeLower = ($db->is_api_database && $db->is_api_database !== '0') ? strtolower($db->is_api_database) : null;
+                $dbSlugLower = Str::slug($db->name, '_');
+
+                $isAllowedForPage = true;
+                if ($configuredAllowedDatabases !== null) {
+                    $isAllowedForPage = (
+                        in_array($dbIdStr, $configuredAllowedDatabases, true) ||
+                        in_array($dbNameLower, $configuredAllowedDatabases, true) ||
+                        ($dbShortcodeLower && in_array($dbShortcodeLower, $configuredAllowedDatabases, true)) ||
+                        ($dbApiTypeLower && in_array($dbApiTypeLower, $configuredAllowedDatabases, true)) ||
+                        in_array($dbSlugLower, $configuredAllowedDatabases, true)
+                    );
+                }
+
+                if (! $isAllowedForPage) {
+                    continue;
+                }
+
+                // Check if this database's entries should be included in the response
                 $shouldIncludeEntries = false;
 
                 if ($request->boolean('all')) {
+                    $shouldIncludeEntries = true;
+                } elseif ($configuredAllowedDatabases !== null) {
+                    // If explicitly allowed for the page, include entries
                     $shouldIncludeEntries = true;
                 } elseif ($isFilteredMode) {
                     // 1. Check explicit parameter matches
@@ -325,10 +359,11 @@ class FactionPageController extends Controller
                                 continue;
                             }
                             if (
-                                (string) $db->id === $reqDbLower ||
-                                strtolower($db->name) === $reqDbLower ||
-                                ($db->record_shortcode && strtolower($db->record_shortcode) === $reqDbLower) ||
-                                ($db->is_api_database && strtolower($db->is_api_database) === $reqDbLower)
+                                $dbIdStr === $reqDbLower ||
+                                $dbNameLower === $reqDbLower ||
+                                ($dbShortcodeLower && $dbShortcodeLower === $reqDbLower) ||
+                                ($dbApiTypeLower && $dbApiTypeLower === $reqDbLower) ||
+                                $dbSlugLower === $reqDbLower
                             ) {
                                 $shouldIncludeEntries = true;
                                 break;
@@ -336,20 +371,15 @@ class FactionPageController extends Controller
                         }
                     }
 
-                    // 2. Check page content matches
+                    // 2. Check page content matches safely (exact name, shortcode, API type, or slug)
                     if (! $shouldIncludeEntries && $pageContent) {
                         $contentLower = strtolower($pageContent);
-                        $dbNameLower = strtolower($db->name);
-                        $dbShortcodeLower = $db->record_shortcode ? strtolower($db->record_shortcode) : null;
-                        $dbApiTypeLower = ($db->is_api_database && $db->is_api_database !== '0') ? strtolower($db->is_api_database) : null;
-                        $slugifiedName = Str::slug($db->name, '_');
 
                         if (
                             str_contains($contentLower, $dbNameLower) ||
                             ($dbShortcodeLower && str_contains($contentLower, $dbShortcodeLower)) ||
                             ($dbApiTypeLower && str_contains($contentLower, $dbApiTypeLower)) ||
-                            ($slugifiedName && str_contains($contentLower, $slugifiedName)) ||
-                            preg_match('/\b'.$db->id.'\b/', $pageContent)
+                            ($dbSlugLower && str_contains($contentLower, $dbSlugLower))
                         ) {
                             $shouldIncludeEntries = true;
                         }
@@ -391,8 +421,12 @@ class FactionPageController extends Controller
                     $db->id,
                     (string) $db->id,
                     $db->name,
+                    strtolower($db->name),
                     $db->record_shortcode ?: null,
+                    $db->record_shortcode ? strtolower($db->record_shortcode) : null,
                     ($db->is_api_database && $db->is_api_database !== '0') ? $db->is_api_database : null,
+                    ($db->is_api_database && $db->is_api_database !== '0') ? strtolower($db->is_api_database) : null,
+                    $dbSlugLower,
                 ]));
 
                 foreach ($keys as $k) {

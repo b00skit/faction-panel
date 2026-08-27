@@ -6,6 +6,7 @@ import api from '../api';
 import { FactionPage, Role, Group } from '../types';
 import Loading from './Loading';
 import { DynamicIcon, AVAILABLE_ICONS } from './DynamicIcon';
+import { setupHandlebarsAndDOMPurify } from '../utils/handlebarsHelpers';
 import {
   FileText,
   Plus,
@@ -20,8 +21,11 @@ import {
   HelpCircle,
   Users,
   Layers,
+  Database,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+setupHandlebarsAndDOMPurify();
 
 interface FactionPagesProps {
   shortname: string;
@@ -38,6 +42,7 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
   const [contextData, setContextData] = useState<any>(null);
   const [roles, setRoles] = useState<Role[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [availableDatabases, setAvailableDatabases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -48,7 +53,16 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
   const [showCheatsheet, setShowCheatsheet] = useState(false);
 
   // Form State
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    slug: string;
+    icon: string;
+    show_in_sidebar: boolean;
+    is_published: boolean;
+    sort_order: number;
+    content: string;
+    allowed_databases: (number | string)[] | null;
+  }>({
     name: '',
     slug: '',
     icon: 'FileText',
@@ -56,6 +70,7 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
     is_published: true,
     sort_order: 0,
     content: '',
+    allowed_databases: null,
   });
 
   // Icon search state
@@ -75,17 +90,19 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
 
   const fetchPages = async () => {
     try {
-      const [pagesRes, contextRes, rolesRes, groupsRes] = await Promise.all([
+      const [pagesRes, contextRes, rolesRes, groupsRes, recordsRes] = await Promise.all([
         api.get(`/factions/${shortname}/pages`),
         api.get(`/factions/${shortname}/pages/context-data`),
         api.get(`/factions/${shortname}/roles`),
         api.get(`/factions/${shortname}/groups`),
+        api.get(`/factions/${shortname}/records`).catch(() => ({ data: [] })),
       ]);
 
       setPages(pagesRes.data);
       setContextData(contextRes.data);
       setRoles(rolesRes.data);
       setGroups(groupsRes.data);
+      setAvailableDatabases(recordsRes.data || []);
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to load faction pages');
     } finally {
@@ -117,8 +134,11 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
         const template = Handlebars.compile(formData.content || '');
         const raw = template(contextData || {});
         const sanitized = DOMPurify.sanitize(raw, {
-          ADD_TAGS: ['style'],
-          ADD_ATTR: ['target', 'class', 'style', 'id', 'data-*'],
+          ADD_TAGS: ['style', 'script'],
+          ADD_ATTR: [
+            'target', 'class', 'style', 'id', 'data-*',
+            'onclick', 'oninput', 'onchange', 'onkeyup', 'onkeydown', 'onsubmit', 'onreset',
+          ],
         });
         setPreviewHtml(sanitized);
       } catch (err: any) {
@@ -140,6 +160,7 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
         is_published: page.is_published,
         sort_order: page.sort_order || 0,
         content: page.content || '',
+        allowed_databases: page.allowed_databases ?? null,
       });
       try {
         const ctxRes = await api.get(`/factions/${shortname}/pages/context-data?page=${page.slug}`);
@@ -156,6 +177,7 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
         show_in_sidebar: true,
         is_published: true,
         sort_order: pages.length * 10,
+        allowed_databases: null,
         content: `<!-- Custom Faction Page Template -->
 <div class="p-6 bg-card border border-border rounded-lg space-y-4">
   <div class="flex items-center justify-between">
@@ -556,6 +578,134 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
                     />
                     Published / Visible to Members
                   </label>
+                </div>
+
+                {/* Database Access Configuration */}
+                <div className="bg-bg border border-border rounded-lg p-3.5 space-y-3 mt-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-xs font-bold text-text uppercase tracking-wider flex items-center gap-1.5">
+                        <Database size={13} className="text-accent" /> Data Access & Record Databases
+                      </h4>
+                      <p className="text-[11px] text-muted">
+                        Select which record databases are loaded and accessible by this page to prevent data leaks.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, allowed_databases: null }))}
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold transition-colors ${
+                          formData.allowed_databases === null
+                            ? 'bg-accent text-white'
+                            : 'bg-card text-muted hover:text-text border border-border'
+                        }`}
+                      >
+                        All Databases (Auto)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            allowed_databases:
+                              prev.allowed_databases !== null
+                                ? prev.allowed_databases
+                                : availableDatabases.map((d: any) => d.id),
+                          }))
+                        }
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold transition-colors ${
+                          formData.allowed_databases !== null
+                            ? 'bg-accent text-white'
+                            : 'bg-card text-muted hover:text-text border border-border'
+                        }`}
+                      >
+                        Specific Databases Only
+                      </button>
+                    </div>
+                  </div>
+
+                  {formData.allowed_databases !== null && (
+                    <div className="pt-2 border-t border-border space-y-2">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-muted font-bold">
+                          {formData.allowed_databases.length} of {availableDatabases.length} databases selected
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                allowed_databases: availableDatabases.map((d: any) => d.id),
+                              }))
+                            }
+                            className="text-accent hover:underline font-bold"
+                          >
+                            Select All
+                          </button>
+                          <span className="text-muted">&bull;</span>
+                          <button
+                            type="button"
+                            onClick={() => setFormData((prev) => ({ ...prev, allowed_databases: [] }))}
+                            className="text-muted hover:text-text font-bold"
+                          >
+                            Clear All
+                          </button>
+                        </div>
+                      </div>
+
+                      {availableDatabases.length === 0 ? (
+                        <p className="text-xs text-muted italic">No record databases found in this faction.</p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-44 overflow-y-auto pr-1">
+                          {availableDatabases.map((db: any) => {
+                            const isChecked = formData.allowed_databases?.some(
+                              (id) => String(id) === String(db.id) || String(id) === String(db.name)
+                            );
+                            return (
+                              <label
+                                key={db.id}
+                                className={`flex items-center justify-between p-2 rounded border cursor-pointer transition-colors text-xs ${
+                                  isChecked
+                                    ? 'bg-accent/10 border-accent/40 text-text'
+                                    : 'bg-card border-border text-muted hover:border-accent/20'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 truncate">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(isChecked)}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setFormData((prev) => {
+                                        const current = prev.allowed_databases || [];
+                                        const next = checked
+                                          ? [...current, db.id]
+                                          : current.filter(
+                                              (id) => String(id) !== String(db.id) && String(id) !== String(db.name)
+                                            );
+                                        return { ...prev, allowed_databases: next };
+                                      });
+                                    }}
+                                    className="rounded bg-bg border-border text-accent focus:ring-0"
+                                  />
+                                  <span className="font-bold truncate" title={db.name}>
+                                    {db.name}
+                                  </span>
+                                </div>
+                                {db.record_shortcode && (
+                                  <span className="text-[10px] font-mono text-muted bg-bg px-1.5 py-0.5 rounded border border-border ml-1 flex-shrink-0">
+                                    {db.record_shortcode}
+                                  </span>
+                                )}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
