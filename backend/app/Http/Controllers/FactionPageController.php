@@ -407,8 +407,8 @@ class FactionPageController extends Controller
                     }
                 }
             } else {
-                // When not in filtered mode and no restrictions are specified, include accessible database entries
-                $shouldIncludeEntries = true;
+                // When not in filtered mode and no page/databases are specified, keep entries lightweight (metadata only) unless all=1 is requested
+                $shouldIncludeEntries = false;
             }
 
             $entriesQuery = FactionRecordEntry::where('database_id', $db->id)->where('is_active', true);
