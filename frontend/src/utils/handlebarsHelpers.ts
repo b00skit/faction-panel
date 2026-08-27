@@ -261,10 +261,16 @@ export function sanitizeHtml(rawHtml: string): string {
 
   if (purify && typeof purify.sanitize === 'function') {
     return purify.sanitize(rawHtml, {
-      ADD_TAGS: ['style'],
+      ADD_TAGS: [
+        'style', 'canvas', 'svg', 'g', 'path', 'circle', 'rect', 'line', 'polygon',
+        'polyline', 'text', 'tspan', 'defs', 'symbol', 'use', 'clipPath', 'linearGradient', 'radialGradient', 'stop',
+      ],
       ADD_ATTR: [
-        'target', 'class', 'style', 'id', 'data-*',
-        'onclick', 'oninput', 'onchange', 'onkeyup', 'onkeydown', 'onsubmit', 'onreset',
+        'target', 'class', 'style', 'id', 'data-*', 'aria-*', 'role',
+        'onclick', 'oninput', 'onchange', 'onkeyup', 'onkeydown', 'onsubmit', 'onreset', 'onscroll',
+        'value', 'placeholder', 'type', 'checked', 'disabled', 'selected', 'rows', 'cols', 'min', 'max', 'step',
+        'href', 'src', 'alt', 'title', 'name', 'for', 'colspan', 'rowspan',
+        'viewBox', 'd', 'fill', 'stroke', 'stroke-width', 'transform', 'points', 'x', 'y', 'cx', 'cy', 'r', 'rx', 'ry', 'x1', 'x2', 'y1', 'y2', 'width', 'height',
       ],
     });
   }

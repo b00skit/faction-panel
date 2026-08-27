@@ -19,7 +19,35 @@ import { setupHandlebarsAndDOMPurify, renderCustomPage, executeExtractedScripts 
 // Register Handlebars helpers and DOMPurify hooks
 setupHandlebarsAndDOMPurify();
 
-export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, user, permissions }) => {
+interface CustomPageRendererProps {
+  html: string;
+  scripts: string[];
+}
+
+export const CustomPageRenderer: React.FC<CustomPageRendererProps> = React.memo(({ html, scripts }) => {
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const lastHtmlRef = React.useRef<string>('');
+
+  React.useLayoutEffect(() => {
+    if (!containerRef.current) return;
+    if (lastHtmlRef.current !== html) {
+      lastHtmlRef.current = html;
+      containerRef.current.innerHTML = html;
+      if (scripts.length > 0) {
+        executeExtractedScripts(scripts);
+      }
+    }
+  }, [html, scripts]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="faction-page-rendered prose max-w-none text-text"
+    />
+  );
+});
+
+export const FactionPageView: React.FC<FactionPageViewProps> = React.memo(({ shortname, user, permissions }) => {
   const { slug } = useParams<{ slug: string }>();
   const [page, setPage] = useState<FactionPage | null>(null);
   const [contextData, setContextData] = useState<any>(null);
@@ -29,8 +57,6 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
   const [error, setError] = useState<string | null>(null);
 
   const canModifyPages = user?.is_superadmin || permissions.includes('modify_faction_pages');
-
-  const renderedContainerRef = React.useRef<HTMLDivElement | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -57,13 +83,6 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
       setLoading(false);
     }
   };
-
-  // Reliably execute scripts once the rendered HTML is mounted to the DOM
-  useEffect(() => {
-    if (!loading && renderedHtml && renderedScripts.length > 0) {
-      executeExtractedScripts(renderedScripts);
-    }
-  }, [loading, renderedHtml, renderedScripts]);
 
   useEffect(() => {
     if (slug && shortname) {
@@ -140,12 +159,8 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
         </div>
 
         {/* Page Content (Sanitized HTML & Rendered Handlebars) */}
-        <div 
-          ref={renderedContainerRef}
-          className="faction-page-rendered prose max-w-none text-text"
-          dangerouslySetInnerHTML={{ __html: renderedHtml }}
-        />
+        <CustomPageRenderer html={renderedHtml} scripts={renderedScripts} />
       </div>
     </main>
   );
-};
+});

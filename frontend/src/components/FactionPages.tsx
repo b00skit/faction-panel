@@ -7,6 +7,7 @@ import { FactionPage, Role, Group } from '../types';
 import Loading from './Loading';
 import { DynamicIcon, AVAILABLE_ICONS } from './DynamicIcon';
 import { setupHandlebarsAndDOMPurify, renderCustomPage, executeExtractedScripts } from '../utils/handlebarsHelpers';
+import { CustomPageRenderer } from './FactionPageView';
 import {
   FileText,
   Plus,
@@ -129,7 +130,7 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
   }, [searchParams, pages]);
 
   const [previewScripts, setPreviewScripts] = useState<string[]>([]);
-  const previewContainerRef = useRef<HTMLDivElement | null>(null);
+
 
   // Handle live preview rendering whenever content or active tab changes
   useEffect(() => {
@@ -139,13 +140,6 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
       setPreviewScripts(scripts);
     }
   }, [activeTab, formData.content, contextData]);
-
-  // Execute scripts in preview tab once rendered
-  useEffect(() => {
-    if (activeTab === 'preview' && previewHtml && previewScripts.length > 0) {
-      executeExtractedScripts(previewScripts);
-    }
-  }, [activeTab, previewHtml, previewScripts]);
 
   const handleOpenModal = async (page?: FactionPage) => {
     if (page) {
@@ -754,11 +748,9 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
                       <div className="text-xs font-bold text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
                         <Sparkles size={13} className="text-amber-400" /> Live Rendered Preview (Sanitized via DOMPurify)
                       </div>
-                      <div
-                        ref={previewContainerRef}
-                        className="faction-page-rendered prose max-w-none text-text p-6 bg-card border border-border rounded-lg min-h-[300px]"
-                        dangerouslySetInnerHTML={{ __html: previewHtml }}
-                      />
+                      <div className="p-6 bg-card border border-border rounded-lg min-h-[300px]">
+                        <CustomPageRenderer html={previewHtml} scripts={previewScripts} />
+                      </div>
                     </div>
                   )}
                 </div>
