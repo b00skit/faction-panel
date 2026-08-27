@@ -266,49 +266,138 @@ class FactionPageController extends Controller
         return response()->json($page->permissions()->with(['role', 'group'])->get());
     }
 
-    public function getContextData(string $shortname)
+    public function getContextData(Request $request, string $shortname)
     {
         $faction = Faction::where('shortname', $shortname)->firstOrFail();
         $user = Auth::user();
+
+        // Check if a specific page or list of databases is requested/involved
+        $pageIdentifier = $request->query('page') ?? $request->query('page_id') ?? $request->query('slug');
+        $requestedDatabasesParam = $request->query('databases') ?? $request->input('databases');
+        $requestedDatabases = [];
+
+        if (is_string($requestedDatabasesParam)) {
+            $requestedDatabases = array_filter(array_map('trim', explode(',', $requestedDatabasesParam)));
+        } elseif (is_array($requestedDatabasesParam)) {
+            $requestedDatabases = array_filter($requestedDatabasesParam);
+        }
+
+        $pageContent = null;
+        if ($pageIdentifier) {
+            $targetPage = FactionPage::where('faction_id', $faction->id)
+                ->where(function ($q) use ($pageIdentifier) {
+                    if (is_numeric($pageIdentifier)) {
+                        $q->where('id', (int) $pageIdentifier)->orWhere('slug', $pageIdentifier);
+                    } else {
+                        $q->where('slug', $pageIdentifier);
+                    }
+                })
+                ->first();
+
+            if ($targetPage) {
+                $pageContent = $targetPage->content;
+            }
+        } elseif ($request->has('content')) {
+            $pageContent = (string) $request->input('content');
+        }
 
         // 1. Fetch accessible record databases & entries
         $databases = FactionRecordDatabase::where('faction_id', $faction->id)->get();
         $accessibleDatabases = [];
         $recordsMap = [];
 
+        // Determine if filtering of database entries is active (if page/content/databases filter is passed)
+        $isFilteredMode = ($pageContent !== null || ! empty($requestedDatabases));
+
         foreach ($databases as $db) {
             if (User::hasRecordPermission($user, $db, 'view_database')) {
-                $entries = FactionRecordEntry::where('database_id', $db->id)
-                    ->where('is_active', true)
-                    ->get()
-                    ->map(function ($entry) {
+                // Check if this database is involved/queried in the page/request
+                $shouldIncludeEntries = true;
+
+                if ($isFilteredMode) {
+                    $shouldIncludeEntries = false;
+
+                    // 1. Check explicit parameter matches
+                    if (! empty($requestedDatabases)) {
+                        foreach ($requestedDatabases as $reqDb) {
+                            $reqDbLower = strtolower($reqDb);
+                            if (
+                                (string) $db->id === (string) $reqDb ||
+                                strtolower($db->name) === $reqDbLower ||
+                                ($db->record_shortcode && strtolower($db->record_shortcode) === $reqDbLower) ||
+                                ($db->is_api_database && strtolower($db->is_api_database) === $reqDbLower)
+                            ) {
+                                $shouldIncludeEntries = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // 2. Check page content matches
+                    if (! $shouldIncludeEntries && $pageContent) {
+                        $contentLower = strtolower($pageContent);
+                        $dbNameLower = strtolower($db->name);
+                        $dbShortcodeLower = $db->record_shortcode ? strtolower($db->record_shortcode) : null;
+                        $dbApiTypeLower = $db->is_api_database ? strtolower($db->is_api_database) : null;
+                        $slugifiedName = Str::slug($db->name, '_');
+
+                        if (
+                            str_contains($contentLower, $dbNameLower) ||
+                            ($dbShortcodeLower && str_contains($contentLower, $dbShortcodeLower)) ||
+                            ($dbApiTypeLower && str_contains($contentLower, $dbApiTypeLower)) ||
+                            str_contains($contentLower, $slugifiedName) ||
+                            str_contains($pageContent, (string) $db->id)
+                        ) {
+                            $shouldIncludeEntries = true;
+                        }
+                    }
+                }
+
+                $entriesQuery = FactionRecordEntry::where('database_id', $db->id)->where('is_active', true);
+                $totalEntriesCount = (clone $entriesQuery)->count();
+
+                $entries = [];
+                if ($shouldIncludeEntries) {
+                    $entries = $entriesQuery->get()->map(function ($entry) {
                         return [
-                            'id' => $entry->id,
-                            'entry_data' => $entry->entry_data,
+                            'id' => $entry->entry_id ?? $entry->id,
+                            'entry_id' => $entry->entry_id ?? $entry->id,
+                            'entry_data' => $entry->data,
+                            'data' => $entry->data,
                             'created_at' => $entry->created_at ? $entry->created_at->toIso8601String() : null,
                             'created_by' => $entry->created_by,
                         ];
                     });
+                }
 
                 $dbData = [
                     'id' => $db->id,
                     'name' => $db->name,
                     'description' => $db->description,
                     'record_shortcode' => $db->record_shortcode,
+                    'is_api_database' => $db->is_api_database,
                     'structure' => $db->database_structure,
-                    'entries_count' => $entries->count(),
+                    'entries_count' => $totalEntriesCount,
                     'entries' => $entries,
                 ];
 
                 $accessibleDatabases[] = $dbData;
+
                 $recordsMap[$db->id] = $entries;
                 $recordsMap[(string) $db->id] = $entries;
                 $recordsMap[$db->name] = $entries;
+                $recordsMap[strtolower($db->name)] = $entries;
                 $slugifiedKey = Str::slug($db->name, '_');
                 $recordsMap[$slugifiedKey] = $entries;
 
                 if ($db->record_shortcode) {
                     $recordsMap[$db->record_shortcode] = $entries;
+                    $recordsMap[strtolower($db->record_shortcode)] = $entries;
+                }
+
+                if ($db->is_api_database && $db->is_api_database !== '0') {
+                    $recordsMap[$db->is_api_database] = $entries;
+                    $recordsMap[strtolower($db->is_api_database)] = $entries;
                 }
             }
         }

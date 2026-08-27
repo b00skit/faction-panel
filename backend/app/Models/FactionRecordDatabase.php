@@ -30,7 +30,7 @@ class FactionRecordDatabase extends Model
         'permissions' => 'array',
         'database_structure' => 'array',
         'detail_customization' => 'array',
-        'is_api_database' => 'boolean',
+        'is_api_database' => 'string',
         'allow_details_view' => 'boolean',
         'is_published' => 'boolean',
     ];

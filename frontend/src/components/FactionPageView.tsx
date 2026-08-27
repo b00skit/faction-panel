@@ -186,7 +186,7 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
     try {
       const [pageRes, contextRes] = await Promise.all([
         api.get(`/factions/${shortname}/pages/${slug}`),
-        api.get(`/factions/${shortname}/pages/context-data`),
+        api.get(`/factions/${shortname}/pages/context-data?page=${slug}`),
       ]);
 
       const loadedPage: FactionPage = pageRes.data;
