@@ -29,6 +29,8 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
 
   const canModifyPages = user?.is_superadmin || permissions.includes('modify_faction_pages');
 
+  const renderedContainerRef = React.useRef<HTMLDivElement | null>(null);
+
   const fetchData = async () => {
     setLoading(true);
     setError(null);
@@ -56,22 +58,6 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
         });
 
         setRenderedHtml(cleanOutput);
-
-        // Execute any script tags within the sanitized custom page HTML
-        setTimeout(() => {
-          const container = document.querySelector('.faction-page-rendered');
-          if (container) {
-            const scripts = container.querySelectorAll('script');
-            scripts.forEach((oldScript) => {
-              const newScript = document.createElement('script');
-              Array.from(oldScript.attributes).forEach((attr) =>
-                newScript.setAttribute(attr.name, attr.value)
-              );
-              newScript.appendChild(document.createTextNode(oldScript.innerHTML));
-              oldScript.parentNode?.replaceChild(newScript, oldScript);
-            });
-          }
-        }, 50);
       } catch (compileErr: any) {
         console.error('Handlebars compile error:', compileErr);
         setRenderedHtml(`<div className="p-4 border border-red-500/50 bg-red-500/10 text-red-400 rounded">
@@ -85,6 +71,22 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
       setLoading(false);
     }
   };
+
+  // Reliably execute scripts once the rendered HTML is mounted to the DOM
+  useEffect(() => {
+    if (!loading && renderedHtml && renderedContainerRef.current) {
+      const container = renderedContainerRef.current;
+      const scripts = container.querySelectorAll('script');
+      scripts.forEach((oldScript) => {
+        const newScript = document.createElement('script');
+        Array.from(oldScript.attributes).forEach((attr: Attr) =>
+          newScript.setAttribute(attr.name, attr.value)
+        );
+        newScript.textContent = oldScript.textContent || oldScript.innerText || '';
+        oldScript.parentNode?.replaceChild(newScript, oldScript);
+      });
+    }
+  }, [loading, renderedHtml]);
 
   useEffect(() => {
     if (slug && shortname) {
@@ -162,6 +164,7 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
 
         {/* Page Content (Sanitized HTML & Rendered Handlebars) */}
         <div 
+          ref={renderedContainerRef}
           className="faction-page-rendered prose max-w-none text-text"
           dangerouslySetInnerHTML={{ __html: renderedHtml }}
         />

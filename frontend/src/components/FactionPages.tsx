@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import Handlebars from 'handlebars';
 import DOMPurify from 'dompurify';
@@ -127,6 +127,8 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
     }
   }, [searchParams, pages]);
 
+  const previewContainerRef = useRef<HTMLDivElement | null>(null);
+
   // Handle live preview rendering whenever content or active tab changes
   useEffect(() => {
     if (activeTab === 'preview') {
@@ -148,6 +150,22 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
       }
     }
   }, [activeTab, formData.content, contextData]);
+
+  // Execute scripts in preview tab once rendered
+  useEffect(() => {
+    if (activeTab === 'preview' && previewHtml && previewContainerRef.current) {
+      const container = previewContainerRef.current;
+      const scripts = container.querySelectorAll('script');
+      scripts.forEach((oldScript) => {
+        const newScript = document.createElement('script');
+        Array.from(oldScript.attributes).forEach((attr: Attr) =>
+          newScript.setAttribute(attr.name, attr.value)
+        );
+        newScript.textContent = oldScript.textContent || oldScript.innerText || '';
+        oldScript.parentNode?.replaceChild(newScript, oldScript);
+      });
+    }
+  }, [activeTab, previewHtml]);
 
   const handleOpenModal = async (page?: FactionPage) => {
     if (page) {
@@ -741,6 +759,7 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
                         <Sparkles size={13} className="text-amber-400" /> Live Rendered Preview (Sanitized via DOMPurify)
                       </div>
                       <div
+                        ref={previewContainerRef}
                         className="faction-page-rendered prose max-w-none text-text p-6 bg-card border border-border rounded-lg min-h-[300px]"
                         dangerouslySetInnerHTML={{ __html: previewHtml }}
                       />
