@@ -388,18 +388,15 @@ class FactionPageController extends Controller
                 $accessibleDatabases[] = $dbData;
 
                 $keys = array_unique(array_filter([
+                    $db->id,
                     (string) $db->id,
                     $db->name,
-                    strtolower($db->name),
-                    Str::slug($db->name, '_'),
-                    $db->record_shortcode,
-                    $db->record_shortcode ? strtolower($db->record_shortcode) : null,
-                    $db->is_api_database,
-                    ($db->is_api_database && $db->is_api_database !== '0') ? strtolower($db->is_api_database) : null,
+                    $db->record_shortcode ?: null,
+                    ($db->is_api_database && $db->is_api_database !== '0') ? $db->is_api_database : null,
                 ]));
 
                 foreach ($keys as $k) {
-                    if ($k && $k !== '0') {
+                    if ($k !== null && $k !== '' && $k !== '0') {
                         $recordsMap[$k] = $entries;
                     }
                 }

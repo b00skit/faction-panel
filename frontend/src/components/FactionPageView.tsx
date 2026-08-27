@@ -33,9 +33,48 @@ if (!(Handlebars as any)._customHelpersRegistered) {
     }
   });
 
+  function resolveRecordEntries(records: any, databases: any[], dbName: any): any[] {
+    if (!records || !dbName) return [];
+    const target = String(dbName).trim();
+    if (records[target]) return records[target];
+
+    const targetLower = target.toLowerCase();
+    if (records[targetLower]) return records[targetLower];
+
+    const targetUpper = target.toUpperCase();
+    if (records[targetUpper]) return records[targetUpper];
+
+    const slugified = targetLower.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    if (records[slugified]) return records[slugified];
+
+    const foundDb = Array.isArray(databases)
+      ? databases.find(
+          (d: any) =>
+            String(d.id) === target ||
+            (d.name && String(d.name).toLowerCase() === targetLower) ||
+            (d.record_shortcode && String(d.record_shortcode).toLowerCase() === targetLower) ||
+            (d.is_api_database && String(d.is_api_database).toLowerCase() === targetLower) ||
+            (d.name && String(d.name).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') === targetLower)
+        )
+      : null;
+
+    if (foundDb) {
+      return (
+        records[foundDb.id] ||
+        records[String(foundDb.id)] ||
+        records[foundDb.is_api_database] ||
+        records[foundDb.record_shortcode] ||
+        records[foundDb.name] ||
+        []
+      );
+    }
+
+    return [];
+  }
+
   Handlebars.registerHelper('getRecordEntries', function (dbName, options) {
-    const records = options?.data?.root?.records || {};
-    return records[dbName] || [];
+    const root = options?.data?.root || {};
+    return resolveRecordEntries(root.records, root.record_databases, dbName);
   });
 
   Handlebars.registerHelper('getRecordDatabase', function (dbName, options) {
@@ -44,21 +83,30 @@ if (!(Handlebars as any)._customHelpersRegistered) {
     return databases.find((d: any) => 
       String(d.id) === String(dbName) || 
       (d.record_shortcode && String(d.record_shortcode).toLowerCase() === target) ||
+      (d.is_api_database && String(d.is_api_database).toLowerCase() === target) ||
       (d.name && String(d.name).toLowerCase() === target) ||
       (d.name && String(d.name).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') === target)
     ) || null;
   });
 
   Handlebars.registerHelper('filterRecords', function (dbName, fieldName, value, options) {
-    const records = options?.data?.root?.records || {};
-    const entries = records[dbName] || [];
-    return entries.filter((e: any) => e.entry_data && String(e.entry_data[fieldName]) === String(value));
+    const root = options?.data?.root || {};
+    const entries = resolveRecordEntries(root.records, root.record_databases, dbName);
+    return entries.filter((e: any) => {
+      const data = e.entry_data || e.data || e;
+      return data && String(data[fieldName]) === String(value);
+    });
   });
 
   Handlebars.registerHelper('findRecord', function (dbName, fieldName, value, options) {
-    const records = options?.data?.root?.records || {};
-    const entries = records[dbName] || [];
-    return entries.find((e: any) => e.entry_data && String(e.entry_data[fieldName]) === String(value)) || null;
+    const root = options?.data?.root || {};
+    const entries = resolveRecordEntries(root.records, root.record_databases, dbName);
+    return (
+      entries.find((e: any) => {
+        const data = e.entry_data || e.data || e;
+        return data && String(data[fieldName]) === String(value);
+      }) || null
+    );
   });
 
   Handlebars.registerHelper('sortRecords', function (entries, fieldName, direction) {
