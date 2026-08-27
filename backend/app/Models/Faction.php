@@ -247,4 +247,9 @@ class Faction extends Model
     {
         return $this->hasMany(KanbanProject::class, 'faction_id');
     }
+
+    public function pages()
+    {
+        return $this->hasMany(FactionPage::class);
+    }
 }

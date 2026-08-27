@@ -6,6 +6,7 @@ use App\Http\Controllers\ChangelogController;
 use App\Http\Controllers\CreditController;
 use App\Http\Controllers\DatasetController;
 use App\Http\Controllers\FactionController;
+use App\Http\Controllers\FactionPageController;
 use App\Http\Controllers\FactionRecordController;
 use App\Http\Controllers\FactionRecordEntryController;
 use App\Http\Controllers\FactionRecordPermissionController;
@@ -283,6 +284,17 @@ Route::middleware('auth:sanctum')->group(function () {
     // Quick Search
     Route::put('/factions/{shortname}/quick-search/settings', [QuickSearchController::class, 'updateSettings']);
     Route::get('/factions/{shortname}/quick-search', [QuickSearchController::class, 'search']);
+
+    // Faction Pages Management
+    Route::get('/factions/{shortname}/pages', [FactionPageController::class, 'index']);
+    Route::post('/factions/{shortname}/pages', [FactionPageController::class, 'store']);
+    Route::get('/factions/{shortname}/pages/context-data', [FactionPageController::class, 'getContextData']);
+    Route::get('/factions/{shortname}/pages/{identifier}', [FactionPageController::class, 'show']);
+    Route::put('/factions/{shortname}/pages/{page}', [FactionPageController::class, 'update']);
+    Route::delete('/factions/{shortname}/pages/{page}', [FactionPageController::class, 'destroy']);
+    Route::put('/factions/{shortname}/pages-reorder', [FactionPageController::class, 'reorder']);
+    Route::get('/factions/{shortname}/pages/{page}/permissions', [FactionPageController::class, 'getPermissions']);
+    Route::put('/factions/{shortname}/pages/{page}/permissions', [FactionPageController::class, 'updatePermissions']);
 
     // Faction Forms Management
     Route::get('/factions/{shortname}/forms', [FormController::class, 'index']);

@@ -882,6 +882,15 @@ class FactionController extends Controller
         // Ensure rosters relation is NOT loaded or serialized on faction model to prevent unmasked data leakage
         $faction->unsetRelation('rosters');
 
+        $canModifyPages = $user && User::hasFactionPermission($user, $faction, 'modify_faction_pages');
+        $pagesQuery = \App\Models\FactionPage::where('faction_id', $faction->id)->orderBy('sort_order', 'asc')->orderBy('created_at', 'asc');
+        if (! $canModifyPages) {
+            $pagesQuery->where('is_published', true);
+        }
+        $factionPages = $pagesQuery->get()->filter(function ($p) use ($user) {
+            return User::hasPagePermission($user, $p, 'view_page');
+        })->values();
+
         $this->audit('faction.show', "Viewed faction panel for '{$faction->name}'", $faction->id, $faction);
 
         return response()->json([
@@ -893,6 +902,7 @@ class FactionController extends Controller
             'flags' => $flags,
             'record_data' => $recordDataResponse,
             'online_users' => $onlineUsers,
+            'faction_pages' => $factionPages,
         ]);
     }
 

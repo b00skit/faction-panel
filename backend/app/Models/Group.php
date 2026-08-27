@@ -32,6 +32,11 @@ class Group extends Model
         return $this->belongsToMany(User::class)->withPivot('is_leader')->withTimestamps();
     }
 
+    public function users()
+    {
+        return $this->members();
+    }
+
     public function leaders()
     {
         return $this->belongsToMany(User::class)->wherePivot('is_leader', true)->withPivot('is_leader')->withTimestamps();

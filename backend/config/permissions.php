@@ -292,6 +292,26 @@ return [
                 ],
             ],
         ],
+        'pages' => [
+            'name' => 'Faction Pages',
+            'permissions' => [
+                'view_faction_pages' => [
+                    'name' => 'View Faction Pages',
+                    'description' => 'Allows viewing faction pages and page management.',
+                    'type' => 'VIEW',
+                ],
+                'create_faction_pages' => [
+                    'name' => 'Create Faction Pages',
+                    'description' => 'Allows creating new custom faction pages.',
+                    'type' => 'CREATE',
+                ],
+                'modify_faction_pages' => [
+                    'name' => 'Modify Faction Pages',
+                    'description' => 'Allows editing and deleting custom faction pages.',
+                    'type' => 'MODIFY',
+                ],
+            ],
+        ],
         'system' => [
             'name' => 'System',
             'permissions' => [

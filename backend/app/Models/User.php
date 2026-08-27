@@ -159,6 +159,8 @@ class User extends Authenticatable
 
     protected static $formPermissionsCache = [];
 
+    protected static $pagePermissionsCache = [];
+
     protected static $hierarchyPermissionsCache = [];
 
     protected static $projectPermissionsCache = [];
@@ -174,6 +176,7 @@ class User extends Authenticatable
         self::$recordPermissionsCache = [];
         self::$statisticsPermissionsCache = [];
         self::$formPermissionsCache = [];
+        self::$pagePermissionsCache = [];
         self::$hierarchyPermissionsCache = [];
         self::$projectPermissionsCache = [];
         self::$exclusionCheckedCache = [];
@@ -896,5 +899,72 @@ class User extends Authenticatable
         }
 
         return in_array($permissionKey, self::$formPermissionsCache[$cacheKey]);
+    }
+
+    public static function hasPagePermission(?User $user, \App\Models\FactionPage $page, string $permissionKey = 'view_page'): bool
+    {
+        $faction = $page->faction;
+
+        // 1. Superadmin/Faction Leader/Global Page Modifier/Creator always have access
+        if ($user) {
+            if ($user->is_superadmin ||
+                $faction->faction_leader === $user->id ||
+                self::hasFactionPermission($user, $faction, 'modify_faction_pages') ||
+                $page->created_by === $user->id
+            ) {
+                return true;
+            }
+        }
+
+        // 2. Check if user has basic view_faction_pages permission
+        if ($user && ! self::hasFactionPermission($user, $faction, 'view_faction_pages')) {
+            return false;
+        }
+
+        // 3. If page has no granular permissions configured, fall back to true (accessible to anyone with view_faction_pages)
+        if ($page->permissions()->count() === 0) {
+            return true;
+        }
+
+        $userId = $user ? $user->id : 'guest';
+        $cacheKey = "{$userId}_{$page->id}";
+
+        if (! isset(self::$pagePermissionsCache[$cacheKey])) {
+            $permissionSets = collect();
+
+            // Public permissions (group_id and role_id are null)
+            $publicPerms = $page->permissions->whereNull('group_id')->whereNull('role_id')->first();
+            if ($publicPerms) {
+                $permissionSets->push(is_array($publicPerms->permissions) ? $publicPerms->permissions : json_decode($publicPerms->permissions, true));
+            }
+
+            if ($user) {
+                // Group permissions
+                $userGroupIds = self::getUserGroupIds($user, $faction->id);
+                $groupPerms = $page->permissions->whereIn('group_id', $userGroupIds);
+                foreach ($groupPerms as $gp) {
+                    $permissionSets->push(is_array($gp->permissions) ? $gp->permissions : json_decode($gp->permissions, true));
+                }
+
+                // Role permissions
+                $userRoleIds = self::getUserRoleIds($user, $faction->id);
+                $rolePerms = $page->permissions->whereIn('role_id', $userRoleIds);
+                foreach ($rolePerms as $rp) {
+                    $permissionSets->push(is_array($rp->permissions) ? $rp->permissions : json_decode($rp->permissions, true));
+                }
+            }
+
+            $resolved = [];
+            foreach ($permissionSets as $set) {
+                if (is_array($set)) {
+                    foreach ($set as $perm) {
+                        $resolved[] = $perm;
+                    }
+                }
+            }
+            self::$pagePermissionsCache[$cacheKey] = array_unique($resolved);
+        }
+
+        return in_array($permissionKey, self::$pagePermissionsCache[$cacheKey]);
     }
 }

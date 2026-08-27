@@ -651,3 +651,31 @@ export interface KanbanStatus {
   is_default?: boolean;
   cards?: KanbanCard[];
 }
+
+export interface FactionPagePermission {
+  id?: number;
+  page_id?: number;
+  role_id?: number | null;
+  group_id?: number | null;
+  permissions: string[];
+  role?: Role;
+  group?: Group;
+}
+
+export interface FactionPage {
+  id: number;
+  faction_id: number;
+  name: string;
+  slug: string;
+  icon: string;
+  show_in_sidebar: boolean;
+  content: string;
+  sort_order: number;
+  is_published: boolean;
+  created_by?: number | null;
+  updated_by?: number | null;
+  created_at?: string;
+  updated_at?: string;
+  permissions?: FactionPagePermission[];
+}
+

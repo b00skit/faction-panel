@@ -1,6 +1,7 @@
 import React from 'react';
 import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
+import { FactionPage } from '../types';
 
 interface FactionLayoutProps {
     isDark: boolean;
@@ -23,6 +24,8 @@ interface FactionLayoutProps {
     canViewFactionHierarchy?: boolean;
     canViewNotifications?: boolean;
     canViewKanban?: boolean;
+    canViewPages?: boolean;
+    factionPages?: FactionPage[];
     siteVersion: string;
     children: React.ReactNode;
 }
@@ -48,6 +51,8 @@ const FactionLayout: React.FC<FactionLayoutProps> = ({
     canViewFactionHierarchy,
     canViewNotifications,
     canViewKanban,
+    canViewPages,
+    factionPages,
     siteVersion,
     children
 }) => {
@@ -93,6 +98,8 @@ const FactionLayout: React.FC<FactionLayoutProps> = ({
                     canViewFactionHierarchy={canViewFactionHierarchy}
                     canViewNotifications={canViewNotifications}
                     canViewKanban={canViewKanban}
+                    canViewPages={canViewPages}
+                    factionPages={factionPages}
                     user={user} 
                     siteVersion={siteVersion} 
                     customFooterText={factionData.custom_footer_text}

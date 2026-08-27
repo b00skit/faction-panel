@@ -1,6 +1,8 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { Users, Settings, Layers, Database, History, RefreshCw, Camera, BarChart3, FileText, Sparkles, Bell, GitFork, Columns3 } from 'lucide-react';
+import { FactionPage } from '../types';
+import { DynamicIcon } from './DynamicIcon';
 
 interface SidebarProps {
   shortname: string;
@@ -16,6 +18,8 @@ interface SidebarProps {
   canViewFactionHierarchy?: boolean;
   canViewNotifications?: boolean;
   canViewKanban?: boolean;
+  canViewPages?: boolean;
+  factionPages?: FactionPage[];
   user: any | null;
   siteVersion?: string;
   customFooterText?: string | null;
@@ -35,13 +39,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   canViewFactionHierarchy = false,
   canViewNotifications = false,
   canViewKanban = false,
+  canViewPages = false,
+  factionPages = [],
   user, 
   siteVersion = '1.0.0', 
   customFooterText 
 }) => {
+  const customSidebarPages = (factionPages || []).filter((page) => page.show_in_sidebar);
+
   return (
     <aside className="sidebar border-r border-border bg-card flex flex-col sticky top-[var(--nav-h)] h-[calc(100vh-var(--nav-h))]">
-      <div className="py-2 space-y-0.5">
+      <div className="py-2 space-y-0.5 overflow-y-auto">
         <NavLink 
           to={`/${shortname}/roster`}
           className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
@@ -160,6 +168,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </NavLink>
         )}
 
+        {canViewPages && (
+          <NavLink 
+            to={`/${shortname}/pages/manage`}
+            className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
+          >
+            <FileText size={14} />
+            Faction Pages
+          </NavLink>
+        )}
+
         {canViewAdmin && (
           <NavLink 
             to={`/${shortname}/admin`}
@@ -168,6 +186,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Settings size={14} />
             Administration
           </NavLink>
+        )}
+
+        {/* Custom Faction Pages separated by horizontal line if any exist */}
+        {customSidebarPages.length > 0 && (
+          <>
+            <div className="my-2 border-t border-border" />
+            {customSidebarPages.map((page) => (
+              <NavLink 
+                key={page.id}
+                to={`/${shortname}/pages/${page.slug}`}
+                className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
+              >
+                <DynamicIcon name={page.icon} size={14} />
+                {page.name}
+              </NavLink>
+            ))}
+          </>
         )}
       </div>
 

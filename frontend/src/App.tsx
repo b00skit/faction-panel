@@ -35,6 +35,8 @@ import Changelog from './components/Changelog';
 import FactionForms from './components/FactionForms';
 import FactionNotifications from './components/FactionNotifications';
 import { FactionKanban } from './components/FactionKanban';
+import { FactionPages } from './components/FactionPages';
+import { FactionPageView } from './components/FactionPageView';
 import GlobalLayout from './layouts/GlobalLayout';
 import FactionLayout from './layouts/FactionLayout';
 import { ConfirmationProvider } from './components/ConfirmationProvider';
@@ -57,13 +59,14 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
   const [flags, setFlags] = useState<any[]>([]);
   const [recordData, setRecordData] = useState<any[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+  const [factionPages, setFactionPages] = useState<any[]>([]);
 
   const fetchAllData = async () => {
     try {
       const res = await api.get(`/factions/${shortname}`, {
         params: { roster_id: activeDivId }
       });
-      const { faction, permissions: perms, rosters: rosterData, sandbox_rosters: sandboxRosterData, datasets: datasetData, flags: flagData, record_data: recordDataRes, online_users: onlineUsersRes } = res.data;
+      const { faction, permissions: perms, rosters: rosterData, sandbox_rosters: sandboxRosterData, datasets: datasetData, flags: flagData, record_data: recordDataRes, online_users: onlineUsersRes, faction_pages: factionPagesRes } = res.data;
       
       const normalizedDatasets = (datasetData || []).map((d: any) => ({
         ...d,
@@ -81,6 +84,7 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
       setFlags(flagData);
       setRecordData(recordDataRes);
       setOnlineUsers(onlineUsersRes || []);
+      setFactionPages(factionPagesRes || []);
 
       if (rosterData.length > 0) {
         const rosterParam = searchParams.get('roster');
@@ -241,6 +245,7 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
   const canViewFactionHierarchy = user?.is_superadmin || permissions.includes('view_faction_hierarchy') || permissions.includes('global_hierarchy_moderation');
   const canViewNotifications = user?.is_superadmin || permissions.includes('view_notifications') || permissions.includes('configure_notifications') || permissions.includes('administrator');
   const canViewKanban = user?.is_superadmin || permissions.includes('view_faction_projects') || permissions.includes('global_kanban_moderation');
+  const canViewPages = user?.is_superadmin || permissions.includes('view_faction_pages') || permissions.includes('modify_faction_pages');
 
   if (location.pathname === `/${shortname}`) {
     return <Navigate to={`/${shortname}/roster`} replace />;
@@ -268,6 +273,8 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
       canViewFactionHierarchy={canViewFactionHierarchy}
       canViewNotifications={canViewNotifications}
       canViewKanban={canViewKanban}
+      canViewPages={canViewPages}
+      factionPages={factionPages}
       siteVersion={siteVersion}
     >
       <Routes>
@@ -408,6 +415,16 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
             </main>
           ) : <Navigate to={`/${shortname}/roster`} />
         } />
+        <Route path="pages/manage" element={
+          canViewPages ? (
+            <main className="main flex-1 overflow-auto p-5">
+              <FactionPages shortname={shortname!} user={user} permissions={permissions} fetchFactionData={fetchAllData} />
+            </main>
+          ) : <Navigate to={`/${shortname}/roster`} />
+        } />
+        <Route path="pages/:slug" element={
+          <FactionPageView shortname={shortname!} user={user} permissions={permissions} />
+        } />
       </Routes>
     </FactionLayout>
   );
@@ -451,7 +468,8 @@ const TitleUpdater = ({ user }: { user: any }) => {
       'roster': 'Roster',
       'diagrams': 'Faction Diagrams',
       'hierarchy': 'Faction Diagrams',
-      'kanban': 'Faction Kanban'
+      'kanban': 'Faction Kanban',
+      'pages': 'Faction Pages',
     };
     const displayPage = pageMap[page] || (page.charAt(0).toUpperCase() + page.slice(1));
     document.title = `${shortname} · ${displayPage}`;
