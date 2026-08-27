@@ -90,6 +90,8 @@ class IntegrationController extends Controller
                     'history' => $dbs['CHIST'],
                     'name_changes' => $dbs['CNAME'],
                     'activity' => $dbs['ACTIVITY'],
+                    'vehicles' => $dbs['VEHICLES'] ?? null,
+                    'vehicle_history' => $dbs['VEHIST'] ?? null,
                 ],
             ]);
         });
@@ -137,6 +139,11 @@ class IntegrationController extends Controller
         $charDb = $this->gtawSyncService->findGtawDatabase($faction, 'CHARS');
         if ($charDb) {
             $charDb->entries()->delete();
+        }
+
+        $vehDb = $this->gtawSyncService->findGtawDatabase($faction, 'VEHICLES');
+        if ($vehDb) {
+            $vehDb->entries()->delete();
         }
 
         $this->audit('integration.gtaw.prune', "Pruned synchronized GTA:W database entries for faction '{$faction->name}'", null, $faction);

@@ -91,6 +91,8 @@ class FactionRecordDatabase extends Model
             'ACTIVITY' => 'gtaw_activity',
             'CHIST' => 'gtaw_history',
             'CNAME' => 'gtaw_name_changes',
+            'VEHICLES' => 'gtaw_vehicles',
+            'VEHIST' => 'gtaw_vehicle_history',
         ];
         if (isset($apiTypeMap[$strIdentifier])) {
             $targetType = $apiTypeMap[$strIdentifier];

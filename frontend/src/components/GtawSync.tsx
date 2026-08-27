@@ -179,7 +179,7 @@ const GtawSync: React.FC<{ faction: any; user: any }> = ({ faction, user }) => {
                             <CheckCircle2 size={18} className="text-accent" />
                             <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-text">Last Sync Results</h4>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-border">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 divide-x divide-border">
                             {[
                                 { label: 'Added', value: results.added, color: 'text-green-500' },
                                 { label: 'Updated', value: results.updated, color: 'text-accent' },
@@ -191,7 +191,9 @@ const GtawSync: React.FC<{ faction: any; user: any }> = ({ faction, user }) => {
                                     subLabel: 'Duplicates'
                                 },
                                 { label: 'Name Changes', value: results.name_changes, color: 'text-purple-500' },
-                                { label: 'Activity Logs', value: results.activity_logs, color: 'text-orange-500' }
+                                { label: 'Activity Logs', value: results.activity_logs, color: 'text-orange-500' },
+                                { label: 'Vehicles Added', value: results.vehicles_added ?? 0, color: 'text-emerald-500' },
+                                { label: 'Vehicles Updated', value: results.vehicles_updated ?? 0, color: 'text-cyan-500' },
                             ].map((item: any, idx) => (
                                 <div key={idx} className="p-6 text-center flex flex-col justify-center">
                                     <div className={`text-2xl font-black mb-1 ${item.color}`}>{item.value}</div>

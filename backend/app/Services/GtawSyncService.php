@@ -54,11 +54,25 @@ class GtawSyncService
                 ->keyBy('character_id')
                 ->toArray();
 
+            // Optional: Fetch Vehicle data if available
+            try {
+                $vehRes = $this->gtawService->getFactionVehicles($user->gtaw_access_token, $faction->gtaw_faction_id);
+            } catch (\Throwable $e) {
+                Log::warning('GTA:W getFactionVehicles call skipped: '.$e->getMessage());
+                $vehRes = null;
+            }
+
+            $gtawVehicles = ($vehRes && isset($vehRes['data']['vehicles']) && is_array($vehRes['data']['vehicles']))
+                ? $vehRes['data']['vehicles']
+                : null;
+
             $dbs = $this->ensureGtawDatabases($faction);
             $charDb = $dbs['CHARS'];
             $historyDb = $dbs['CHIST'];
             $nameChangeDb = $dbs['CNAME'];
             $activityDb = $dbs['ACTIVITY'];
+            $vehDb = $dbs['VEHICLES'] ?? null;
+            $vehHistDb = $dbs['VEHIST'] ?? null;
 
             // 1. Deduplicate GTA:W members list first
             $gtawMembers = collect($res['data']['members'] ?? [])
@@ -75,9 +89,12 @@ class GtawSyncService
                 'duplicates_removed' => 0,
                 'name_changes' => 0,
                 'activity_logs' => 0,
+                'vehicles_added' => 0,
+                'vehicles_updated' => 0,
+                'vehicles_removed' => 0,
             ];
 
-            DB::transaction(function () use ($faction, $charDb, $historyDb, $nameChangeDb, $activityDb, $gtawMembers, $abasData, $now, &$syncResults) {
+            DB::transaction(function () use ($faction, $charDb, $historyDb, $nameChangeDb, $activityDb, $vehDb, $vehHistDb, $gtawMembers, $abasData, $gtawVehicles, $now, &$syncResults) {
                 // 2. Pre-sync duplicate cleanup for Characters Database (before any other logic)
                 $charDb->entries()->get()
                     ->groupBy(fn ($e) => $e->data['char_id'] ?? null)
@@ -277,6 +294,114 @@ class GtawSyncService
                     }
                 }
 
+                // Synchronize Vehicles if vehicle data is available
+                if ($gtawVehicles !== null && $vehDb && $vehHistDb) {
+                    $dedupedVehicles = collect($gtawVehicles)
+                        ->groupBy('id')
+                        ->map(fn ($group) => $group->first())
+                        ->values();
+
+                    // Cleanup pre-sync duplicates for Vehicles
+                    $vehDb->entries()->get()
+                        ->groupBy(fn ($e) => $e->data['vehicle_id'] ?? $e->data['id'] ?? null)
+                        ->filter(fn ($g, $id) => $id && $g->count() > 1)
+                        ->each(function ($group) {
+                            $keepId = $group->max('id');
+                            foreach ($group as $entry) {
+                                if ($entry->id !== $keepId) {
+                                    $entry->delete();
+                                }
+                            }
+                        });
+
+                    $freshVehEntries = $vehDb->entries()->get();
+                    $processedVehIds = [];
+
+                    foreach ($dedupedVehicles as $vehicle) {
+                        $vehId = $vehicle['id'];
+                        $processedVehIds[] = $vehId;
+
+                        $existingVehEntry = $freshVehEntries->first(function ($e) use ($vehId) {
+                            return ($e->data['vehicle_id'] ?? $e->data['id'] ?? null) == $vehId;
+                        });
+
+                        $vehicleData = [
+                            'id' => $vehicle['id'],
+                            'vehicle_id' => $vehicle['id'],
+                            'plate' => $vehicle['plate'] ?? '',
+                            'model' => $vehicle['model'] ?? '',
+                            'model_name' => $vehicle['model_name'] ?? $vehicle['model'] ?? '',
+                            'distance_driven' => $vehicle['distance_driven'] ?? 0,
+                            'hasalpr' => (bool) ($vehicle['hasalpr'] ?? false),
+                            'last_maintenance_distance' => $vehicle['last_maintenance_distance'] ?? 0,
+                            'owner' => $vehicle['owner'] ?? null,
+                            'owner_name' => $vehicle['owner_name'] ?? null,
+                            'business' => $vehicle['business'] ?? null,
+                            'business_name' => $vehicle['business_name'] ?? null,
+                        ];
+
+                        if ($existingVehEntry) {
+                            $existingData = $existingVehEntry->data;
+                            $hasChanges = false;
+                            foreach ($vehicleData as $key => $value) {
+                                if (! array_key_exists($key, $existingData) || $existingData[$key] != $value) {
+                                    $hasChanges = true;
+                                    break;
+                                }
+                            }
+
+                            if ($hasChanges) {
+                                $existingVehEntry->update(['data' => $vehicleData]);
+                                NotificationService::triggerDatabaseEntryEvent($existingVehEntry, 'updated');
+                                $syncResults['vehicles_updated']++;
+                            }
+                        } else {
+                            $newVehEntry = $vehDb->entries()->create([
+                                'entry_id' => ($vehDb->entries()->withTrashed()->max('entry_id') ?? 0) + 1,
+                                'data' => $vehicleData,
+                                'created_by' => null,
+                            ]);
+                            NotificationService::triggerDatabaseEntryEvent($newVehEntry, 'created');
+
+                            $vehHistEntry = $vehHistDb->entries()->create([
+                                'entry_id' => ($vehHistDb->entries()->withTrashed()->max('entry_id') ?? 0) + 1,
+                                'data' => [
+                                    'vehicle_id' => $vehId,
+                                    'plate' => $vehicle['plate'] ?? '',
+                                    'model_name' => $vehicle['model_name'] ?? $vehicle['model'] ?? '',
+                                    'action' => 'Added',
+                                    'date' => $now,
+                                ],
+                                'created_by' => null,
+                            ]);
+                            NotificationService::triggerDatabaseEntryEvent($vehHistEntry, 'created');
+
+                            $syncResults['vehicles_added']++;
+                        }
+                    }
+
+                    foreach ($freshVehEntries as $entry) {
+                        $vId = $entry->data['vehicle_id'] ?? $entry->data['id'] ?? null;
+                        if ($vId && ! in_array($vId, $processedVehIds)) {
+                            $remVehHistEntry = $vehHistDb->entries()->create([
+                                'entry_id' => ($vehHistDb->entries()->withTrashed()->max('entry_id') ?? 0) + 1,
+                                'data' => [
+                                    'vehicle_id' => $vId,
+                                    'plate' => $entry->data['plate'] ?? '',
+                                    'model_name' => $entry->data['model_name'] ?? '',
+                                    'action' => 'Removed',
+                                    'date' => $now,
+                                ],
+                                'created_by' => null,
+                            ]);
+                            NotificationService::triggerDatabaseEntryEvent($remVehHistEntry, 'created');
+
+                            $entry->delete();
+                            $syncResults['vehicles_removed']++;
+                        }
+                    }
+                }
+
                 // Update linked roster columns and re-evaluate auto-apply rules
                 $this->updateLinkedRosterColumns($faction, $charDb);
             });
@@ -398,6 +523,42 @@ class GtawSyncService
                 ],
                 'is_published' => true,
             ],
+            'VEHICLES' => [
+                'name' => 'Faction Vehicles',
+                'description' => 'Automated synchronization of faction vehicles from GTA:W.',
+                'record_shortcode' => 'VEHICLES',
+                'structure' => [
+                    ['id' => 'id', 'name' => 'ID', 'type' => 'number', 'required' => true],
+                    ['id' => 'vehicle_id', 'name' => 'Vehicle ID', 'type' => 'number', 'required' => true],
+                    ['id' => 'plate', 'name' => 'Plate', 'type' => 'text', 'required' => true],
+                    ['id' => 'model', 'name' => 'Model', 'type' => 'text', 'required' => true],
+                    ['id' => 'model_name', 'name' => 'Model Name', 'type' => 'text', 'required' => true],
+                    ['id' => 'distance_driven', 'name' => 'Distance Driven', 'type' => 'number', 'required' => false],
+                    ['id' => 'hasalpr', 'name' => 'Has ALPR', 'type' => 'boolean', 'required' => false],
+                    ['id' => 'last_maintenance_distance', 'name' => 'Last Maintenance Distance', 'type' => 'number', 'required' => false],
+                    ['id' => 'owner', 'name' => 'Owner ID', 'type' => 'number', 'required' => false],
+                    ['id' => 'owner_name', 'name' => 'Owner Name', 'type' => 'text', 'required' => false],
+                    ['id' => 'business', 'name' => 'Business ID', 'type' => 'number', 'required' => false],
+                    ['id' => 'business_name', 'name' => 'Business Name', 'type' => 'text', 'required' => false],
+                ],
+                'is_published' => true,
+                'detail_customization' => [
+                    'showcase_field' => 'model_name',
+                ],
+            ],
+            'VEHIST' => [
+                'name' => 'Vehicle History',
+                'description' => 'Logs of vehicles added to or removed from the faction on GTA:W.',
+                'record_shortcode' => 'VEHIST',
+                'structure' => [
+                    ['id' => 'vehicle_id', 'name' => 'Vehicle ID', 'type' => 'number', 'required' => true],
+                    ['id' => 'plate', 'name' => 'Plate', 'type' => 'text', 'required' => true],
+                    ['id' => 'model_name', 'name' => 'Model Name', 'type' => 'text', 'required' => true],
+                    ['id' => 'action', 'name' => 'Action', 'type' => 'text', 'required' => true],
+                    ['id' => 'date', 'name' => 'Date', 'type' => 'date', 'required' => true],
+                ],
+                'is_published' => true,
+            ],
         ];
 
         $apiTypeMap = [
@@ -405,6 +566,8 @@ class GtawSyncService
             'ACTIVITY' => 'gtaw_activity',
             'CHIST' => 'gtaw_history',
             'CNAME' => 'gtaw_name_changes',
+            'VEHICLES' => 'gtaw_vehicles',
+            'VEHIST' => 'gtaw_vehicle_history',
         ];
 
         $result = [];
@@ -792,6 +955,8 @@ class GtawSyncService
             'ACTIVITY' => 'gtaw_activity',
             'CHIST' => 'gtaw_history',
             'CNAME' => 'gtaw_name_changes',
+            'VEHICLES' => 'gtaw_vehicles',
+            'VEHIST' => 'gtaw_vehicle_history',
         ];
         $targetType = $apiTypeMap[$shortcode] ?? null;
 
@@ -831,9 +996,13 @@ class GtawSyncService
                 $matched = true;
             } elseif ($shortcode === 'ACTIVITY' && in_array('abas', $fieldIds) && ! in_array('is_alt', $fieldIds)) {
                 $matched = true;
-            } elseif ($shortcode === 'CHIST' && in_array('action', $fieldIds)) {
+            } elseif ($shortcode === 'CHIST' && in_array('action', $fieldIds) && in_array('char_id', $fieldIds)) {
                 $matched = true;
             } elseif ($shortcode === 'CNAME' && (in_array('old_name', $fieldIds) || in_array('new_name', $fieldIds))) {
+                $matched = true;
+            } elseif ($shortcode === 'VEHICLES' && in_array('plate', $fieldIds) && in_array('model_name', $fieldIds)) {
+                $matched = true;
+            } elseif ($shortcode === 'VEHIST' && in_array('vehicle_id', $fieldIds) && in_array('action', $fieldIds)) {
                 $matched = true;
             }
 

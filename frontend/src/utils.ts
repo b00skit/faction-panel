@@ -36,6 +36,8 @@ export const findRecordDatabase = (
     'ACTIVITY': 'gtaw_activity',
     'CHIST': 'gtaw_history',
     'CNAME': 'gtaw_name_changes',
+    'VEHICLES': 'gtaw_vehicles',
+    'VEHIST': 'gtaw_vehicle_history',
   };
   const mappedApiType = apiTypeMap[idStr.toUpperCase()];
   if (mappedApiType) {

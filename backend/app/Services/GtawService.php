@@ -71,4 +71,17 @@ class GtawService
 
         return $response->json();
     }
+
+    public function getFactionVehicles(string $accessToken, int $factionId)
+    {
+        $response = Http::withToken($accessToken)->get("{$this->baseUrl}/api/faction/{$factionId}/vehicles");
+
+        if ($response->failed()) {
+            Log::error('GTA:W Get Faction Vehicles Failed', ['status' => $response->status(), 'body' => $response->json(), 'faction_id' => $factionId]);
+
+            return null;
+        }
+
+        return $response->json();
+    }
 }
