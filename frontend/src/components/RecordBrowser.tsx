@@ -395,7 +395,10 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
 
         const renderField = (field: any) => (
             <div key={field.id}>
-                <label className="block text-[10px] font-black text-muted uppercase tracking-[0.2em] mb-1.5">{field.name}</label>
+                <div className="flex items-center gap-2 mb-1.5">
+                    <label className="block text-[10px] font-black text-muted uppercase tracking-[0.2em]">{field.name}</label>
+                    <span className="font-mono text-[9px] text-muted/60 lowercase">[{field.id}]</span>
+                </div>
                 <div className="text-sm text-text font-medium bg-surface/30 p-3 rounded-lg border border-border/50">
                     {renderFieldValue(field, selectedEntry.data?.[field.id])}
                 </div>
@@ -587,7 +590,12 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
                                 <th className={`text-left ${isCompact ? 'p-2' : 'p-4'} text-[9px] font-black uppercase tracking-widest text-muted w-20`}>ID</th>
                                 <th className={`text-left ${isCompact ? 'p-2' : 'p-4'} text-[9px] font-black uppercase tracking-widest text-muted w-16`}>Status</th>
                                 {database.database_structure.map(field => (
-                                    <th key={field.id} className={`text-left ${isCompact ? 'p-2' : 'p-4'} text-[9px] font-black uppercase tracking-widest text-muted`}>{field.name}</th>
+                                    <th key={field.id} className={`text-left ${isCompact ? 'p-2' : 'p-4'} text-[9px] font-black uppercase tracking-widest text-muted`}>
+                                        <div className="flex flex-col">
+                                            <span>{field.name}</span>
+                                            <span className="font-mono text-[8px] text-muted/60 lowercase tracking-normal font-normal">[{field.id}]</span>
+                                        </div>
+                                    </th>
                                 ))}
                                 <th className={`text-right ${isCompact ? 'p-2' : 'p-4'} text-[9px] font-black uppercase tracking-widest text-muted`}>Created</th>
                                 <th className={`${isCompact ? 'p-2' : 'p-4'} w-16`}></th>
@@ -651,9 +659,12 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
                                     #{database.record_shortcode ? `${database.record_shortcode}` : ''}{entry.entry_id}
                                 </span>
                                 <div className="flex gap-8 overflow-hidden">
-                                    {database.database_structure.slice(0, 4).map(field => (
+                                     {database.database_structure.slice(0, 4).map(field => (
                                         <div key={field.id} className="min-w-[120px]">
-                                            <label className="block text-[8px] font-black text-muted uppercase tracking-widest mb-0.5">{field.name}</label>
+                                            <div className="flex items-center gap-1 mb-0.5">
+                                                <label className="block text-[8px] font-black text-muted uppercase tracking-widest">{field.name}</label>
+                                                <span className="font-mono text-[7px] text-muted/60 lowercase">[{field.id}]</span>
+                                            </div>
                                             <div className="text-xs text-text truncate">
                                                 {renderFieldValue(field, entry.data?.[field.id])}
                                             </div>
@@ -708,7 +719,10 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
                         <div className={`space-y-4 mb-6 ${isDetailed ? 'divide-y divide-border/30' : ''}`}>
                             {database.database_structure.map(field => (
                                 <div key={field.id} className={isDetailed ? 'pt-3 first:pt-0' : ''}>
-                                    <label className="block text-[8px] font-black text-muted uppercase tracking-[0.2em] mb-1">{field.name}</label>
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                        <label className="block text-[8px] font-black text-muted uppercase tracking-[0.2em]">{field.name}</label>
+                                        <span className="font-mono text-[7px] text-muted/60 lowercase">[{field.id}]</span>
+                                    </div>
                                     <div className={`${isDetailed ? 'text-sm' : 'text-xs'} text-text font-medium`}>
                                         {renderFieldValue(field, entry.data?.[field.id])}
                                     </div>
@@ -764,9 +778,18 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
                                 </div>
                             )}
                         </div>
-                        <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1">
-                            Browsing records for {database.record_shortcode || 'DATABASE'}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <span className="text-[10px] font-bold text-muted uppercase tracking-widest">
+                                Browsing records for <strong className="text-text">{database.name}</strong>
+                            </span>
+                            <div className="flex items-center gap-2 text-[10px] font-mono text-muted/80 bg-surface px-2.5 py-0.5 rounded border border-border/50">
+                                <span>ID: <strong className="text-accent">#{database.id}</strong></span>
+                                <span>•</span>
+                                <span>Prefix: <strong className="text-text">{database.record_shortcode || 'NONE'}</strong></span>
+                                <span>•</span>
+                                <span>Query: <strong className="text-text">records['{database.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')}']</strong></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -879,9 +902,12 @@ export default function RecordBrowser({ database, shortname, permissions, user, 
 
                                 {database.database_structure.map(field => (
                                     <div key={field.id}>
-                                        <label className="block text-[10px] font-bold text-muted uppercase tracking-widest mb-1.5">
-                                            {field.name}
-                                            {field.required && <span className="text-danger ml-1">*</span>}
+                                        <label className="block text-[10px] font-bold text-muted uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                                            <span>
+                                                {field.name}
+                                                {field.required && <span className="text-danger ml-1">*</span>}
+                                            </span>
+                                            <span className="font-mono text-[9px] text-muted/60 font-normal lowercase">Key: [{field.id}]</span>
                                         </label>
                                         
                                         {field.type === 'textarea' ? (

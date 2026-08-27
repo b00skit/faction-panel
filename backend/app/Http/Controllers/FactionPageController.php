@@ -301,6 +301,8 @@ class FactionPageController extends Controller
                 ];
 
                 $accessibleDatabases[] = $dbData;
+                $recordsMap[$db->id] = $entries;
+                $recordsMap[(string) $db->id] = $entries;
                 $recordsMap[$db->name] = $entries;
                 $slugifiedKey = Str::slug($db->name, '_');
                 $recordsMap[$slugifiedKey] = $entries;

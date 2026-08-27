@@ -340,14 +340,24 @@ export default function FactionRecords({ shortname, permissions, user }: Faction
                                 )}
                             </div>
 
-                            <h3 className="text-lg font-bold text-text mb-2 group-hover:text-accent transition-colors">
+                            <h3 className="text-lg font-bold text-text mb-1 group-hover:text-accent transition-colors">
                                 {db.name}
                             </h3>
-                            <p className="text-sm text-muted line-clamp-2 mb-6">
+
+                            {/* Reference Information for Page Querying */}
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-muted/80 mb-3 bg-surface/80 px-2.5 py-1.5 rounded border border-border/50">
+                                <span>ID: <strong className="text-accent">#{db.id}</strong></span>
+                                <span>•</span>
+                                <span>Prefix: <strong className="text-text">{db.record_shortcode || 'NONE'}</strong></span>
+                                <span>•</span>
+                                <span>Key: <strong className="text-text">records['{db.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')}']</strong></span>
+                            </div>
+
+                            <p className="text-sm text-muted line-clamp-2 mb-4">
                                 {db.description || 'No description provided.'}
                             </p>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-4 mb-4">
                                 <div className="flex items-center gap-2 text-[10px] font-bold text-muted uppercase tracking-widest">
                                     <Layout size={12} className="opacity-50" />
                                     <span>{db.data_overview_display}</span>
@@ -357,6 +367,21 @@ export default function FactionRecords({ shortname, permissions, user }: Faction
                                     <span>{db.record_shortcode || 'NO PREFIX'}</span>
                                 </div>
                             </div>
+
+                            {/* Column Structure Preview with Column Keys */}
+                            {db.database_structure && db.database_structure.length > 0 && (
+                                <div className="pt-3 border-t border-border/40">
+                                    <span className="block text-[8px] font-black text-muted uppercase tracking-widest mb-1.5">Columns & Reference Keys ({db.database_structure.length})</span>
+                                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                                        {db.database_structure.map((f: any) => (
+                                            <span key={f.id} className="px-2 py-0.5 bg-surface border border-border/60 rounded text-[9px] font-medium text-text flex items-center gap-1">
+                                                <span>{f.name}</span>
+                                                <span className="font-mono text-muted/60 text-[8px]">[{f.id}]</span>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             
                             {db.is_published && (
                                 <div className="mt-4 flex items-center gap-2 px-2 py-1 bg-accent/10 border border-accent/20 rounded text-[8px] font-black text-accent uppercase tracking-widest w-fit">
@@ -438,6 +463,24 @@ export default function FactionRecords({ shortname, permissions, user }: Faction
                         <form onSubmit={handleCreate} className="p-6 space-y-8 overflow-y-auto">
                             {modalTab === 'info' && (
                                 <div className="space-y-6">
+                                    {editMode && (
+                                        <div className="bg-surface border border-border/80 p-3.5 rounded-xl flex flex-wrap items-center justify-between gap-4 text-xs font-mono">
+                                            <div className="flex items-center gap-6">
+                                                <div>
+                                                    <span className="text-muted/60 uppercase text-[8px] font-sans font-bold tracking-widest block">Database ID</span>
+                                                    <strong className="text-accent font-bold">#{editMode.id}</strong>
+                                                </div>
+                                                <div>
+                                                    <span className="text-muted/60 uppercase text-[8px] font-sans font-bold tracking-widest block">Shortcode Prefix</span>
+                                                    <strong className="text-text font-bold">{editMode.record_shortcode || 'NONE'}</strong>
+                                                </div>
+                                                <div>
+                                                    <span className="text-muted/60 uppercase text-[8px] font-sans font-bold tracking-widest block">Custom Page Handlebars Key</span>
+                                                    <strong className="text-text font-bold">records['{editMode.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')}']</strong>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="space-y-4">
                                         <div>
                                             <label className="block text-[10px] font-bold text-muted uppercase tracking-widest mb-1.5">Database Name</label>
@@ -577,6 +620,10 @@ export default function FactionRecords({ shortname, permissions, user }: Faction
                                                             placeholder="Field Name (e.g. Callsign)"
                                                             className="w-full bg-transparent border-none p-0 text-sm font-bold text-text focus:ring-0 outline-none placeholder:text-muted/40 disabled:opacity-50"
                                                         />
+                                                        <div className="text-[10px] font-mono text-muted/60 mt-0.5 flex items-center gap-1.5">
+                                                            <span>Column Key:</span>
+                                                            <code className="bg-card px-1.5 py-0.5 rounded text-accent font-bold text-[9px] border border-border/50">{field.id}</code>
+                                                        </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <select 

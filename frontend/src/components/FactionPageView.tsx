@@ -40,7 +40,13 @@ if (!(Handlebars as any)._customHelpersRegistered) {
 
   Handlebars.registerHelper('getRecordDatabase', function (dbName, options) {
     const databases = options?.data?.root?.record_databases || [];
-    return databases.find((d: any) => d.name === dbName || d.record_shortcode === dbName) || null;
+    const target = String(dbName).toLowerCase();
+    return databases.find((d: any) => 
+      String(d.id) === String(dbName) || 
+      (d.record_shortcode && String(d.record_shortcode).toLowerCase() === target) ||
+      (d.name && String(d.name).toLowerCase() === target) ||
+      (d.name && String(d.name).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') === target)
+    ) || null;
   });
 
   Handlebars.registerHelper('filterRecords', function (dbName, fieldName, value, options) {
