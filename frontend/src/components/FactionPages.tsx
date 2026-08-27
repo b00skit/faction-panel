@@ -6,7 +6,7 @@ import api from '../api';
 import { FactionPage, Role, Group } from '../types';
 import Loading from './Loading';
 import { DynamicIcon, AVAILABLE_ICONS } from './DynamicIcon';
-import { setupHandlebarsAndDOMPurify, executeScriptsInElement } from '../utils/handlebarsHelpers';
+import { setupHandlebarsAndDOMPurify, renderCustomPage, executeExtractedScripts } from '../utils/handlebarsHelpers';
 import {
   FileText,
   Plus,
@@ -127,42 +127,28 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
     }
   }, [searchParams, pages]);
 
+  const [previewScripts, setPreviewScripts] = useState<string[]>([]);
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Handle live preview rendering whenever content or active tab changes
   useEffect(() => {
     if (activeTab === 'preview') {
-      try {
-        const template = Handlebars.compile(formData.content || '');
-        const raw = template(contextData || {});
-        const sanitized = DOMPurify.sanitize(raw, {
-          ADD_TAGS: ['style', 'script'],
-          ADD_ATTR: [
-            'target', 'class', 'style', 'id', 'data-*',
-            'onclick', 'oninput', 'onchange', 'onkeyup', 'onkeydown', 'onsubmit', 'onreset',
-          ],
-        });
-        setPreviewHtml(sanitized);
-      } catch (err: any) {
-        setPreviewHtml(`<div className="p-4 border border-red-500/50 bg-red-500/10 text-red-400 rounded text-xs">
-          <strong>Syntax Error:</strong> ${err.message || 'Invalid Handlebars markup'}
-        </div>`);
-      }
+      const { html, scripts } = renderCustomPage(formData.content || '', contextData || {});
+      setPreviewHtml(html);
+      setPreviewScripts(scripts);
     }
   }, [activeTab, formData.content, contextData]);
 
   // Execute scripts in preview tab once rendered
   useEffect(() => {
-    if (activeTab === 'preview' && previewHtml && previewContainerRef.current) {
-      executeScriptsInElement(previewContainerRef.current);
+    if (activeTab === 'preview' && previewHtml && previewScripts.length > 0) {
+      executeExtractedScripts(previewScripts);
       const timer = setTimeout(() => {
-        if (previewContainerRef.current) {
-          executeScriptsInElement(previewContainerRef.current);
-        }
+        executeExtractedScripts(previewScripts);
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [activeTab, previewHtml]);
+  }, [activeTab, previewHtml, previewScripts]);
 
   const handleOpenModal = async (page?: FactionPage) => {
     if (page) {

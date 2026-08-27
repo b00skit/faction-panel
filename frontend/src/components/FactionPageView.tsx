@@ -14,7 +14,7 @@ interface FactionPageViewProps {
   permissions: string[];
 }
 
-import { setupHandlebarsAndDOMPurify, executeScriptsInElement } from '../utils/handlebarsHelpers';
+import { setupHandlebarsAndDOMPurify, renderCustomPage, executeExtractedScripts } from '../utils/handlebarsHelpers';
 
 // Register Handlebars helpers and DOMPurify hooks
 setupHandlebarsAndDOMPurify();
@@ -24,6 +24,7 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
   const [page, setPage] = useState<FactionPage | null>(null);
   const [contextData, setContextData] = useState<any>(null);
   const [renderedHtml, setRenderedHtml] = useState<string>('');
+  const [renderedScripts, setRenderedScripts] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,24 +47,9 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
       setPage(loadedPage);
       setContextData(loadedContext);
 
-      // Compile Handlebars template safely
-      try {
-        const template = Handlebars.compile(loadedPage.content || '');
-        const rawOutput = template(loadedContext);
-
-        // Sanitize rendered HTML using DOMPurify
-        const cleanOutput = DOMPurify.sanitize(rawOutput, {
-          ADD_TAGS: ['style', 'script'],
-          ADD_ATTR: ['target', 'class', 'style', 'id', 'data-*', 'on*'],
-        });
-
-        setRenderedHtml(cleanOutput);
-      } catch (compileErr: any) {
-        console.error('Handlebars compile error:', compileErr);
-        setRenderedHtml(`<div className="p-4 border border-red-500/50 bg-red-500/10 text-red-400 rounded">
-          <strong>Template Rendering Error:</strong> ${compileErr.message || 'Syntax error in Handlebars markup'}
-        </div>`);
-      }
+      const { html, scripts } = renderCustomPage(loadedPage.content || '', loadedContext);
+      setRenderedHtml(html);
+      setRenderedScripts(scripts);
     } catch (err: any) {
       console.error('Failed to load page:', err);
       setError(err.response?.data?.message || 'Failed to load page or permission denied.');
@@ -74,17 +60,14 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
 
   // Reliably execute scripts once the rendered HTML is mounted to the DOM
   useEffect(() => {
-    if (!loading && renderedHtml && renderedContainerRef.current) {
-      // Execute immediately and after paint to guarantee DOM container elements exist
-      executeScriptsInElement(renderedContainerRef.current);
+    if (!loading && renderedHtml && renderedScripts.length > 0) {
+      executeExtractedScripts(renderedScripts);
       const timer = setTimeout(() => {
-        if (renderedContainerRef.current) {
-          executeScriptsInElement(renderedContainerRef.current);
-        }
+        executeExtractedScripts(renderedScripts);
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [loading, renderedHtml]);
+  }, [loading, renderedHtml, renderedScripts]);
 
   useEffect(() => {
     if (slug && shortname) {

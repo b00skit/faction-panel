@@ -235,20 +235,104 @@ export function setupHandlebarsAndDOMPurify() {
       return val !== undefined && val !== null && val !== '' ? val : fallback;
     });
   }
+}
 
-  // Hook DOMPurify to allow event handler attributes like oninput, onchange, onclick
-  if (!(DOMPurify as any)._eventHookAdded) {
-    (DOMPurify as any)._eventHookAdded = true;
-    DOMPurify.addHook('uponSanitizeAttribute', (_node, data) => {
-      if (data.attrName && data.attrName.startsWith('on')) {
-        (data as any).forceKeepAttr = true;
-      }
+export function getDOMPurifyInstance() {
+  if (typeof DOMPurify === 'function' && !(DOMPurify as any).sanitize) {
+    return (DOMPurify as any)(typeof window !== 'undefined' ? window : undefined);
+  }
+  return DOMPurify;
+}
+
+export function sanitizeHtml(rawHtml: string): string {
+  const purify = getDOMPurifyInstance();
+  if (purify && typeof purify.addHook === 'function' && !(purify as any)._eventHookAdded) {
+    (purify as any)._eventHookAdded = true;
+    try {
+      purify.addHook('uponSanitizeAttribute', (_node: any, data: any) => {
+        if (data.attrName && data.attrName.startsWith('on')) {
+          data.forceKeepAttr = true;
+        }
+      });
+    } catch (e) {
+      // Ignore if hook fails
+    }
+  }
+
+  if (purify && typeof purify.sanitize === 'function') {
+    return purify.sanitize(rawHtml, {
+      ADD_TAGS: ['style'],
+      ADD_ATTR: [
+        'target', 'class', 'style', 'id', 'data-*',
+        'onclick', 'oninput', 'onchange', 'onkeyup', 'onkeydown', 'onsubmit', 'onreset',
+      ],
     });
+  }
+
+  return rawHtml;
+}
+
+/**
+ * Compiles a Handlebars custom page template, extracts <script> tags so DOMPurify
+ * does not strip them, sanitizes the remaining HTML, and returns both.
+ */
+export function renderCustomPage(
+  templateContent: string,
+  contextData: any
+): { html: string; scripts: string[] } {
+  try {
+    const template = Handlebars.compile(templateContent || '');
+    const rawOutput = template(contextData || {});
+
+    const scripts: string[] = [];
+
+    // Extract all script tags before DOMPurify so they don't get stripped/corrupted
+    const htmlWithoutScripts = rawOutput.replace(
+      /<script\b[^>]*>([\s\S]*?)<\/script>/gi,
+      (_match, scriptBody) => {
+        scripts.push(scriptBody);
+        return '';
+      }
+    );
+
+    const cleanHtml = sanitizeHtml(htmlWithoutScripts);
+
+    return { html: cleanHtml, scripts };
+  } catch (err: any) {
+    return {
+      html: `<div class="p-4 border border-red-500/50 bg-red-500/10 text-red-400 rounded text-xs">
+        <strong>Template Rendering Error:</strong> ${err.message || 'Syntax error in Handlebars markup'}
+      </div>`,
+      scripts: [],
+    };
   }
 }
 
 /**
- * Execute script tags embedded inside an element container in the global browser context.
+ * Execute extracted script strings in the global browser context in sequential order.
+ */
+export function executeExtractedScripts(scripts: string[]) {
+  if (!Array.isArray(scripts) || scripts.length === 0) return;
+  scripts.forEach((code, idx) => {
+    if (!code || !code.trim()) return;
+    try {
+      const newScript = document.createElement('script');
+      newScript.text = code;
+      document.head.appendChild(newScript);
+      document.head.removeChild(newScript);
+    } catch (e) {
+      console.warn(`Script #${idx + 1} execution via document.head failed, falling back to window.eval:`, e);
+      try {
+        (window as any).eval(code);
+      } catch (evalErr) {
+        console.error(`Script #${idx + 1} execution failed:`, evalErr);
+      }
+    }
+  });
+}
+
+/**
+ * Fallback: Execute script tags embedded inside an element container in the global browser context.
  */
 export function executeScriptsInElement(container: HTMLElement | null) {
   if (!container) return;
@@ -275,4 +359,5 @@ export function executeScriptsInElement(container: HTMLElement | null) {
     }
   });
 }
+
 
