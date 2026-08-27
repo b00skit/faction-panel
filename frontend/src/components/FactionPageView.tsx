@@ -202,11 +202,27 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
 
         // Sanitize rendered HTML using DOMPurify
         const cleanOutput = DOMPurify.sanitize(rawOutput, {
-          ADD_TAGS: ['style'],
-          ADD_ATTR: ['target', 'class', 'style', 'id', 'data-*'],
+          ADD_TAGS: ['style', 'script'],
+          ADD_ATTR: ['target', 'class', 'style', 'id', 'data-*', 'on*'],
         });
 
         setRenderedHtml(cleanOutput);
+
+        // Execute any script tags within the sanitized custom page HTML
+        setTimeout(() => {
+          const container = document.querySelector('.faction-page-rendered');
+          if (container) {
+            const scripts = container.querySelectorAll('script');
+            scripts.forEach((oldScript) => {
+              const newScript = document.createElement('script');
+              Array.from(oldScript.attributes).forEach((attr) =>
+                newScript.setAttribute(attr.name, attr.value)
+              );
+              newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+              oldScript.parentNode?.replaceChild(newScript, oldScript);
+            });
+          }
+        }, 50);
       } catch (compileErr: any) {
         console.error('Handlebars compile error:', compileErr);
         setRenderedHtml(`<div className="p-4 border border-red-500/50 bg-red-500/10 text-red-400 rounded">
