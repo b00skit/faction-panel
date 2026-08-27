@@ -246,3 +246,33 @@ export function setupHandlebarsAndDOMPurify() {
     });
   }
 }
+
+/**
+ * Execute script tags embedded inside an element container in the global browser context.
+ */
+export function executeScriptsInElement(container: HTMLElement | null) {
+  if (!container) return;
+  const scripts = Array.from(container.querySelectorAll('script'));
+  scripts.forEach((oldScript) => {
+    const code = oldScript.text || oldScript.textContent || oldScript.innerHTML || '';
+    if (!code.trim()) return;
+
+    try {
+      const newScript = document.createElement('script');
+      Array.from(oldScript.attributes).forEach((attr: Attr) => {
+        newScript.setAttribute(attr.name, attr.value);
+      });
+      newScript.text = code;
+      document.head.appendChild(newScript);
+      document.head.removeChild(newScript);
+    } catch (e) {
+      console.warn('Script execution via document.head failed, falling back to window.eval:', e);
+      try {
+        (window as any).eval(code);
+      } catch (evalErr) {
+        console.error('Failed to execute page script:', evalErr);
+      }
+    }
+  });
+}
+

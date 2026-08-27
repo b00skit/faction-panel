@@ -6,7 +6,7 @@ import api from '../api';
 import { FactionPage, Role, Group } from '../types';
 import Loading from './Loading';
 import { DynamicIcon, AVAILABLE_ICONS } from './DynamicIcon';
-import { setupHandlebarsAndDOMPurify } from '../utils/handlebarsHelpers';
+import { setupHandlebarsAndDOMPurify, executeScriptsInElement } from '../utils/handlebarsHelpers';
 import {
   FileText,
   Plus,
@@ -154,16 +154,13 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
   // Execute scripts in preview tab once rendered
   useEffect(() => {
     if (activeTab === 'preview' && previewHtml && previewContainerRef.current) {
-      const container = previewContainerRef.current;
-      const scripts = container.querySelectorAll('script');
-      scripts.forEach((oldScript) => {
-        const newScript = document.createElement('script');
-        Array.from(oldScript.attributes).forEach((attr: Attr) =>
-          newScript.setAttribute(attr.name, attr.value)
-        );
-        newScript.textContent = oldScript.textContent || oldScript.innerText || '';
-        oldScript.parentNode?.replaceChild(newScript, oldScript);
-      });
+      executeScriptsInElement(previewContainerRef.current);
+      const timer = setTimeout(() => {
+        if (previewContainerRef.current) {
+          executeScriptsInElement(previewContainerRef.current);
+        }
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [activeTab, previewHtml]);
 

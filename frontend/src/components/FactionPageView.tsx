@@ -14,7 +14,7 @@ interface FactionPageViewProps {
   permissions: string[];
 }
 
-import { setupHandlebarsAndDOMPurify } from '../utils/handlebarsHelpers';
+import { setupHandlebarsAndDOMPurify, executeScriptsInElement } from '../utils/handlebarsHelpers';
 
 // Register Handlebars helpers and DOMPurify hooks
 setupHandlebarsAndDOMPurify();
@@ -75,16 +75,14 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
   // Reliably execute scripts once the rendered HTML is mounted to the DOM
   useEffect(() => {
     if (!loading && renderedHtml && renderedContainerRef.current) {
-      const container = renderedContainerRef.current;
-      const scripts = container.querySelectorAll('script');
-      scripts.forEach((oldScript) => {
-        const newScript = document.createElement('script');
-        Array.from(oldScript.attributes).forEach((attr: Attr) =>
-          newScript.setAttribute(attr.name, attr.value)
-        );
-        newScript.textContent = oldScript.textContent || oldScript.innerText || '';
-        oldScript.parentNode?.replaceChild(newScript, oldScript);
-      });
+      // Execute immediately and after paint to guarantee DOM container elements exist
+      executeScriptsInElement(renderedContainerRef.current);
+      const timer = setTimeout(() => {
+        if (renderedContainerRef.current) {
+          executeScriptsInElement(renderedContainerRef.current);
+        }
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [loading, renderedHtml]);
 
