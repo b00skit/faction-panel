@@ -37,7 +37,7 @@ class KanbanLabelController extends Controller
     public function index(KanbanProject $project)
     {
         $user = Auth::user();
-        if (!User::canViewProject($user, $project)) {
+        if (! User::canViewProject($user, $project)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -46,7 +46,7 @@ class KanbanLabelController extends Controller
 
     public function store(Request $request, KanbanProject $project)
     {
-        if (!$this->checkAccess($project, 'manage_labels')) {
+        if (! $this->checkAccess($project, 'manage_labels')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -67,7 +67,7 @@ class KanbanLabelController extends Controller
     public function update(Request $request, KanbanLabel $label)
     {
         $project = $label->project;
-        if (!$this->checkAccess($project, 'manage_labels')) {
+        if (! $this->checkAccess($project, 'manage_labels')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -89,7 +89,7 @@ class KanbanLabelController extends Controller
     public function destroy(KanbanLabel $label)
     {
         $project = $label->project;
-        if (!$this->checkAccess($project, 'manage_labels')) {
+        if (! $this->checkAccess($project, 'manage_labels')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

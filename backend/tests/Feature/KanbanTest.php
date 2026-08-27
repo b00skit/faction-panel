@@ -1,16 +1,15 @@
 <?php
 
-use App\Events\KanbanBoardUpdated;
 use App\Models\Faction;
 use App\Models\KanbanCard;
 use App\Models\KanbanCardType;
 use App\Models\KanbanPriority;
-use App\Models\KanbanLabel;
 use App\Models\KanbanProject;
 use App\Models\KanbanProjectPermission;
+use App\Models\KanbanRow;
 use App\Models\KanbanStatus;
+use App\Models\Role;
 use App\Models\User;
-use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
     $this->user = User::factory()->create(['is_superadmin' => true]);
@@ -278,7 +277,7 @@ test('can create project with prefix and toggle show prefix settings', function 
 
     // Can access project endpoint using shortcode prefix instead of ID
     $prefixResponse = $this->actingAs($this->user)
-        ->getJson("/api/kanban/projects/UPD/assignees");
+        ->getJson('/api/kanban/projects/UPD/assignees');
 
     $prefixResponse->assertStatus(200);
 });
@@ -366,7 +365,7 @@ test('can fetch unified card activity feed', function () {
             'current_page',
             'per_page',
             'total',
-            'last_page'
+            'last_page',
         ]);
 
     $data = $response->json('data');
@@ -424,9 +423,9 @@ test('obfuscates comments and descriptions when user lacks view details permissi
     $this->assertFalse($proj['user_permissions']['view_card_details']);
 
     $cardData = $proj['statuses'][0]['cards'][0];
-    
+
     // Description should be boolean true/false, not contents
-    $this->assertTrue($cardData['description']); 
+    $this->assertTrue($cardData['description']);
 
     // Comments should be integer/count, not the comment records array
     $this->assertEquals(1, $cardData['comments']);
@@ -451,7 +450,7 @@ test('can create and manage kanban rows and respects default status column prote
         'is_default' => true,
     ]);
 
-    $defaultRow = \App\Models\KanbanRow::create([
+    $defaultRow = KanbanRow::create([
         'project_id' => $project->id,
         'name' => 'Default Row',
         'order' => 0,
@@ -564,7 +563,7 @@ test('assignees endpoint filters users by view_card_details permission', functio
     ]);
 
     // Give regularUser2 view_card_details permission via explicit role or group
-    $role = \App\Models\Role::create([
+    $role = Role::create([
         'faction_id' => $this->faction->id,
         'name' => 'Test Role',
         'hierarchy_order' => 1,
@@ -680,7 +679,3 @@ test('user mentions generate notifications and card mentions auto-link cards', f
         'linked_card_id' => $card1->id,
     ]);
 });
-
-
-
-

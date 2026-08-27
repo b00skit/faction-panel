@@ -2,7 +2,6 @@
 
 namespace App\Events;
 
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
@@ -14,8 +13,11 @@ class KanbanBoardUpdated implements ShouldBroadcastNow
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public $factionId;
+
     public $projectId;
+
     public $cardId;
+
     public $action; // e.g. 'project_updated', 'card_moved', 'card_updated'
 
     /**

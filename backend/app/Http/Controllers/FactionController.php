@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\SyncRosterData;
 use App\Models\Faction;
+use App\Models\FactionPage;
 use App\Models\FactionRecordDatabase;
 use App\Models\FactionRecordEntry;
 use App\Models\FactionSnapshot;
@@ -883,7 +884,7 @@ class FactionController extends Controller
         $faction->unsetRelation('rosters');
 
         $canModifyPages = $user && User::hasFactionPermission($user, $faction, 'modify_faction_pages');
-        $pagesQuery = \App\Models\FactionPage::where('faction_id', $faction->id)->orderBy('sort_order', 'asc')->orderBy('created_at', 'asc');
+        $pagesQuery = FactionPage::where('faction_id', $faction->id)->orderBy('sort_order', 'asc')->orderBy('created_at', 'asc');
         if (! $canModifyPages) {
             $pagesQuery->where('is_published', true);
         }

@@ -18,9 +18,9 @@ class KanbanProjectController extends Controller
 
         $projects = $faction->kanbanProjects()
             ->with([
-                'permissions', 'labels', 
+                'permissions', 'labels',
                 'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments',
-                'rows.cards.assignees', 'rows.cards.labels', 'rows.cards.cardType', 'rows.cards.priority', 'rows.cards.subtasks', 'rows.cards.comments'
+                'rows.cards.assignees', 'rows.cards.labels', 'rows.cards.cardType', 'rows.cards.priority', 'rows.cards.subtasks', 'rows.cards.comments',
             ])
             ->orderBy('order')
             ->orderBy('id')
@@ -90,9 +90,9 @@ class KanbanProjectController extends Controller
         $this->audit('kanban.project.create', "Created Kanban project '{$project->name}' for faction '{$faction->name}'", null, $project, null, $project->getAttributes());
 
         return response()->json($this->sanitizeProjectForUser($project->load([
-            'permissions', 'labels', 
+            'permissions', 'labels',
             'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments',
-            'rows.cards.assignees', 'rows.cards.labels', 'rows.cards.cardType', 'rows.cards.priority', 'rows.cards.subtasks', 'rows.cards.comments'
+            'rows.cards.assignees', 'rows.cards.labels', 'rows.cards.cardType', 'rows.cards.priority', 'rows.cards.subtasks', 'rows.cards.comments',
         ]), $user), 201);
     }
 
@@ -217,7 +217,7 @@ class KanbanProjectController extends Controller
     public function archivedCards(KanbanProject $project)
     {
         $user = Auth::user();
-        if (!User::canViewProject($user, $project)) {
+        if (! User::canViewProject($user, $project)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -245,8 +245,8 @@ class KanbanProjectController extends Controller
     private function sanitizeCardForUser($card, $user, $hasViewCardDetails)
     {
         $canViewCardSpecific = $hasViewCardDetails || ($user && $card->created_by === $user->id);
-        if (!$canViewCardSpecific) {
-            $card->description = !empty($card->description);
+        if (! $canViewCardSpecific) {
+            $card->description = ! empty($card->description);
 
             $commentsCount = $card->comments ? $card->comments->count() : 0;
             $card->unsetRelation('comments');
@@ -257,27 +257,28 @@ class KanbanProjectController extends Controller
             $card->unsetRelation('subtasks');
             $card->setAttribute('subtasks', $totalSubtasks > 0 ? ['completed' => $completedSubtasks, 'total' => $totalSubtasks] : null);
         }
+
         return $card;
     }
 
     private function sanitizeProjectForUser($project, $user)
     {
         // First make sure we load everything needed if not loaded
-        if (!$project->relationLoaded('statuses') || !$project->relationLoaded('rows')) {
+        if (! $project->relationLoaded('statuses') || ! $project->relationLoaded('rows')) {
             $project->load([
-                'permissions', 'labels', 
+                'permissions', 'labels',
                 'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments',
-                'rows.cards.assignees', 'rows.cards.labels', 'rows.cards.cardType', 'rows.cards.priority', 'rows.cards.subtasks', 'rows.cards.comments'
+                'rows.cards.assignees', 'rows.cards.labels', 'rows.cards.cardType', 'rows.cards.priority', 'rows.cards.subtasks', 'rows.cards.comments',
             ]);
         } else {
             // Ensure cards relations are loaded for status columns
             foreach ($project->statuses as $status) {
-                if (!$status->relationLoaded('cards')) {
+                if (! $status->relationLoaded('cards')) {
                     $status->load('cards.assignees', 'cards.labels', 'cards.cardType', 'cards.priority', 'cards.subtasks', 'cards.comments');
                 }
             }
             foreach ($project->rows as $row) {
-                if (!$row->relationLoaded('cards')) {
+                if (! $row->relationLoaded('cards')) {
                     $row->load('cards.assignees', 'cards.labels', 'cards.cardType', 'cards.priority', 'cards.subtasks', 'cards.comments');
                 }
             }

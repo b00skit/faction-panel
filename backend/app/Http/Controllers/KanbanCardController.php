@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Events\KanbanBoardUpdated;
 use App\Models\KanbanCard;
+use App\Models\KanbanPriority;
 use App\Models\KanbanProject;
 use App\Models\User;
+use App\Services\KanbanMentionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -55,7 +57,7 @@ class KanbanCardController extends Controller
 
     public function show(KanbanCard $card)
     {
-        if (!$this->canViewDetails($card)) {
+        if (! $this->canViewDetails($card)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -82,7 +84,7 @@ class KanbanCardController extends Controller
             User::hasFactionPermission($user, $project->faction, 'global_kanban_moderation') ||
             $project->created_by === $user->id;
 
-        if (!$canAdd) {
+        if (! $canAdd) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -99,7 +101,7 @@ class KanbanCardController extends Controller
 
         $maxOrder = $status->cards()->max('order') ?? -1;
 
-        $priorityId = $validated['priority_id'] ?? (\App\Models\KanbanPriority::where('is_default', true)->value('id') ?? \App\Models\KanbanPriority::value('id'));
+        $priorityId = $validated['priority_id'] ?? (KanbanPriority::where('is_default', true)->value('id') ?? KanbanPriority::value('id'));
         $rowId = $validated['row_id'] ?? ($project->rows()->where('is_default', true)->value('id') ?? $project->rows()->value('id'));
 
         $card = KanbanCard::create([
@@ -122,7 +124,7 @@ class KanbanCardController extends Controller
 
     public function update(Request $request, KanbanCard $card)
     {
-        if (!$this->canModifyCard($card, 'modify_card')) {
+        if (! $this->canModifyCard($card, 'modify_card')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -144,12 +146,12 @@ class KanbanCardController extends Controller
 
         // Update card attributes
         $cardFields = $request->only(['title', 'description', 'color', 'card_type_id', 'priority_id', 'row_id']);
-        if (!empty($cardFields)) {
+        if (! empty($cardFields)) {
             $card->update($cardFields);
         }
 
-        if ($request->has('description') && !empty($validated['description'])) {
-            \App\Services\KanbanMentionService::processText($card, $validated['description'], Auth::user());
+        if ($request->has('description') && ! empty($validated['description'])) {
+            KanbanMentionService::processText($card, $validated['description'], Auth::user());
         }
 
         // Sync assignees
@@ -177,7 +179,7 @@ class KanbanCardController extends Controller
 
     public function linkCard(Request $request, KanbanCard $card)
     {
-        if (!$this->canModifyCard($card, 'modify_card')) {
+        if (! $this->canModifyCard($card, 'modify_card')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -204,7 +206,7 @@ class KanbanCardController extends Controller
 
     public function unlinkCard(KanbanCard $card, KanbanCard $linkedCard)
     {
-        if (!$this->canModifyCard($card, 'modify_card')) {
+        if (! $this->canModifyCard($card, 'modify_card')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -221,7 +223,7 @@ class KanbanCardController extends Controller
 
     public function destroy(KanbanCard $card)
     {
-        if (!$this->canModifyCard($card, 'modify_card')) {
+        if (! $this->canModifyCard($card, 'modify_card')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -239,7 +241,7 @@ class KanbanCardController extends Controller
     public function move(Request $request, KanbanCard $card)
     {
         // Require modify_card permission to move card
-        if (!$this->canModifyCard($card, 'modify_card')) {
+        if (! $this->canModifyCard($card, 'modify_card')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -276,7 +278,7 @@ class KanbanCardController extends Controller
                 }
             }
 
-            if ($oldStatusId !== $targetStatus->id && !empty($validated['source_card_order'])) {
+            if ($oldStatusId !== $targetStatus->id && ! empty($validated['source_card_order'])) {
                 foreach ($validated['source_card_order'] as $index => $id) {
                     KanbanCard::where('id', $id)->update(['order' => $index, 'status_id' => $oldStatusId]);
                 }
@@ -284,7 +286,7 @@ class KanbanCardController extends Controller
         }
 
         // Apply source column reorder if provided (when moving between columns)
-        if ($oldStatusId !== $targetStatus->id && !empty($validated['source_card_order'])) {
+        if ($oldStatusId !== $targetStatus->id && ! empty($validated['source_card_order'])) {
             foreach ($validated['source_card_order'] as $index => $id) {
                 KanbanCard::where('id', $id)->update(['order' => $index, 'status_id' => $oldStatusId]);
             }
@@ -299,7 +301,7 @@ class KanbanCardController extends Controller
 
     public function archiveCard(KanbanCard $card)
     {
-        if (!$this->canModifyCard($card, 'modify_card')) {
+        if (! $this->canModifyCard($card, 'modify_card')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -316,7 +318,7 @@ class KanbanCardController extends Controller
 
     public function restoreCard(KanbanCard $card)
     {
-        if (!$this->canModifyCard($card, 'modify_card')) {
+        if (! $this->canModifyCard($card, 'modify_card')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -333,14 +335,14 @@ class KanbanCardController extends Controller
 
     public function activity(Request $request, KanbanCard $card)
     {
-        if (!$this->canViewDetails($card)) {
+        if (! $this->canViewDetails($card)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
         // Fetch comments with user
         $comments = $card->comments()->with('user')->get()->map(function ($comment) {
             return [
-                'id' => 'comment_' . $comment->id,
+                'id' => 'comment_'.$comment->id,
                 'type' => 'comment',
                 'user' => $comment->user,
                 'comment' => $comment->comment,
@@ -352,7 +354,7 @@ class KanbanCardController extends Controller
         // Fetch audits with user
         $audits = $card->audits()->with('user')->get()->map(function ($audit) {
             return [
-                'id' => 'audit_' . $audit->id,
+                'id' => 'audit_'.$audit->id,
                 'type' => 'action',
                 'user' => $audit->user,
                 'event' => $audit->event,

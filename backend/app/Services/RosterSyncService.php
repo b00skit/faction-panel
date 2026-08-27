@@ -87,6 +87,7 @@ class RosterSyncService
                                     $changed = true;
                                 }
                             }
+
                             continue;
                         }
 
@@ -113,7 +114,7 @@ class RosterSyncService
                             $disp = ($fieldId && $fieldId !== 'id')
                                 ? ($entry->data[$fieldId] ?? $entry->data['name'] ?? $entry->data['character_name'] ?? (string) $entry->entry_id)
                                 : ($entry->data['name'] ?? $entry->data['character_name'] ?? $entry->data['Character Name'] ?? (string) $entry->entry_id);
-                            
+
                             $disp = (string) $disp;
 
                             if (($linkedId[$colId] ?? null) !== $entry->entry_id || ($linkedDisplay[$colId] ?? null) !== $disp || ($data[$colId] ?? null) !== $disp) {

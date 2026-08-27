@@ -36,7 +36,7 @@ class KanbanStatusController extends Controller
 
     public function store(Request $request, KanbanProject $project)
     {
-        if (!$this->checkAccess($project, 'manage_statuses')) {
+        if (! $this->checkAccess($project, 'manage_statuses')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -63,7 +63,7 @@ class KanbanStatusController extends Controller
     public function update(Request $request, KanbanStatus $status)
     {
         $project = $status->project;
-        if (!$this->checkAccess($project, 'manage_statuses')) {
+        if (! $this->checkAccess($project, 'manage_statuses')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -89,7 +89,7 @@ class KanbanStatusController extends Controller
     public function destroy(KanbanStatus $status)
     {
         $project = $status->project;
-        if (!$this->checkAccess($project, 'manage_statuses')) {
+        if (! $this->checkAccess($project, 'manage_statuses')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -108,7 +108,7 @@ class KanbanStatusController extends Controller
 
     public function reorder(Request $request, KanbanProject $project)
     {
-        if (!$this->checkAccess($project, 'manage_statuses')) {
+        if (! $this->checkAccess($project, 'manage_statuses')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

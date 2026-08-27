@@ -6,6 +6,7 @@ use App\Events\KanbanBoardUpdated;
 use App\Models\KanbanCard;
 use App\Models\KanbanComment;
 use App\Models\User;
+use App\Services\KanbanMentionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -34,7 +35,7 @@ class KanbanCommentController extends Controller
 
     public function store(Request $request, KanbanCard $card)
     {
-        if (!$this->canComment($card)) {
+        if (! $this->canComment($card)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -47,7 +48,7 @@ class KanbanCommentController extends Controller
             'comment' => $validated['comment'],
         ]);
 
-        \App\Services\KanbanMentionService::processText($card, $validated['comment'], Auth::user());
+        KanbanMentionService::processText($card, $validated['comment'], Auth::user());
 
         $project = $card->project;
         $this->audit('kanban.comment.create', "Commented on card '{$card->title}' in project '{$project->name}'", null, $project, null, $comment->getAttributes());
@@ -70,7 +71,7 @@ class KanbanCommentController extends Controller
             User::hasFactionPermission($user, $faction, 'global_kanban_moderation') ||
             $project->created_by === $user->id;
 
-        if (!$canDelete) {
+        if (! $canDelete) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

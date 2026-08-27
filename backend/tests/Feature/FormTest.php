@@ -10,7 +10,6 @@ use App\Models\FormStage;
 use App\Models\FormStatus;
 use App\Models\FormSubmission;
 use App\Models\User;
-use App\Models\Role;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
@@ -801,7 +800,7 @@ test('standard graded form updates correctness without points', function () {
     expect($response->reviewer_comment)->toBe('Fine');
 });
 
-test('correct answers should be concealed from someone lacking perms', function() {
+test('correct answers should be concealed from someone lacking perms', function () {
     $form = Form::factory()->create(['faction_id' => $this->faction->id]);
     $stage = FormStage::create(['form_id' => $form->id, 'name' => 'Stage 1', 'order' => 0]);
     $section = FormSection::create(['form_stage_id' => $stage->id, 'name' => 'Section 1', 'order' => 0]);
@@ -809,9 +808,8 @@ test('correct answers should be concealed from someone lacking perms', function(
     // Create an applicant user
     $applicant = User::factory()->create();
 
-
     // Allow users to view the form
-    $perm = FormPermission::create(['form_id'=>$form->id, 'permissions'=> '["view_form"]']);
+    $perm = FormPermission::create(['form_id' => $form->id, 'permissions' => '["view_form"]']);
 
     // Create field
     $field = FormField::create([
@@ -822,28 +820,28 @@ test('correct answers should be concealed from someone lacking perms', function(
         'points' => 10,
         'order' => 0,
         'has_grading' => true,
-        'correct_answer'=> 'secret'
+        'correct_answer' => 'secret',
     ]);
     $this->actingAs($this->user)->getJson("/api/factions/{$this->faction->shortname}/forms/{$form->id}")
         ->assertStatus(200)
         ->assertJsonPath('stages.0.sections.0.fields.0.correct_answer', 'secret');
-        // Full access
-    
+    // Full access
+
     $this->actingAs($applicant)->getJson("/api/factions/{$this->faction->shortname}/forms/{$form->id}")
         ->assertStatus(200)
         ->assertJsonMissingPath('stages.0.sections.0.fields.0.correct_answer');
-        //No access
+    // No access
 
-    $perm->update(['permissions'=> '["view_form", "view_submissions"]']);
+    $perm->update(['permissions' => '["view_form", "view_submissions"]']);
     $this->actingAs($applicant)->getJson("/api/factions/{$this->faction->shortname}/forms/{$form->id}")
         ->assertStatus(200)
         ->assertJsonPath('stages.0.sections.0.fields.0.correct_answer', 'secret');
-        //Manual access
+    // Manual access
 
-    $perm->update(['permissions'=> '["view_form", "form_editor"]']);
+    $perm->update(['permissions' => '["view_form", "form_editor"]']);
     $this->actingAs($applicant)->getJson("/api/factions/{$this->faction->shortname}/forms/{$form->id}")
         ->assertStatus(200)
         ->assertJsonPath('stages.0.sections.0.fields.0.correct_answer', 'secret');
-        //Manual access
+    // Manual access
 
 });

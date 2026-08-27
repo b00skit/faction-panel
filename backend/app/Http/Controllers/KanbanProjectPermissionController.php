@@ -23,7 +23,7 @@ class KanbanProjectPermissionController extends Controller
 
     public function index(KanbanProject $project)
     {
-        if (!$this->checkAccess($project)) {
+        if (! $this->checkAccess($project)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -32,7 +32,7 @@ class KanbanProjectPermissionController extends Controller
 
     public function update(Request $request, KanbanProject $project)
     {
-        if (!$this->checkAccess($project)) {
+        if (! $this->checkAccess($project)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -64,7 +64,7 @@ class KanbanProjectPermissionController extends Controller
 
     public function destroy(KanbanProject $project, $permissionId)
     {
-        if (!$this->checkAccess($project)) {
+        if (! $this->checkAccess($project)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

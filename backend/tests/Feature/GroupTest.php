@@ -152,4 +152,3 @@ test('regular faction member can list groups', function () {
     $response->assertStatus(200)
         ->assertJsonFragment(['name' => 'Patrol Division']);
 });
-

@@ -81,7 +81,7 @@ class KanbanCardTypeController extends Controller
 
     public function store(Request $request)
     {
-        if (!$this->canManageGlobal($request)) {
+        if (! $this->canManageGlobal($request)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -108,7 +108,7 @@ class KanbanCardTypeController extends Controller
 
     public function update(Request $request, KanbanCardType $cardType)
     {
-        if (!$this->canManageGlobal($request)) {
+        if (! $this->canManageGlobal($request)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -136,7 +136,7 @@ class KanbanCardTypeController extends Controller
 
     public function destroy(Request $request, KanbanCardType $cardType)
     {
-        if (!$this->canManageGlobal($request)) {
+        if (! $this->canManageGlobal($request)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

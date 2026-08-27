@@ -420,7 +420,6 @@ class User extends Authenticatable
         return count(self::getFactionPermissions($user, $faction)) > 0;
     }
 
-
     public static function hasRosterPermission(?User $user, Roster $roster, string $permissionKey): bool
     {
         if ($roster->is_sandbox) {
@@ -901,7 +900,7 @@ class User extends Authenticatable
         return in_array($permissionKey, self::$formPermissionsCache[$cacheKey]);
     }
 
-    public static function hasPagePermission(?User $user, \App\Models\FactionPage $page, string $permissionKey = 'view_page'): bool
+    public static function hasPagePermission(?User $user, FactionPage $page, string $permissionKey = 'view_page'): bool
     {
         $faction = $page->faction;
 

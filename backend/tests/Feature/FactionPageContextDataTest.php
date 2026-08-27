@@ -66,7 +66,7 @@ class FactionPageContextDataTest extends TestCase
 
         // Query context data specifying page=fleet-index
         $response = $this->actingAs($user)
-            ->getJson("/api/factions/lspd/pages/context-data?page=fleet-index");
+            ->getJson('/api/factions/lspd/pages/context-data?page=fleet-index');
 
         $response->assertStatus(200);
 
@@ -128,7 +128,7 @@ class FactionPageContextDataTest extends TestCase
         ]);
 
         $response = $this->actingAs($user)
-            ->getJson("/api/factions/lspd/pages/context-data?page=fleet-registry");
+            ->getJson('/api/factions/lspd/pages/context-data?page=fleet-registry');
 
         $response->assertStatus(200);
         $data = $response->json();
@@ -186,7 +186,7 @@ class FactionPageContextDataTest extends TestCase
         ]);
 
         $response = $this->actingAs($user)
-            ->getJson("/api/factions/lspd/pages/context-data?page=alpha-page");
+            ->getJson('/api/factions/lspd/pages/context-data?page=alpha-page');
 
         $response->assertStatus(200);
         $data = $response->json();
@@ -194,5 +194,27 @@ class FactionPageContextDataTest extends TestCase
         $this->assertCount(1, $data['records']['ALPHA']);
         // Database Beta should NOT have its entries loaded merely because '2' was in the HTML text
         $this->assertCount(0, $data['records']['BETA']);
+    }
+
+    public function test_get_context_data_without_page_parameter_succeeds_cleanly(): void
+    {
+        $user = User::factory()->create(['is_superadmin' => true]);
+        $faction = Faction::factory()->create(['shortname' => 'lspd']);
+
+        FactionRecordDatabase::create([
+            'faction_id' => $faction->id,
+            'name' => 'General DB',
+            'record_shortcode' => 'GEN',
+        ]);
+
+        $response = $this->actingAs($user)
+            ->getJson('/api/factions/lspd/pages/context-data');
+
+        $response->assertStatus(200);
+        $data = $response->json();
+
+        $this->assertArrayHasKey('faction', $data);
+        $this->assertArrayHasKey('record_databases', $data);
+        $this->assertCount(1, $data['record_databases']);
     }
 }

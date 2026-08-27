@@ -13,9 +13,13 @@ class KanbanPriorityController extends Controller
     private function canManageGlobal(Request $request)
     {
         $user = Auth::user();
-        if (!$user) return false;
-        if ($user->is_superadmin) return true;
-        
+        if (! $user) {
+            return false;
+        }
+        if ($user->is_superadmin) {
+            return true;
+        }
+
         $factions = Faction::all();
         foreach ($factions as $faction) {
             if ($faction->faction_leader === $user->id || User::hasFactionPermission($user, $faction, 'global_kanban_moderation')) {
@@ -65,7 +69,7 @@ class KanbanPriorityController extends Controller
 
     public function store(Request $request)
     {
-        if (!$this->canManageGlobal($request)) {
+        if (! $this->canManageGlobal($request)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -90,7 +94,7 @@ class KanbanPriorityController extends Controller
 
     public function update(Request $request, KanbanPriority $priority)
     {
-        if (!$this->canManageGlobal($request)) {
+        if (! $this->canManageGlobal($request)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -116,7 +120,7 @@ class KanbanPriorityController extends Controller
 
     public function destroy(Request $request, KanbanPriority $priority)
     {
-        if (!$this->canManageGlobal($request)) {
+        if (! $this->canManageGlobal($request)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

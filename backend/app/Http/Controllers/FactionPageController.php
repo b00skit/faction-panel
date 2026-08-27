@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Faction;
 use App\Models\FactionPage;
-use App\Models\FactionPagePermission;
 use App\Models\FactionRecordDatabase;
 use App\Models\FactionRecordEntry;
 use App\Models\User;
@@ -288,6 +287,7 @@ class FactionPageController extends Controller
         }
 
         $pageContent = null;
+        $targetPage = null;
         if ($pageIdentifier) {
             $targetPage = FactionPage::where('faction_id', $faction->id)
                 ->where(function ($q) use ($pageIdentifier) {

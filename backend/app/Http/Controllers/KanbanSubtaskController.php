@@ -14,6 +14,7 @@ class KanbanSubtaskController extends Controller
     private function canModifySubtask(KanbanSubtask $subtask)
     {
         $card = $subtask->card;
+
         return $this->canModifyCard($card);
     }
 
@@ -40,7 +41,7 @@ class KanbanSubtaskController extends Controller
 
     public function store(Request $request, KanbanCard $card)
     {
-        if (!$this->canModifyCard($card)) {
+        if (! $this->canModifyCard($card)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -64,7 +65,7 @@ class KanbanSubtaskController extends Controller
 
     public function update(Request $request, KanbanSubtask $subtask)
     {
-        if (!$this->canModifySubtask($subtask)) {
+        if (! $this->canModifySubtask($subtask)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -83,7 +84,7 @@ class KanbanSubtaskController extends Controller
 
     public function destroy(KanbanSubtask $subtask)
     {
-        if (!$this->canModifySubtask($subtask)) {
+        if (! $this->canModifySubtask($subtask)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -99,7 +100,7 @@ class KanbanSubtaskController extends Controller
 
     public function reorder(Request $request, KanbanCard $card)
     {
-        if (!$this->canModifyCard($card)) {
+        if (! $this->canModifyCard($card)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

@@ -4,7 +4,6 @@ use App\Models\FactionRecordDatabase;
 use App\Models\FactionRecordEntry;
 use App\Models\RosterContent;
 use App\Models\RosterDataset;
-use App\Models\RosterDatasetOption;
 use App\Models\RosterSection;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +19,7 @@ return new class extends Migration
             $sections = RosterSection::with('roster.faction')->get()->keyBy('id');
             $datasets = RosterDataset::with('options')->get()->keyBy('id');
             $allDatabases = FactionRecordDatabase::all();
-            
+
             $dbEntries = FactionRecordEntry::withTrashed()->get();
             $entriesByDbAndEntryId = [];
             $entriesByDbAndName = [];
@@ -90,6 +89,7 @@ return new class extends Migration
                             $linkedDisplay[$colId] = (string) $targetVal;
                             $data[$colId] = (string) $targetVal;
                             $changed = true;
+
                             continue;
                         }
 
@@ -104,7 +104,7 @@ return new class extends Migration
                                     $display = ($fieldId && $fieldId !== 'id')
                                         ? ($entry->data[$fieldId] ?? $entry->data['name'] ?? $entry->data['character_name'] ?? (string) $entryId)
                                         : ($entry->data['name'] ?? $entry->data['character_name'] ?? $entry->data['Character Name'] ?? (string) $entryId);
-                                    
+
                                     $linkedId[$colId] = $entryId;
                                     $linkedDisplay[$colId] = (string) $display;
                                     $data[$colId] = (string) $display;
@@ -121,6 +121,7 @@ return new class extends Migration
                                     $linkedDisplay[$colId] = $val;
                                 }
                             }
+
                             continue;
                         }
 
