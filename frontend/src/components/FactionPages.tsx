@@ -144,10 +144,6 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
   useEffect(() => {
     if (activeTab === 'preview' && previewHtml && previewScripts.length > 0) {
       executeExtractedScripts(previewScripts);
-      const timer = setTimeout(() => {
-        executeExtractedScripts(previewScripts);
-      }, 0);
-      return () => clearTimeout(timer);
     }
   }, [activeTab, previewHtml, previewScripts]);
 

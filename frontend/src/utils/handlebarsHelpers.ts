@@ -316,8 +316,25 @@ export function executeExtractedScripts(scripts: string[]) {
   scripts.forEach((code, idx) => {
     if (!code || !code.trim()) return;
     try {
+      // Find top-level function declarations to expose to window (so inline event handlers like onclick="fn()" work)
+      const functionMatches = [...code.matchAll(/(?:^|[\n\r;])\s*function\s+([a-zA-Z0-9_$]+)\s*\(/g)];
+      const functionNames = Array.from(new Set(functionMatches.map((m) => m[1])));
+      const exposureCode = functionNames
+        .map((name) => `try { if (typeof ${name} === 'function') { window['${name}'] = ${name}; } } catch(_) {}`)
+        .join('\n');
+
+      // Wrap in an IIFE bound to window so top-level const/let/class don't collide across re-renders or page navigations
+      const wrappedCode = `(function() {
+        try {
+          ${code}
+          ${exposureCode}
+        } catch (err) {
+          console.error("Custom page script runtime error:", err);
+        }
+      }).call(window);`;
+
       const newScript = document.createElement('script');
-      newScript.text = code;
+      newScript.text = wrappedCode;
       document.head.appendChild(newScript);
       document.head.removeChild(newScript);
     } catch (e) {

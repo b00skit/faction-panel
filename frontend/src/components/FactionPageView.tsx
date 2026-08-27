@@ -62,10 +62,6 @@ export const FactionPageView: React.FC<FactionPageViewProps> = ({ shortname, use
   useEffect(() => {
     if (!loading && renderedHtml && renderedScripts.length > 0) {
       executeExtractedScripts(renderedScripts);
-      const timer = setTimeout(() => {
-        executeExtractedScripts(renderedScripts);
-      }, 0);
-      return () => clearTimeout(timer);
     }
   }, [loading, renderedHtml, renderedScripts]);
 
