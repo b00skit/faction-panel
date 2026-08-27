@@ -129,7 +129,7 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
     }
   }, [activeTab, formData.content, contextData]);
 
-  const handleOpenModal = (page?: FactionPage) => {
+  const handleOpenModal = async (page?: FactionPage) => {
     if (page) {
       setEditingPage(page);
       setFormData({
@@ -141,6 +141,12 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
         sort_order: page.sort_order || 0,
         content: page.content || '',
       });
+      try {
+        const ctxRes = await api.get(`/factions/${shortname}/pages/context-data?page=${page.slug}`);
+        setContextData(ctxRes.data);
+      } catch (e) {
+        console.error('Failed to fetch context for page:', e);
+      }
     } else {
       setEditingPage(null);
       setFormData({
