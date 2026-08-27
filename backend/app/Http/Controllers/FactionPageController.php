@@ -17,18 +17,9 @@ class FactionPageController extends Controller
     public function index(string $shortname)
     {
         $faction = Faction::where('shortname', $shortname)->firstOrFail();
-        $user = Auth::user();
-
-        if ($user && ! User::canAccessFaction($user, $faction)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        $user = Auth::guard('sanctum')->user();
 
         $canModify = $user && User::hasFactionPermission($user, $faction, 'modify_faction_pages');
-        $canView = $user && User::hasFactionPermission($user, $faction, 'view_faction_pages');
-
-        if (! $canView && ! $canModify && ! ($user && ($user->is_superadmin || $faction->faction_leader === $user->id))) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
 
         $query = FactionPage::where('faction_id', $faction->id)->orderBy('sort_order', 'asc')->orderBy('created_at', 'asc');
 
@@ -36,7 +27,7 @@ class FactionPageController extends Controller
             $query->where('is_published', true);
         }
 
-        $pages = $query->get()->filter(function ($page) use ($user) {
+        $pages = $query->with('permissions')->get()->filter(function ($page) use ($user) {
             return User::hasPagePermission($user, $page, 'view_page');
         })->values();
 
@@ -103,7 +94,7 @@ class FactionPageController extends Controller
     public function show(string $shortname, string $identifier)
     {
         $faction = Faction::where('shortname', $shortname)->firstOrFail();
-        $user = Auth::user();
+        $user = Auth::guard('sanctum')->user();
 
         $page = FactionPage::where('faction_id', $faction->id)
             ->where(function ($q) use ($identifier) {
@@ -113,7 +104,19 @@ class FactionPageController extends Controller
                     $q->where('slug', $identifier);
                 }
             })
+            ->with('permissions')
             ->firstOrFail();
+
+        $canModify = $user && (
+            $user->is_superadmin ||
+            $faction->faction_leader === $user->id ||
+            User::hasFactionPermission($user, $faction, 'modify_faction_pages') ||
+            $page->created_by === $user->id
+        );
+
+        if (! $page->is_published && ! $canModify) {
+            return response()->json(['message' => 'Page is unpublished'], 404);
+        }
 
         if (! User::hasPagePermission($user, $page, 'view_page')) {
             return response()->json(['message' => 'Forbidden'], 403);
@@ -273,7 +276,7 @@ class FactionPageController extends Controller
     public function getContextData(Request $request, string $shortname)
     {
         $faction = Faction::where('shortname', $shortname)->firstOrFail();
-        $user = Auth::user();
+        $user = Auth::guard('sanctum')->user();
 
         // Check if a specific page or list of databases is requested/involved
         $pageIdentifier = $request->query('page') ?? $request->query('page_id') ?? $request->query('slug');
@@ -297,9 +300,13 @@ class FactionPageController extends Controller
                         $q->where('slug', $pageIdentifier);
                     }
                 })
+                ->with('permissions')
                 ->first();
 
             if ($targetPage) {
+                if (! User::hasPagePermission($user, $targetPage, 'view_page')) {
+                    return response()->json(['message' => 'Forbidden'], 403);
+                }
                 $pageContent = $targetPage->content;
             }
         } elseif ($request->has('content')) {
@@ -307,7 +314,7 @@ class FactionPageController extends Controller
         }
 
         // 1. Fetch accessible record databases & entries
-        $databases = FactionRecordDatabase::where('faction_id', $faction->id)->get();
+        $databases = FactionRecordDatabase::where('faction_id', $faction->id)->with('databasePermissions')->get();
         $accessibleDatabases = [];
         $recordsMap = [];
 
@@ -320,27 +327,39 @@ class FactionPageController extends Controller
         $isFilteredMode = ($pageContent !== null || ! empty($requestedDatabases) || $configuredAllowedDatabases !== null);
 
         foreach ($databases as $db) {
-            if (User::hasRecordPermission($user, $db, 'view_database')) {
-                $dbIdStr = (string) $db->id;
-                $dbNameLower = strtolower($db->name);
-                $dbShortcodeLower = $db->record_shortcode ? strtolower($db->record_shortcode) : null;
-                $dbApiTypeLower = ($db->is_api_database && $db->is_api_database !== '0') ? strtolower($db->is_api_database) : null;
-                $dbSlugLower = Str::slug($db->name, '_');
+            $dbIdStr = (string) $db->id;
+            $dbNameLower = strtolower($db->name);
+            $dbShortcodeLower = $db->record_shortcode ? strtolower($db->record_shortcode) : null;
+            $dbApiTypeLower = ($db->is_api_database && $db->is_api_database !== '0') ? strtolower($db->is_api_database) : null;
+            $dbSlugLower = Str::slug($db->name, '_');
 
-                $isAllowedForPage = true;
-                if ($configuredAllowedDatabases !== null) {
-                    $isAllowedForPage = (
-                        in_array($dbIdStr, $configuredAllowedDatabases, true) ||
-                        in_array($dbNameLower, $configuredAllowedDatabases, true) ||
-                        ($dbShortcodeLower && in_array($dbShortcodeLower, $configuredAllowedDatabases, true)) ||
-                        ($dbApiTypeLower && in_array($dbApiTypeLower, $configuredAllowedDatabases, true)) ||
-                        in_array($dbSlugLower, $configuredAllowedDatabases, true)
-                    );
-                }
+            $hasDirectDbPerm = User::hasRecordPermission($user, $db, 'view_database');
+            $isExplicitlyAllowedByPage = ($targetPage && $configuredAllowedDatabases !== null && (
+                in_array($dbIdStr, $configuredAllowedDatabases, true) ||
+                in_array($dbNameLower, $configuredAllowedDatabases, true) ||
+                ($dbShortcodeLower && in_array($dbShortcodeLower, $configuredAllowedDatabases, true)) ||
+                ($dbApiTypeLower && in_array($dbApiTypeLower, $configuredAllowedDatabases, true)) ||
+                in_array($dbSlugLower, $configuredAllowedDatabases, true)
+            ));
 
-                if (! $isAllowedForPage) {
-                    continue;
-                }
+            if (! $hasDirectDbPerm && ! $isExplicitlyAllowedByPage) {
+                continue;
+            }
+
+            $isAllowedForPage = true;
+            if ($configuredAllowedDatabases !== null) {
+                $isAllowedForPage = (
+                    in_array($dbIdStr, $configuredAllowedDatabases, true) ||
+                    in_array($dbNameLower, $configuredAllowedDatabases, true) ||
+                    ($dbShortcodeLower && in_array($dbShortcodeLower, $configuredAllowedDatabases, true)) ||
+                    ($dbApiTypeLower && in_array($dbApiTypeLower, $configuredAllowedDatabases, true)) ||
+                    in_array($dbSlugLower, $configuredAllowedDatabases, true)
+                );
+            }
+
+            if (! $isAllowedForPage) {
+                continue;
+            }
 
                 // Check if this database's entries should be included in the response
                 $shouldIncludeEntries = false;
@@ -435,7 +454,6 @@ class FactionPageController extends Controller
                     }
                 }
             }
-        }
 
         // 2. Fetch roles with member counts
         $roles = $faction->roles()->withCount('users')->orderBy('weight', 'desc')->get()->map(function ($r) {

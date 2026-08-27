@@ -22,6 +22,7 @@ import {
   Users,
   Layers,
   Database,
+  Globe,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -280,6 +281,17 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
     }
   };
 
+  const handleTogglePublicPerm = () => {
+    setPagePerms((prev) => {
+      const existingIdx = prev.findIndex((p) => (p.role_id === null || p.role_id === undefined || p.role_id === '') && (p.group_id === null || p.group_id === undefined || p.group_id === ''));
+      if (existingIdx >= 0) {
+        return prev.filter((_, idx) => idx !== existingIdx);
+      } else {
+        return [...prev, { role_id: null, group_id: null, permissions: ['view_page'] }];
+      }
+    });
+  };
+
   const handleToggleRolePerm = (roleId: number) => {
     setPagePerms((prev) => {
       const existingIdx = prev.findIndex((p) => p.role_id === roleId);
@@ -390,7 +402,12 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 flex-wrap justify-end">
+                    {page.permissions && page.permissions.some((p: any) => !p.role_id && !p.group_id) && (
+                      <span className="px-1.5 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[9px] font-bold uppercase tracking-wider rounded flex items-center gap-1">
+                        <Globe size={10} /> Public
+                      </span>
+                    )}
                     {page.show_in_sidebar && (
                       <span className="px-1.5 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[9px] font-bold uppercase tracking-wider rounded">
                         Sidebar
@@ -865,8 +882,36 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
 
             <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
               <p className="text-xs text-muted">
-                Configure which ranks/roles or groups can view this specific custom page. If no specific roles/groups are selected, anyone with the general <code>view_faction_pages</code> permission can view it.
+                Configure who can view this custom page. Enable <strong>Public / Everyone</strong> to allow guests (non-signed in users / external visitors) to view this page. If no specific permissions are set, only faction members with <code>view_faction_pages</code> can view it.
               </p>
+
+              {/* Everyone / Public Section */}
+              <div className="p-3 bg-bg border border-border rounded-lg space-y-2">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                      <Globe size={18} />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-text uppercase tracking-wider flex items-center gap-1.5">
+                        Public / Everyone
+                        <span className="px-1.5 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[9px] font-bold uppercase rounded">
+                          Guest & World Access
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-muted">
+                        Allows non-signed in guests and members outside the faction to view this page.
+                      </p>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={pagePerms.some((p) => (p.role_id === null || p.role_id === undefined || p.role_id === '') && (p.group_id === null || p.group_id === undefined || p.group_id === ''))}
+                    onChange={handleTogglePublicPerm}
+                    className="rounded bg-bg border-border text-accent focus:ring-0 w-4 h-4 cursor-pointer"
+                  />
+                </label>
+              </div>
 
               {/* Roles Section */}
               <div>
@@ -874,7 +919,7 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
                   <Users size={14} className="text-accent" /> Faction Ranks / Roles
                 </h4>
                 <div className="space-y-1.5">
-                  {roles.map((role) => {
+                  {roles.filter((r) => r.name.toLowerCase() !== 'public').map((role) => {
                     const isGranted = pagePerms.some((p) => p.role_id === role.id);
                     return (
                       <label
@@ -901,13 +946,13 @@ export const FactionPages: React.FC<FactionPagesProps> = ({ shortname, user, per
               </div>
 
               {/* Groups Section */}
-              {groups.length > 0 && (
+              {groups.filter((g) => g.name.toLowerCase() !== 'public').length > 0 && (
                 <div>
                   <h4 className="text-xs font-bold text-text uppercase tracking-wider mb-2 flex items-center gap-1.5">
                     <Layers size={14} className="text-accent" /> Faction Groups
                   </h4>
                   <div className="space-y-1.5">
-                    {groups.map((group) => {
+                    {groups.filter((g) => g.name.toLowerCase() !== 'public').map((group) => {
                       const isGranted = pagePerms.some((p) => p.group_id === group.id);
                       return (
                         <label

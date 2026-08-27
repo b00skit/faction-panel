@@ -156,7 +156,13 @@ class FactionController extends Controller
             return User::canViewRoster($user, $roster);
         })->values();
 
-        if ($filteredRosters->isEmpty() && ! $canViewGlobal && ! $hasSandboxPerm) {
+        $hasPublicPages = FactionPage::where('faction_id', $faction->id)
+            ->where('is_published', true)
+            ->with('permissions')
+            ->get()
+            ->contains(fn ($p) => User::hasPagePermission($user, $p, 'view_page'));
+
+        if ($filteredRosters->isEmpty() && ! $canViewGlobal && ! $hasSandboxPerm && ! $hasPublicPages) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -888,7 +894,7 @@ class FactionController extends Controller
         if (! $canModifyPages) {
             $pagesQuery->where('is_published', true);
         }
-        $factionPages = $pagesQuery->get()->filter(function ($p) use ($user) {
+        $factionPages = $pagesQuery->with('permissions')->get()->filter(function ($p) use ($user) {
             return User::hasPagePermission($user, $p, 'view_page');
         })->values();
 

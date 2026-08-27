@@ -915,16 +915,6 @@ class User extends Authenticatable
             }
         }
 
-        // 2. Check if user has basic view_faction_pages permission
-        if ($user && ! self::hasFactionPermission($user, $faction, 'view_faction_pages')) {
-            return false;
-        }
-
-        // 3. If page has no granular permissions configured, fall back to true (accessible to anyone with view_faction_pages)
-        if ($page->permissions()->count() === 0) {
-            return true;
-        }
-
         $userId = $user ? $user->id : 'guest';
         $cacheKey = "{$userId}_{$page->id}";
 
@@ -964,6 +954,17 @@ class User extends Authenticatable
             self::$pagePermissionsCache[$cacheKey] = array_unique($resolved);
         }
 
-        return in_array($permissionKey, self::$pagePermissionsCache[$cacheKey]);
+        // If explicit permissions are configured on the page, check if user or guest matched them
+        if ($page->permissions->isNotEmpty()) {
+            return in_array($permissionKey, self::$pagePermissionsCache[$cacheKey]);
+        }
+
+        // If page has NO granular permissions configured:
+        // Accessible only to logged-in faction members with basic view_faction_pages permission
+        if ($user && self::hasFactionPermission($user, $faction, 'view_faction_pages')) {
+            return true;
+        }
+
+        return false;
     }
 }

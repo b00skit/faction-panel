@@ -89,6 +89,9 @@ Route::get('/kanban/priorities', [KanbanPriorityController::class, 'index']);
 Route::post('/rosters/resolve-links', [RosterController::class, 'resolveLinks']);
 Route::get('/factions/{shortname}/datasets', [DatasetController::class, 'index']);
 Route::get('/factions/{shortname}/flags', [RosterFlagController::class, 'index']);
+Route::get('/factions/{shortname}/pages', [FactionPageController::class, 'index']);
+Route::get('/factions/{shortname}/pages/context-data', [FactionPageController::class, 'getContextData']);
+Route::get('/factions/{shortname}/pages/{identifier}', [FactionPageController::class, 'show']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'me']);
@@ -286,10 +289,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/factions/{shortname}/quick-search', [QuickSearchController::class, 'search']);
 
     // Faction Pages Management
-    Route::get('/factions/{shortname}/pages', [FactionPageController::class, 'index']);
     Route::post('/factions/{shortname}/pages', [FactionPageController::class, 'store']);
-    Route::get('/factions/{shortname}/pages/context-data', [FactionPageController::class, 'getContextData']);
-    Route::get('/factions/{shortname}/pages/{identifier}', [FactionPageController::class, 'show']);
     Route::put('/factions/{shortname}/pages/{page}', [FactionPageController::class, 'update']);
     Route::delete('/factions/{shortname}/pages/{page}', [FactionPageController::class, 'destroy']);
     Route::put('/factions/{shortname}/pages-reorder', [FactionPageController::class, 'reorder']);
