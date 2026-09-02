@@ -401,3 +401,118 @@ test('syncing gtaw auto-heals roster entry IDs pointing to old database entries 
     expect($updatedRow->content['name'])->toBe('John Doe');
     expect($updatedRow->content['name_cb'])->toContain('Acting Officer');
 });
+
+test('when member is cleared or removed from roster cell, gtaw sync does not add them back and de-links cell', function () {
+    // 1. Initial sync with John Doe
+    $this->mock(GtawService::class, function ($mock) {
+        $mock->shouldReceive('getFactionMembers')->andReturn([
+            'data' => [
+                'members' => [
+                    [
+                        'character_id' => 12345,
+                        'character_name' => 'John Doe',
+                        'rank_name' => 'Acting Sheriff',
+                        'rank' => 15,
+                        'abas' => 0.00,
+                        'user_id' => 789,
+                    ],
+                ],
+            ],
+        ]);
+        $mock->shouldReceive('getFactionAbas')->andReturn(['data' => []]);
+    });
+
+    $response = $this->actingAs($this->leader)->postJson('/api/factions/lssd/integrations/gtaw/sync');
+    $response->assertStatus(200);
+
+    $row = RosterContent::find($this->contentRow->id);
+    expect($row->content['name'])->toBe('John Doe');
+    expect($row->linked_id['name'])->not->toBeNull();
+
+    // 2. User removes John Doe from this roster cell (clears it)
+    $row->update([
+        'content' => ['name' => '', 'name_cb' => ['Acting Officer'], 'name_tags' => ['Command']],
+        'linked_id' => $row->linked_id,
+        'linked_display' => $row->linked_display,
+    ]);
+
+    // 3. Re-run GTA:W sync (John Doe is still in GTA:W faction)
+    $response2 = $this->actingAs($this->leader)->postJson('/api/factions/lssd/integrations/gtaw/sync');
+    $response2->assertStatus(200);
+
+    // 4. Verify John Doe was NOT added back to this cleared cell, cell was de-linked, and auto-applied rules removed
+    $updatedRow = RosterContent::find($this->contentRow->id);
+    expect($updatedRow->content['name'])->toBe('');
+    expect($updatedRow->linked_id['name'] ?? null)->toBeNull();
+    expect($updatedRow->linked_display['name'] ?? null)->toBeNull();
+    expect($updatedRow->content['name_cb'] ?? [])->toBeEmpty();
+    expect($updatedRow->content['name_tags'] ?? [])->toBeEmpty();
+});
+
+test('when member name is changed on roster to non-matching name, gtaw sync de-links cell and preserves new name', function () {
+    // 1. Initial sync with John Doe
+    $this->mock(GtawService::class, function ($mock) {
+        $mock->shouldReceive('getFactionMembers')->andReturn([
+            'data' => [
+                'members' => [
+                    [
+                        'character_id' => 12345,
+                        'character_name' => 'John Doe',
+                        'rank_name' => 'Acting Sheriff',
+                        'rank' => 15,
+                        'abas' => 0.00,
+                        'user_id' => 789,
+                    ],
+                ],
+            ],
+        ]);
+        $mock->shouldReceive('getFactionAbas')->andReturn(['data' => []]);
+    });
+
+    $response = $this->actingAs($this->leader)->postJson('/api/factions/lssd/integrations/gtaw/sync');
+    $response->assertStatus(200);
+
+    $row = RosterContent::find($this->contentRow->id);
+    expect($row->content['name'])->toBe('John Doe');
+
+    // 2. User types a custom name that doesn't match any GTA:W faction member
+    $row->update([
+        'content' => ['name' => 'Jane Smith', 'name_cb' => ['Acting Officer'], 'name_tags' => ['Command']],
+        'linked_id' => $row->linked_id,
+        'linked_display' => $row->linked_display,
+    ]);
+
+    // 3. Re-run GTA:W sync
+    $response2 = $this->actingAs($this->leader)->postJson('/api/factions/lssd/integrations/gtaw/sync');
+    $response2->assertStatus(200);
+
+    // 4. Verify the new name is preserved, cell is de-linked, and auto-applied rules removed
+    $updatedRow = RosterContent::find($this->contentRow->id);
+    expect($updatedRow->content['name'])->toBe('Jane Smith');
+    expect($updatedRow->linked_id['name'] ?? null)->toBeNull();
+    expect($updatedRow->linked_display['name'] ?? null)->toBeNull();
+    expect($updatedRow->content['name_cb'] ?? [])->toBeEmpty();
+    expect($updatedRow->content['name_tags'] ?? [])->toBeEmpty();
+});
+
+test('roster content update API endpoint de-links stale linked_id and linked_display when cell is edited', function () {
+    $row = RosterContent::create([
+        'section_id' => $this->section->id,
+        'type' => 'predefined',
+        'content' => ['name' => 'John Doe'],
+        'linked_id' => ['name' => 101],
+        'linked_display' => ['name' => 'John Doe'],
+        'created_by' => $this->leader->id,
+    ]);
+
+    // Update cell via controller endpoint
+    $response = $this->actingAs($this->leader)->putJson("/api/contents/{$row->id}", [
+        'content' => ['name' => 'Jane Smith'],
+    ]);
+    $response->assertStatus(200);
+
+    $updatedRow = RosterContent::find($row->id);
+    expect($updatedRow->content['name'])->toBe('Jane Smith');
+    expect($updatedRow->linked_id['name'] ?? null)->toBeNull();
+    expect($updatedRow->linked_display['name'] ?? null)->toBeNull();
+});

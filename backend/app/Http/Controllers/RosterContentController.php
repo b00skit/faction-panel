@@ -132,6 +132,38 @@ class RosterContentController extends Controller
                     }
                 }
             }
+
+            // De-link columns whose content was emptied or modified to not match existing linked_display
+            $linkedId = is_array($validated['linked_id'] ?? null) ? $validated['linked_id'] : (is_array($content->linked_id) ? $content->linked_id : []);
+            $linkedDisplay = is_array($validated['linked_display'] ?? null) ? $validated['linked_display'] : (is_array($content->linked_display) ? $content->linked_display : []);
+            $linksChanged = false;
+
+            foreach ($validated['content'] as $colId => $newVal) {
+                if ($newVal === null || $newVal === '') {
+                    if (array_key_exists($colId, $linkedId)) {
+                        unset($linkedId[$colId]);
+                        $linksChanged = true;
+                    }
+                    if (array_key_exists($colId, $linkedDisplay)) {
+                        unset($linkedDisplay[$colId]);
+                        $linksChanged = true;
+                    }
+                } elseif (isset($linkedDisplay[$colId]) && ! is_array($newVal) && strcasecmp(trim((string) $newVal), trim((string) $linkedDisplay[$colId])) !== 0) {
+                    if (array_key_exists($colId, $linkedId)) {
+                        unset($linkedId[$colId]);
+                        $linksChanged = true;
+                    }
+                    if (array_key_exists($colId, $linkedDisplay)) {
+                        unset($linkedDisplay[$colId]);
+                        $linksChanged = true;
+                    }
+                }
+            }
+
+            if ($linksChanged) {
+                $validated['linked_id'] = $linkedId;
+                $validated['linked_display'] = $linkedDisplay;
+            }
         }
 
         $oldValues = $content->getOriginal();

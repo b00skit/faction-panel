@@ -135,7 +135,76 @@ test('linked_display and content retain character display string when entry is r
 
     $content->refresh();
 
-    // Display string is preserved and never converted back to integer 202!
+    // Display string is preserved as text and cell is de-linked
     expect($content->content['col_name'])->toBe('Eliana Kingsley');
-    expect($content->linked_display['col_name'])->toBe('Eliana Kingsley');
+    expect($content->linked_id['col_name'] ?? null)->toBeNull();
+    expect($content->linked_display['col_name'] ?? null)->toBeNull();
+});
+
+test('clearing a roster cell removes linked_id and sync does not restore the removed member', function () {
+    $faction = Faction::create(['name' => 'Test Faction 3', 'shortname' => 'testfac3', 'color' => '#123123']);
+    $user = User::factory()->create();
+
+    $charDb = FactionRecordDatabase::create([
+        'faction_id' => $faction->id,
+        'name' => 'Characters',
+        'shortcode' => 'CHARS',
+        'is_api_database' => 'gtaw_characters',
+        'database_structure' => [
+            ['id' => 'name', 'label' => 'Name', 'type' => 'text'],
+        ],
+    ]);
+
+    $entry = FactionRecordEntry::create([
+        'database_id' => $charDb->id,
+        'entry_id' => 303,
+        'data' => ['name' => 'Officer Bob', 'char_id' => 303],
+        'is_active' => true,
+    ]);
+
+    $roster = Roster::create([
+        'faction_id' => $faction->id,
+        'name' => 'Roster 3',
+        'shortname' => 'roster-3',
+        'color' => '#123123',
+        'columns' => [
+            ['id' => 'col_name', 'name' => 'Officer Name', 'type' => 'database_entry', 'linked_database_id' => $charDb->id],
+        ],
+        'created_by' => $user->id,
+    ]);
+
+    $section = RosterSection::create([
+        'roster_id' => $roster->id,
+        'name' => 'Section 3',
+        'shortname' => 'sec3',
+        'type' => 'static',
+        'created_by' => $user->id,
+    ]);
+
+    // Roster content was linked to Officer Bob
+    $content = RosterContent::create([
+        'section_id' => $section->id,
+        'order' => 1,
+        'type' => 'defined',
+        'content' => ['col_name' => 'Officer Bob'],
+        'linked_id' => ['col_name' => 303],
+        'linked_display' => ['col_name' => 'Officer Bob'],
+        'created_by' => $user->id,
+    ]);
+
+    // User removes Officer Bob from roster (cell cleared to empty string)
+    $content->update([
+        'content' => ['col_name' => ''],
+    ]);
+
+    // Re-sync
+    $syncService = new RosterSyncService;
+    $syncService->syncFaction($faction);
+
+    $content->refresh();
+
+    // Roster content remains empty and is de-linked (Officer Bob is NOT added back!)
+    expect($content->content['col_name'])->toBe('');
+    expect($content->linked_id['col_name'] ?? null)->toBeNull();
+    expect($content->linked_display['col_name'] ?? null)->toBeNull();
 });

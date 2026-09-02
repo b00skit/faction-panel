@@ -696,9 +696,62 @@ class GtawSyncService
                     continue;
                 }
 
-                // Stored value in the content or linked_id
-                $val = $data[$colId] ?? $linkedId[$colId] ?? $linkedDisplay[$colId] ?? null;
+                // Stored value in the content (rely on actual cell data)
+                $val = $data[$colId] ?? null;
+
+                // If cell is empty or null, de-link and clean up auto-applied attributes
                 if ($val === null || $val === '') {
+                    if (array_key_exists($colId, $linkedId)) {
+                        unset($linkedId[$colId]);
+                        $changed = true;
+                    }
+                    if (array_key_exists($colId, $linkedDisplay)) {
+                        unset($linkedDisplay[$colId]);
+                        $changed = true;
+                    }
+
+                    // Remove auto-applied checkboxes
+                    if (isset($col['checkboxes']) && is_array($col['checkboxes'])) {
+                        $cbKey = "{$colId}_cb";
+                        $currentCbs = $data[$cbKey] ?? [];
+                        if (is_array($currentCbs) && ! empty($currentCbs)) {
+                            $nextCbs = $currentCbs;
+                            foreach ($col['checkboxes'] as $cb) {
+                                if (isset($cb['auto_apply']) || isset($cb['auto_apply_field'])) {
+                                    $label = $cb['label'] ?? null;
+                                    if ($label) {
+                                        $nextCbs = array_values(array_diff($nextCbs, [$label]));
+                                    }
+                                }
+                            }
+                            if ($nextCbs !== $currentCbs) {
+                                $data[$cbKey] = $nextCbs;
+                                $changed = true;
+                            }
+                        }
+                    }
+
+                    // Remove auto-applied tags
+                    if (isset($col['tags']) && is_array($col['tags'])) {
+                        $tagKey = "{$colId}_tags";
+                        $currentTags = $data[$tagKey] ?? [];
+                        if (is_array($currentTags) && ! empty($currentTags)) {
+                            $nextTags = $currentTags;
+                            foreach ($col['tags'] as $tag) {
+                                if (isset($tag['auto_apply']) || isset($tag['auto_apply_field'])) {
+                                    $label = $tag['label'] ?? null;
+                                    if ($label) {
+                                        $nextTags = array_values(array_diff($nextTags, [$label]));
+                                    }
+                                }
+                            }
+                            if ($nextTags !== $currentTags) {
+                                $data[$tagKey] = $nextTags;
+                                $changed = true;
+                            }
+                        }
+                    }
+
                     continue;
                 }
 
@@ -711,8 +764,16 @@ class GtawSyncService
                 }
 
                 if ($val === null || $val === '' || is_array($val)) {
-                    if ($pointerVal) {
+                    if (array_key_exists($colId, $linkedId) && ! $pointerVal) {
+                        unset($linkedId[$colId]);
+                        $changed = true;
+                    } elseif ($pointerVal && ($linkedId[$colId] ?? null) !== $pointerVal) {
                         $linkedId[$colId] = $pointerVal;
+                        $changed = true;
+                    }
+                    if (array_key_exists($colId, $linkedDisplay)) {
+                        unset($linkedDisplay[$colId]);
+                        $changed = true;
                     }
 
                     continue;
@@ -723,12 +784,12 @@ class GtawSyncService
 
                 if (is_numeric($val) && filter_var($val, FILTER_VALIDATE_INT) !== false) {
                     // Try to find the active entry by entry_id
-                    $matchingEntry = $activeEntries->firstWhere('entry_id', $val);
+                    $matchingEntry = $activeEntries->firstWhere('entry_id', (int) $val);
 
                     // If not found in active, it might be soft-deleted or missing
                     if (! $matchingEntry) {
                         // Look up the soft-deleted entry to get the identity (name/char_id)
-                        $deletedEntry = $charDb->entries()->onlyTrashed()->where('entry_id', $val)->first();
+                        $deletedEntry = $charDb->entries()->onlyTrashed()->where('entry_id', (int) $val)->first();
                         if ($deletedEntry) {
                             $charId = $deletedEntry->data['char_id'] ?? null;
                             $charName = $deletedEntry->data['name'] ?? null;
@@ -755,7 +816,7 @@ class GtawSyncService
                     // If still not found, search all databases of this faction for this entry_id
                     if (! $matchingEntry) {
                         $anyEntry = FactionRecordEntry::whereIn('database_id', $faction->recordDatabases()->pluck('id'))
-                            ->where('entry_id', $val)
+                            ->where('entry_id', (int) $val)
                             ->first();
                         if ($anyEntry) {
                             $charName = $anyEntry->data['name'] ?? $anyEntry->data['Character Name'] ?? null;
@@ -775,13 +836,13 @@ class GtawSyncService
                 } else {
                     // It is a string (e.g. "John Doe"). Try to find an active entry with matching name
                     $matchingEntry = $activeEntries->first(function ($e) use ($val) {
-                        return strcasecmp(trim($e->data['name'] ?? ''), trim($val)) === 0;
+                        return strcasecmp(trim($e->data['name'] ?? ''), trim((string) $val)) === 0;
                     });
                 }
 
                 if ($matchingEntry) {
                     $charName = (string) ($matchingEntry->data['name'] ?? $matchingEntry->data['character_name'] ?? $matchingEntry->entry_id);
-                    $targetLinkedId = $pointerVal ?: $matchingEntry->entry_id;
+                    $targetLinkedId = $pointerVal ?: (int) $matchingEntry->entry_id;
                     if (($linkedId[$colId] ?? null) !== $targetLinkedId || ($linkedDisplay[$colId] ?? null) !== $charName || ($data[$colId] ?? null) !== $charName) {
                         $linkedId[$colId] = $targetLinkedId;
                         $linkedDisplay[$colId] = $charName;
@@ -789,21 +850,24 @@ class GtawSyncService
                         $changed = true;
                     }
                 } else {
-                    // Entry not in active entries: preserve linked_display and content display string
-                    if ($pointerVal) {
-                        $linkedId[$colId] = $pointerVal;
+                    // Entry not in active entries (removed or name doesn't match DB): de-link it!
+                    if (is_numeric($val)) {
+                        $fallbackName = $linkedDisplay[$colId] ?? (string) $val;
+                        if (($data[$colId] ?? null) !== $fallbackName) {
+                            $data[$colId] = $fallbackName;
+                            $changed = true;
+                        }
                     }
-                    if (isset($linkedDisplay[$colId]) && $linkedDisplay[$colId] !== '') {
-                        if (($data[$colId] ?? null) !== $linkedDisplay[$colId]) {
-                            $data[$colId] = $linkedDisplay[$colId];
-                            $changed = true;
-                        }
-                    } elseif (is_string($val) && ! is_numeric($val)) {
-                        $linkedDisplay[$colId] = $val;
-                        if (($data[$colId] ?? null) !== $val) {
-                            $data[$colId] = $val;
-                            $changed = true;
-                        }
+                    if (array_key_exists($colId, $linkedId) && ! $pointerVal) {
+                        unset($linkedId[$colId]);
+                        $changed = true;
+                    } elseif ($pointerVal && ($linkedId[$colId] ?? null) !== $pointerVal) {
+                        $linkedId[$colId] = $pointerVal;
+                        $changed = true;
+                    }
+                    if (array_key_exists($colId, $linkedDisplay)) {
+                        unset($linkedDisplay[$colId]);
+                        $changed = true;
                     }
                 }
 

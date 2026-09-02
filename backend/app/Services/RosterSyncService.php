@@ -60,13 +60,48 @@ class RosterSyncService
                             continue;
                         }
 
-                        $value = $data[$colId] ?? $linkedId[$colId] ?? $linkedDisplay[$colId] ?? null;
+                        $value = $data[$colId] ?? null;
+
+                        // If cell is empty or null, de-link and clean up auto-applied attributes
                         if ($value === null || $value === '') {
+                            if (array_key_exists($colId, $linkedId)) {
+                                unset($linkedId[$colId]);
+                                $changed = true;
+                            }
+                            if (array_key_exists($colId, $linkedDisplay)) {
+                                unset($linkedDisplay[$colId]);
+                                $changed = true;
+                            }
+
+                            // Clean up auto-applied checkboxes
+                            if (isset($col['checkboxes']) && is_array($col['checkboxes'])) {
+                                $key = "{$colId}_cb";
+                                $current = is_array($data[$key] ?? null) ? $data[$key] : [];
+                                $next = $this->evaluateAutoApplies($col['checkboxes'], null, $current);
+                                if ($current !== $next) {
+                                    $data[$key] = array_values($next);
+                                    $changed = true;
+                                }
+                            }
+
+                            // Clean up auto-applied tags
+                            if (isset($col['tags']) && is_array($col['tags'])) {
+                                $key = "{$colId}_tags";
+                                $current = is_array($data[$key] ?? null) ? $data[$key] : [];
+                                $next = $this->evaluateAutoApplies($col['tags'], null, $current);
+                                if ($current !== $next) {
+                                    $data[$key] = array_values($next);
+                                    $changed = true;
+                                }
+                            }
+
                             continue;
                         }
 
                         // Resolve roster data-link pointers
+                        $pointerVal = null;
                         if (is_array($value) && isset($value['row_id'], $value['col_id'])) {
+                            $pointerVal = $value;
                             $targetRowId = $value['row_id'];
 
                             if (! isset($linkedRowsCache[$targetRowId])) {
@@ -79,32 +114,44 @@ class RosterSyncService
                                 ? ($linkedContent[$value['col_id']] ?? null)
                                 : null;
 
-                            if ($dispVal !== null && ! is_array($dispVal)) {
-                                if (($linkedId[$colId] ?? null) !== $value || ($linkedDisplay[$colId] ?? null) !== (string) $dispVal || ($data[$colId] ?? null) !== (string) $dispVal) {
-                                    $linkedId[$colId] = $value;
-                                    $linkedDisplay[$colId] = (string) $dispVal;
-                                    $data[$colId] = (string) $dispVal;
-                                    $changed = true;
-                                }
+                            $value = $dispVal;
+                        }
+
+                        if ($value === null || $value === '' || is_array($value)) {
+                            if (array_key_exists($colId, $linkedId) && ! $pointerVal) {
+                                unset($linkedId[$colId]);
+                                $changed = true;
+                            } elseif ($pointerVal && ($linkedId[$colId] ?? null) !== $pointerVal) {
+                                $linkedId[$colId] = $pointerVal;
+                                $changed = true;
+                            }
+                            if (array_key_exists($colId, $linkedDisplay)) {
+                                unset($linkedDisplay[$colId]);
+                                $changed = true;
                             }
 
                             continue;
                         }
 
-                        if (is_array($value)) {
-                            continue;
+                        // Look up active entry in dbEntries
+                        $entry = null;
+                        if (is_numeric($value) && filter_var($value, FILTER_VALIDATE_INT) !== false) {
+                            $entry = $dbEntries[$dbId][(int) $value] ?? null;
                         }
-
-                        // Look up entry by linked_id or stored value/name
-                        $lookupId = $linkedId[$colId] ?? $value;
-                        $entry = $dbEntries[$dbId][$lookupId] ?? null;
 
                         if (! $entry && isset($dbEntries[$dbId])) {
                             foreach ($dbEntries[$dbId] as $item) {
                                 $name = $item->data['name'] ?? $item->data['character_name'] ?? $item->data['Character Name'] ?? null;
-                                if ($name && strcasecmp(trim($name), trim((string) $value)) === 0) {
+                                if ($name && strcasecmp(trim((string) $name), trim((string) $value)) === 0) {
                                     $entry = $item;
                                     break;
+                                }
+                                $fieldId = $col['database_field_id'] ?? null;
+                                if ($fieldId && isset($item->data[$fieldId])) {
+                                    if (strcasecmp(trim((string) $item->data[$fieldId]), trim((string) $value)) === 0) {
+                                        $entry = $item;
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -116,31 +163,38 @@ class RosterSyncService
                                 : ($entry->data['name'] ?? $entry->data['character_name'] ?? $entry->data['Character Name'] ?? (string) $entry->entry_id);
 
                             $disp = (string) $disp;
+                            $targetLinkedId = $pointerVal ?: (int) $entry->entry_id;
 
-                            if (($linkedId[$colId] ?? null) !== $entry->entry_id || ($linkedDisplay[$colId] ?? null) !== $disp || ($data[$colId] ?? null) !== $disp) {
-                                $linkedId[$colId] = $entry->entry_id;
+                            if (($linkedId[$colId] ?? null) !== $targetLinkedId || ($linkedDisplay[$colId] ?? null) !== $disp || ($data[$colId] ?? null) !== $disp) {
+                                $linkedId[$colId] = $targetLinkedId;
                                 $linkedDisplay[$colId] = $disp;
                                 $data[$colId] = $disp;
                                 $changed = true;
                             }
                         } else {
-                            // Entry not found in active entries: preserve existing linked_display / string value if present
-                            if (isset($linkedDisplay[$colId]) && $linkedDisplay[$colId] !== '') {
-                                if (($data[$colId] ?? null) !== $linkedDisplay[$colId]) {
-                                    $data[$colId] = $linkedDisplay[$colId];
+                            // Entry not found in active entries: de-link it!
+                            if (is_numeric($value)) {
+                                $fallbackName = $linkedDisplay[$colId] ?? (string) $value;
+                                if (($data[$colId] ?? null) !== $fallbackName) {
+                                    $data[$colId] = $fallbackName;
                                     $changed = true;
                                 }
-                            } elseif (is_string($value) && ! is_numeric($value)) {
-                                $linkedDisplay[$colId] = $value;
-                                if (($data[$colId] ?? null) !== $value) {
-                                    $data[$colId] = $value;
-                                    $changed = true;
-                                }
+                            }
+                            if (array_key_exists($colId, $linkedId) && ! $pointerVal) {
+                                unset($linkedId[$colId]);
+                                $changed = true;
+                            } elseif ($pointerVal && ($linkedId[$colId] ?? null) !== $pointerVal) {
+                                $linkedId[$colId] = $pointerVal;
+                                $changed = true;
+                            }
+                            if (array_key_exists($colId, $linkedDisplay)) {
+                                unset($linkedDisplay[$colId]);
+                                $changed = true;
                             }
                         }
 
                         // Re-evaluate Checkboxes
-                        if ($entry && isset($col['checkboxes']) && is_array($col['checkboxes'])) {
+                        if (isset($col['checkboxes']) && is_array($col['checkboxes'])) {
                             $key = "{$colId}_cb";
                             $current = is_array($data[$key] ?? null) ? $data[$key] : [];
                             $next = $this->evaluateAutoApplies($col['checkboxes'], $entry, $current);
@@ -152,7 +206,7 @@ class RosterSyncService
                         }
 
                         // Re-evaluate Tags
-                        if ($entry && isset($col['tags']) && is_array($col['tags'])) {
+                        if (isset($col['tags']) && is_array($col['tags'])) {
                             $key = "{$colId}_tags";
                             $current = is_array($data[$key] ?? null) ? $data[$key] : [];
                             $next = $this->evaluateAutoApplies($col['tags'], $entry, $current);
@@ -192,7 +246,7 @@ class RosterSyncService
         return $modified;
     }
 
-    private function evaluateAutoApplies(array $definitions, FactionRecordEntry $entry, array $current): array
+    private function evaluateAutoApplies(array $definitions, ?FactionRecordEntry $entry, array $current): array
     {
         $next = $current;
         $changed = false;
@@ -215,13 +269,15 @@ class RosterSyncService
 
             $matchValue = $def['auto_apply_value'] ?? ($autoApply['match_value'] ?? null);
 
-            $dbVal = ($dbColumn === 'id') ? (string) $entry->entry_id : ($entry->data[$dbColumn] ?? null);
-
             $isMatch = false;
-            if ($matchValue !== null && $matchValue !== '') {
-                $isMatch = $dbVal && str_contains(strtolower((string) $dbVal), strtolower((string) $matchValue));
-            } else {
-                $isMatch = ! empty($dbVal);
+            if ($entry) {
+                $dbVal = ($dbColumn === 'id') ? (string) $entry->entry_id : ($entry->data[$dbColumn] ?? null);
+
+                if ($matchValue !== null && $matchValue !== '') {
+                    $isMatch = $dbVal && str_contains(strtolower((string) $dbVal), strtolower((string) $matchValue));
+                } else {
+                    $isMatch = ! empty($dbVal);
+                }
             }
 
             $has = in_array($label, $next);
