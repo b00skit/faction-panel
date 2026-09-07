@@ -70,6 +70,15 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
             >
               <div
                 onClick={() => onSelect(item.id)}
+                onContextMenu={(e) => {
+                  if (showMenuButton) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setMenuPosition({ left: rect.left + rect.width / 2 });
+                    setActiveMenuId(item.id);
+                  }
+                }}
                 className={`tab pl-4 py-2 cursor-pointer transition-all text-[10px] font-bold uppercase h-full flex items-center gap-1.5 relative border-t-2 ${
                   showMenuButton ? 'pr-1' : 'pr-4'
                 } ${

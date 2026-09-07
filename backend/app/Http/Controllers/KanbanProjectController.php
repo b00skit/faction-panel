@@ -18,7 +18,7 @@ class KanbanProjectController extends Controller
 
         $projects = $faction->kanbanProjects()
             ->with([
-                'permissions', 'labels',
+                'permissions', 'labels', 'htmlCards',
                 'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments',
                 'rows.cards.assignees', 'rows.cards.labels', 'rows.cards.cardType', 'rows.cards.priority', 'rows.cards.subtasks', 'rows.cards.comments',
             ])
@@ -90,7 +90,7 @@ class KanbanProjectController extends Controller
         $this->audit('kanban.project.create', "Created Kanban project '{$project->name}' for faction '{$faction->name}'", null, $project, null, $project->getAttributes());
 
         return response()->json($this->sanitizeProjectForUser($project->load([
-            'permissions', 'labels',
+            'permissions', 'labels', 'htmlCards',
             'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments',
             'rows.cards.assignees', 'rows.cards.labels', 'rows.cards.cardType', 'rows.cards.priority', 'rows.cards.subtasks', 'rows.cards.comments',
         ]), $user), 201);
@@ -126,7 +126,7 @@ class KanbanProjectController extends Controller
 
         KanbanBoardUpdated::dispatch($project->faction_id, $project->id, null, 'project_updated');
 
-        return response()->json($this->sanitizeProjectForUser($project->load(['permissions', 'labels', 'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments']), $user));
+        return response()->json($this->sanitizeProjectForUser($project->load(['permissions', 'labels', 'htmlCards', 'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments']), $user));
     }
 
     public function destroy(KanbanProject $project)
@@ -264,9 +264,9 @@ class KanbanProjectController extends Controller
     private function sanitizeProjectForUser($project, $user)
     {
         // First make sure we load everything needed if not loaded
-        if (! $project->relationLoaded('statuses') || ! $project->relationLoaded('rows')) {
+        if (! $project->relationLoaded('statuses') || ! $project->relationLoaded('rows') || ! $project->relationLoaded('htmlCards')) {
             $project->load([
-                'permissions', 'labels',
+                'permissions', 'labels', 'htmlCards',
                 'statuses.cards.assignees', 'statuses.cards.labels', 'statuses.cards.cardType', 'statuses.cards.priority', 'statuses.cards.subtasks', 'statuses.cards.comments',
                 'rows.cards.assignees', 'rows.cards.labels', 'rows.cards.cardType', 'rows.cards.priority', 'rows.cards.subtasks', 'rows.cards.comments',
             ]);

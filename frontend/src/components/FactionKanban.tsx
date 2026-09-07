@@ -14,9 +14,9 @@ import {
   Circle, Square, Triangle, Hexagon, Star, Heart, Flame, Target,
   ArrowUp, ArrowDown, ArrowRight, ChevronsUp, ChevronsDown,
   Eye, EyeOff, FolderKanban, SlidersHorizontal, Layers, Kanban,
-  Link as LinkIcon, Unlink
+  Link as LinkIcon, Unlink, Code, FileCode, ArrowLeft
 } from 'lucide-react';
-import { KanbanProject, KanbanCard, KanbanCardType, KanbanLabel, KanbanStatus, KanbanPriority } from '../types';
+import { KanbanProject, KanbanCard, KanbanCardType, KanbanLabel, KanbanStatus, KanbanPriority, KanbanHtmlCard } from '../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 // Custom Confetti Particle Emitter (Zero-dependency, pure HTML5 canvas)
@@ -179,6 +179,23 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
   const [selectedCardDetails, setSelectedCardDetails] = useState<KanbanCard | null>(null);
   const [assigneesList, setAssigneesList] = useState<any[]>([]);
   const [assigneeSearch, setAssigneeSearch] = useState('');
+
+  // HTML Cards State
+  const [showHtmlCardsModal, setShowHtmlCardsModal] = useState(false);
+  const [selectedHtmlCard, setSelectedHtmlCard] = useState<KanbanHtmlCard | null>(null);
+  const [isEditingHtmlCard, setIsEditingHtmlCard] = useState(false);
+  const [htmlCardForm, setHtmlCardForm] = useState<{
+    name: string;
+    status_id: number;
+    position: 'top' | 'bottom';
+    content: string;
+  }>({
+    name: '',
+    status_id: 0,
+    position: 'top',
+    content: ''
+  });
+  const [showHtmlPreview, setShowHtmlPreview] = useState(true);
 
   // Card linking & mention states
   const [showLinkPopover, setShowLinkPopover] = useState(false);
@@ -1123,6 +1140,83 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to delete label', { id: loadToast });
+    }
+  };
+
+  // HTML Cards CRUD
+  const handleOpenHtmlCardsModal = (defaultStatusId?: number) => {
+    setIsEditingHtmlCard(false);
+    setSelectedHtmlCard(null);
+    if (defaultStatusId) {
+      setHtmlCardForm({
+        name: '',
+        status_id: defaultStatusId,
+        position: 'top',
+        content: ''
+      });
+    }
+    setShowHtmlCardsModal(true);
+  };
+
+  const handleStartCreateHtmlCard = (defaultStatusId?: number) => {
+    setSelectedHtmlCard(null);
+    setHtmlCardForm({
+      name: '',
+      status_id: defaultStatusId || activeProject?.statuses?.[0]?.id || 0,
+      position: 'top',
+      content: ''
+    });
+    setIsEditingHtmlCard(true);
+  };
+
+  const handleStartEditHtmlCard = (card: KanbanHtmlCard) => {
+    setSelectedHtmlCard(card);
+    setHtmlCardForm({
+      name: card.name,
+      status_id: card.status_id,
+      position: card.position || 'top',
+      content: card.content || ''
+    });
+    setIsEditingHtmlCard(true);
+  };
+
+  const handleSaveHtmlCard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeProject || !htmlCardForm.name.trim() || !htmlCardForm.status_id) {
+      toast.error('Please enter a card name and select a column');
+      return;
+    }
+
+    const loadToast = toast.loading(selectedHtmlCard ? 'Updating HTML card...' : 'Creating HTML card...');
+    try {
+      if (selectedHtmlCard) {
+        await api.put(`/kanban/html-cards/${selectedHtmlCard.id}`, htmlCardForm);
+        toast.success('HTML card updated', { id: loadToast });
+      } else {
+        await api.post(`/kanban/projects/${activeProject.id}/html-cards`, htmlCardForm);
+        toast.success('HTML card created', { id: loadToast });
+      }
+      setIsEditingHtmlCard(false);
+      setSelectedHtmlCard(null);
+      fetchProjects(getProjectRouteKey());
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to save HTML card', { id: loadToast });
+    }
+  };
+
+  const handleDeleteHtmlCard = async (cardId: number) => {
+    if (!window.confirm('Are you sure you want to delete this HTML card?')) return;
+    const loadToast = toast.loading('Deleting HTML card...');
+    try {
+      await api.delete(`/kanban/html-cards/${cardId}`);
+      toast.success('HTML card deleted', { id: loadToast });
+      if (selectedHtmlCard?.id === cardId) {
+        setIsEditingHtmlCard(false);
+        setSelectedHtmlCard(null);
+      }
+      fetchProjects(getProjectRouteKey());
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete HTML card', { id: loadToast });
     }
   };
 
@@ -2250,11 +2344,22 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
             {activeProject.statuses?.filter((col: any) => col.is_visible !== false).map((col: any) => {
               const visibleRowIds = new Set((activeProject.rows || []).filter((r: any) => r.is_visible !== false).map((r: any) => r.id));
               const visibleCards = (col.cards || []).filter((c: any) => !c.row_id || visibleRowIds.has(c.row_id));
+              const colHtmlCards = (activeProject.html_cards || []).filter((h: KanbanHtmlCard) => h.status_id === col.id);
+              const topHtmlCards = colHtmlCards.filter((h: KanbanHtmlCard) => (h.position || 'top') === 'top');
+              const bottomHtmlCards = colHtmlCards.filter((h: KanbanHtmlCard) => h.position === 'bottom');
+              const hasAnyCards = (visibleCards && visibleCards.length > 0) || colHtmlCards.length > 0;
 
               return (
               <div 
                 key={col.id}
                 draggable={projectPerms.manage_statuses}
+                onContextMenu={(e) => {
+                  const target = e.target as HTMLElement;
+                  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleOpenHtmlCardsModal(col.id);
+                }}
                 onDragStart={(e) => handleColumnDragStart(e, col.id)}
                 onDragOver={(e) => {
                   if (isDraggingCard) {
@@ -2338,7 +2443,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                 <div 
                   onDragOver={handleCardDragOver}
                   className={`overflow-y-auto p-2 scrollbar-thin transition-all duration-200 ${
-                    visibleCards && visibleCards.length > 0
+                    hasAnyCards
                       ? 'flex-1 min-h-[100px] max-h-[calc(100vh-270px)] space-y-2'
                       : isDraggingCard
                         ? draggedOverColId === col.id
@@ -2347,6 +2452,21 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                         : 'h-3 border border-transparent'
                   }`}
                 >
+                  {/* Top Sticky HTML Cards */}
+                  {topHtmlCards.map((hCard: KanbanHtmlCard) => (
+                    <div
+                      key={`html-top-${hCard.id}`}
+                      data-html-card-id={hCard.id}
+                      draggable={false}
+                      onClick={(e) => e.stopPropagation()}
+                      className="sticky top-0 z-10 bg-card/95 backdrop-blur-xs border border-border/70 rounded-lg p-3 shadow-sm flex flex-col items-start select-text cursor-default pointer-events-auto"
+                    >
+                      <div
+                        className="w-full text-text overflow-hidden break-words text-xs leading-relaxed"
+                        dangerouslySetInnerHTML={{ __html: hCard.content }}
+                      />
+                    </div>
+                  ))}
                   {visibleCards && visibleCards.length > 0 ? (
                     visibleCards.map((card: any) => {
                       const cardType = card.card_type || cardTypes.find((t: any) => t.id === card.card_type_id);
@@ -2480,10 +2600,25 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                       );
                     })
                   ) : (
-                    isDraggingCard && draggedOverColId === col.id && (
+                    isDraggingCard && draggedOverColId === col.id ? (
                       <span className="animate-pulse">Drop here</span>
-                    )
+                    ) : null
                   )}
+                  {/* Bottom Sticky HTML Cards */}
+                  {bottomHtmlCards.map((hCard: KanbanHtmlCard) => (
+                    <div
+                      key={`html-bottom-${hCard.id}`}
+                      data-html-card-id={hCard.id}
+                      draggable={false}
+                      onClick={(e) => e.stopPropagation()}
+                      className="sticky bottom-0 z-10 bg-card/95 backdrop-blur-xs border border-border/70 rounded-lg p-3 shadow-sm flex flex-col items-start select-text cursor-default pointer-events-auto"
+                    >
+                      <div
+                        className="w-full text-text overflow-hidden break-words text-xs leading-relaxed"
+                        dangerouslySetInnerHTML={{ __html: hCard.content }}
+                      />
+                    </div>
+                  ))}
                 </div>
 
                 {/* Column Add Card */}
@@ -2709,12 +2844,13 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
         }
         renderContextMenu={activeProject ? (item, closeMenu) => {
           const isProjectOwner = item.created_by === user?.id;
-          const perms = item.user_permissions || { modify_project: false, manage_labels: false, view_project: false };
+          const perms = item.user_permissions || { modify_project: false, manage_labels: false, view_project: false, modify_card: false };
           const canSettings = isGlobalMod || isProjectOwner || perms.modify_project;
           const canLabels = isGlobalMod || isProjectOwner || perms.manage_labels;
           const canPermissions = isGlobalMod || isProjectOwner;
+          const canHtmlCards = isGlobalMod || isProjectOwner || perms.modify_project || perms.modify_card;
 
-          if (!canSettings && !canLabels && !canPermissions) return null;
+          if (!canSettings && !canLabels && !canPermissions && !canHtmlCards) return null;
 
           return (
             <div className="flex flex-col gap-0.5">
@@ -2736,6 +2872,17 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                   className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors text-left cursor-pointer"
                 >
                   <Settings size={12} /> Project Settings
+                </button>
+              )}
+              {canHtmlCards && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    handleOpenHtmlCardsModal();
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors text-left cursor-pointer"
+                >
+                  <Code size={12} /> HTML Cards
                 </button>
               )}
               {perms.view_project && (
@@ -3108,6 +3255,277 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                     )}
                   </div>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* HTML CARDS MODAL */}
+      <AnimatePresence>
+        {showHtmlCardsModal && activeProject && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-card border border-border rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col overflow-hidden max-h-[85vh]"
+            >
+              <div className="flex justify-between items-center p-4 border-b border-border">
+                <div className="flex items-center gap-2">
+                  {isEditingHtmlCard && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingHtmlCard(false)}
+                      className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-muted hover:text-text px-2 py-1 rounded bg-surface hover:bg-surface/80 transition-colors cursor-pointer mr-1"
+                    >
+                      <ArrowLeft size={12} /> Back
+                    </button>
+                  )}
+                  <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-1.5">
+                    <Code size={14} className="text-accent" />
+                    {isEditingHtmlCard
+                      ? (selectedHtmlCard ? 'Edit HTML Card' : 'New HTML Card')
+                      : `HTML Cards: ${activeProject.name}`}
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {!isEditingHtmlCard && (
+                    <button
+                      type="button"
+                      onClick={() => handleStartCreateHtmlCard()}
+                      className="px-3 py-1.5 bg-accent hover:bg-accent/90 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shadow-sm transition-colors"
+                    >
+                      <Plus size={12} /> New Card
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowHtmlCardsModal(false);
+                      setIsEditingHtmlCard(false);
+                      setSelectedHtmlCard(null);
+                    }}
+                    className="text-muted hover:text-text cursor-pointer p-1 rounded hover:bg-surface transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                {!isEditingHtmlCard ? (
+                  <>
+                    <p className="text-[10px] font-bold text-muted uppercase tracking-wider">
+                      HTML cards are sticky, unmovable cards containing custom HTML. Click any card below to open the content editor.
+                    </p>
+
+                    {(activeProject.html_cards || []).length === 0 ? (
+                      <div className="text-center py-10 px-4 bg-surface/30 rounded-xl border border-dashed border-border/80 flex flex-col items-center justify-center">
+                        <FileCode size={36} className="text-muted/40 mb-2.5" />
+                        <h4 className="text-xs font-bold text-text mb-1">No HTML Cards Configured</h4>
+                        <p className="text-[11px] text-muted max-w-sm mb-4">
+                          Create custom cards to display guidelines, links, notices, or announcements in your columns.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleStartCreateHtmlCard()}
+                          className="px-4 py-2 bg-accent hover:bg-accent/90 text-white rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-sm"
+                        >
+                          <Plus size={13} /> Create First HTML Card
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-border/60 bg-surface/20 rounded-xl border border-border/60 overflow-hidden">
+                        {(activeProject.html_cards || []).map((hCard: KanbanHtmlCard) => {
+                          const colObj = activeProject.statuses?.find((s: any) => s.id === hCard.status_id);
+                          return (
+                            <div
+                              key={hCard.id}
+                              onClick={() => handleStartEditHtmlCard(hCard)}
+                              className="p-3.5 hover:bg-surface/60 transition-colors flex items-center justify-between gap-3 cursor-pointer group"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <span className="text-xs font-bold text-text group-hover:text-accent transition-colors">
+                                    {hCard.name}
+                                  </span>
+                                  {colObj && (
+                                    <span className="px-2 py-0.5 rounded bg-surface border border-border text-[9px] font-bold uppercase tracking-wider text-muted">
+                                      Column: {colObj.name}
+                                    </span>
+                                  )}
+                                  <span className="px-2 py-0.5 rounded bg-accent/10 border border-accent/20 text-[9px] font-black uppercase tracking-wider text-accent">
+                                    {hCard.position === 'bottom' ? 'Sticky Bottom' : 'Sticky Top'}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-muted font-mono truncate max-w-md opacity-70">
+                                  {hCard.content ? hCard.content.replace(/<[^>]*>/g, ' ').trim().slice(0, 100) : '(empty HTML)'}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditHtmlCard(hCard)}
+                                  title="Edit HTML Card"
+                                  className="p-1.5 text-muted hover:text-accent hover:bg-accent/10 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Edit2 size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteHtmlCard(hCard.id)}
+                                  title="Delete HTML Card"
+                                  className="p-1.5 text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <form onSubmit={handleSaveHtmlCard} className="space-y-4">
+                    <div>
+                      <label className="block text-[9px] font-bold uppercase tracking-wider text-muted mb-1">
+                        Card Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={htmlCardForm.name}
+                        onChange={(e) => setHtmlCardForm({ ...htmlCardForm, name: e.target.value })}
+                        placeholder="e.g. Column Notice, Sprint Rules, Helpful Links"
+                        className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs font-bold text-text focus:outline-none focus:border-accent"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-bold uppercase tracking-wider text-muted mb-1">
+                          Target Column *
+                        </label>
+                        <select
+                          value={htmlCardForm.status_id}
+                          onChange={(e) => setHtmlCardForm({ ...htmlCardForm, status_id: Number(e.target.value) })}
+                          className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs font-bold text-text focus:outline-none focus:border-accent cursor-pointer"
+                        >
+                          {activeProject.statuses?.map((col: any) => (
+                            <option key={col.id} value={col.id}>
+                              {col.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] font-bold uppercase tracking-wider text-muted mb-1">
+                          Position In Column
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setHtmlCardForm({ ...htmlCardForm, position: 'top' })}
+                            className={`flex-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                              htmlCardForm.position === 'top'
+                                ? 'bg-accent text-white shadow-sm'
+                                : 'bg-surface border border-border text-muted hover:text-text'
+                            }`}
+                          >
+                            Top (Sticky)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setHtmlCardForm({ ...htmlCardForm, position: 'bottom' })}
+                            className={`flex-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                              htmlCardForm.position === 'bottom'
+                                ? 'bg-accent text-white shadow-sm'
+                                : 'bg-surface border border-border text-muted hover:text-text'
+                            }`}
+                          >
+                            Bottom (Sticky)
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[9px] font-bold uppercase tracking-wider text-muted">
+                          HTML Content
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setShowHtmlPreview(!showHtmlPreview)}
+                          className="text-[9px] font-bold uppercase tracking-wider text-accent hover:underline cursor-pointer"
+                        >
+                          {showHtmlPreview ? 'Hide Preview' : 'Show Preview'}
+                        </button>
+                      </div>
+                      <textarea
+                        rows={6}
+                        value={htmlCardForm.content}
+                        onChange={(e) => setHtmlCardForm({ ...htmlCardForm, content: e.target.value })}
+                        placeholder={"<div class=\"text-center p-2\">\n  <h4 class=\"font-bold text-accent\">Sprint Guidelines</h4>\n  <p class=\"text-xs text-muted\">Move cards only when verified.</p>\n</div>"}
+                        className="w-full bg-surface/80 border border-border rounded-lg p-3 font-mono text-xs text-text focus:outline-none focus:border-accent resize-y"
+                      />
+                      <p className="text-[9px] text-muted font-bold tracking-wider uppercase mt-1">
+                        Raw HTML is supported. This HTML defines the card's inner content without standard card metadata.
+                      </p>
+                    </div>
+
+                    {showHtmlPreview && (
+                      <div className="space-y-1.5 pt-1">
+                        <span className="block text-[9px] font-bold uppercase tracking-wider text-muted">
+                          Card Preview (as rendered in column)
+                        </span>
+                        <div className="bg-card/75 border border-border/70 rounded-lg p-3 shadow-sm flex flex-col items-start w-full">
+                          <div
+                            className="w-full text-text overflow-hidden break-words text-xs leading-relaxed"
+                            dangerouslySetInnerHTML={{
+                              __html: htmlCardForm.content || '<span class="text-muted italic">HTML preview will appear here...</span>'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-3 border-t border-border/60">
+                      <div>
+                        {selectedHtmlCard && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteHtmlCard(selectedHtmlCard.id)}
+                            className="px-3.5 py-2 bg-danger/10 hover:bg-danger text-danger hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Trash2 size={12} /> Delete Card
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingHtmlCard(false)}
+                          className="px-3.5 py-2 bg-surface hover:bg-surface/80 text-muted hover:text-text rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-accent hover:bg-accent/90 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest cursor-pointer shadow-sm transition-colors"
+                        >
+                          {selectedHtmlCard ? 'Save Changes' : 'Create Card'}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                )}
               </div>
             </motion.div>
           </div>

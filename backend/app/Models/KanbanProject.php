@@ -67,6 +67,11 @@ class KanbanProject extends Model
         return $this->hasMany(KanbanProjectPermission::class, 'project_id');
     }
 
+    public function htmlCards()
+    {
+        return $this->hasMany(KanbanHtmlCard::class, 'project_id')->orderBy('order')->orderBy('id');
+    }
+
     public function resolveRouteBinding($value, $field = null)
     {
         return $this->where('id', $value)

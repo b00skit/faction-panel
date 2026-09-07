@@ -32,6 +32,7 @@ use App\Http\Controllers\InviteController;
 use App\Http\Controllers\KanbanCardController;
 use App\Http\Controllers\KanbanCardTypeController;
 use App\Http\Controllers\KanbanCommentController;
+use App\Http\Controllers\KanbanHtmlCardController;
 use App\Http\Controllers\KanbanLabelController;
 use App\Http\Controllers\KanbanPriorityController;
 use App\Http\Controllers\KanbanProjectController;
@@ -473,4 +474,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/kanban/subtasks/{subtask}', [KanbanSubtaskController::class, 'update']);
     Route::delete('/kanban/subtasks/{subtask}', [KanbanSubtaskController::class, 'destroy']);
     Route::put('/kanban/cards/{card}/subtasks/reorder', [KanbanSubtaskController::class, 'reorder']);
+
+    // Kanban HTML Card Management
+    Route::get('/kanban/projects/{project}/html-cards', [KanbanHtmlCardController::class, 'index']);
+    Route::post('/kanban/projects/{project}/html-cards', [KanbanHtmlCardController::class, 'store']);
+    Route::put('/kanban/html-cards/{htmlCard}', [KanbanHtmlCardController::class, 'update']);
+    Route::delete('/kanban/html-cards/{htmlCard}', [KanbanHtmlCardController::class, 'destroy']);
 });

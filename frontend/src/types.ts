@@ -617,6 +617,19 @@ export interface KanbanCard {
   updated_at?: string;
 }
 
+export interface KanbanHtmlCard {
+  id: number;
+  project_id: number;
+  status_id: number;
+  name: string;
+  content: string;
+  position: 'top' | 'bottom';
+  order: number;
+  created_by?: number | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface KanbanProject {
   id: number;
   faction_id: number;
@@ -631,6 +644,7 @@ export interface KanbanProject {
   statuses?: KanbanStatus[];
   rows?: KanbanRow[];
   labels?: KanbanLabel[];
+  html_cards?: KanbanHtmlCard[];
   permissions?: any[];
   user_permissions?: {
     view_project: boolean;
