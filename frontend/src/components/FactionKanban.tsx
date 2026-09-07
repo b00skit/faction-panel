@@ -3591,75 +3591,70 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
 
                       {isEditingDesc ? (
                         <div className="space-y-2 relative">
-                          <div className="flex items-start gap-2">
-                            <div className="flex-1 relative">
-                              <textarea
-                                autoFocus
-                                value={cardDescription}
-                                onChange={(e) => handleTextareaChangeWithMentions(e.target.value, setCardDescription, setDescMentionState)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' && !e.shiftKey) {
-                                    e.preventDefault();
-                                    handleSaveDescription();
-                                  } else if (e.key === 'Escape') {
-                                    setDescMentionState({ type: null, query: '' });
-                                    setIsEditingDesc(false);
-                                    setCardDescription(selectedCardDetails.description || '');
-                                  }
-                                }}
-                                placeholder="Add a detailed description... (Supports Markdown, @users, #cards. Press Enter to save, Shift+Enter for new line)"
-                                className="w-full bg-surface border border-accent rounded-xl p-3 text-xs focus:outline-none text-text min-h-[100px] font-medium resize-y"
-                              />
+                          <div className="relative">
+                            <textarea
+                              autoFocus
+                              value={cardDescription}
+                              onChange={(e) => handleTextareaChangeWithMentions(e.target.value, setCardDescription, setDescMentionState)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                  e.preventDefault();
+                                  handleSaveDescription();
+                                } else if (e.key === 'Escape') {
+                                  setDescMentionState({ type: null, query: '' });
+                                  setIsEditingDesc(false);
+                                  setCardDescription(selectedCardDetails.description || '');
+                                }
+                              }}
+                              placeholder="Add a detailed description... (Supports Markdown, @users, #cards. Press Enter to save, Shift+Enter for new line)"
+                              className="w-full bg-surface border border-accent rounded-xl p-3 text-xs focus:outline-none text-text min-h-[110px] font-medium resize-y"
+                            />
 
-                              {/* Mention Suggestions Popup for Description */}
-                              {descMentionState.type && (
-                                <div className="absolute left-0 bottom-full mb-1 w-64 bg-surface border border-border rounded-xl shadow-xl p-1 z-50 max-h-40 overflow-y-auto scrollbar-thin">
-                                  <div className="px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-muted border-b border-border/50">
-                                    {descMentionState.type === 'user' ? 'Mention User' : 'Mention Card'}
-                                  </div>
-                                  {descMentionState.type === 'user' ? (
-                                    assigneesList
-                                      .filter((u: any) => u.username.toLowerCase().includes(descMentionState.query.toLowerCase()))
-                                      .map((u: any) => (
-                                        <button
-                                          key={u.id}
-                                          type="button"
-                                          onClick={() => insertMentionIntoText(cardDescription, setCardDescription, 'user', u.username, setDescMentionState)}
-                                          className="w-full text-left px-2 py-1 hover:bg-accent/10 rounded-lg text-xs font-semibold text-text hover:text-accent flex items-center gap-2 cursor-pointer"
-                                        >
-                                          <User size={12} className="text-muted" />
-                                          <span>@{u.username}</span>
-                                        </button>
-                                      ))
-                                  ) : (
-                                    (activeProject?.statuses?.flatMap((s: any) => s.cards || []) || [])
-                                      .filter((c: any) => c.title.toLowerCase().includes(descMentionState.query.toLowerCase()) || String(c.count).includes(descMentionState.query))
-                                      .map((c: any) => (
-                                        <button
-                                          key={c.id}
-                                          type="button"
-                                          onClick={() => insertMentionIntoText(cardDescription, setCardDescription, 'card', `${activeProject?.prefix ? activeProject.prefix + '-' : ''}${c.count ?? c.id}`, setDescMentionState)}
-                                          className="w-full text-left px-2 py-1 hover:bg-accent/10 rounded-lg text-xs font-semibold text-text hover:text-accent flex items-center justify-between truncate cursor-pointer"
-                                        >
-                                          <span className="font-mono font-bold text-accent">#{activeProject?.prefix ? `${activeProject.prefix}-` : ''}{c.count ?? c.id}</span>
-                                          <span className="truncate ml-2 text-muted">{c.title}</span>
-                                        </button>
-                                      ))
-                                  )}
+                            {/* Mention Suggestions Popup for Description */}
+                            {descMentionState.type && (
+                              <div className="absolute left-0 bottom-full mb-1 w-64 bg-surface border border-border rounded-xl shadow-xl p-1 z-50 max-h-40 overflow-y-auto scrollbar-thin">
+                                <div className="px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-muted border-b border-border/50">
+                                  {descMentionState.type === 'user' ? 'Mention User' : 'Mention Card'}
                                 </div>
-                              )}
-                            </div>
+                                {descMentionState.type === 'user' ? (
+                                  assigneesList
+                                    .filter((u: any) => u.username.toLowerCase().includes(descMentionState.query.toLowerCase()))
+                                    .map((u: any) => (
+                                      <button
+                                        key={u.id}
+                                        type="button"
+                                        onClick={() => insertMentionIntoText(cardDescription, setCardDescription, 'user', u.username, setDescMentionState)}
+                                        className="w-full text-left px-2 py-1 hover:bg-accent/10 rounded-lg text-xs font-semibold text-text hover:text-accent flex items-center gap-2 cursor-pointer"
+                                      >
+                                        <User size={12} className="text-muted" />
+                                        <span>@{u.username}</span>
+                                      </button>
+                                    ))
+                                ) : (
+                                  (activeProject?.statuses?.flatMap((s: any) => s.cards || []) || [])
+                                    .filter((c: any) => c.title.toLowerCase().includes(descMentionState.query.toLowerCase()) || String(c.count).includes(descMentionState.query))
+                                    .map((c: any) => (
+                                      <button
+                                        key={c.id}
+                                        type="button"
+                                        onClick={() => insertMentionIntoText(cardDescription, setCardDescription, 'card', `${activeProject?.prefix ? activeProject.prefix + '-' : ''}${c.count ?? c.id}`, setDescMentionState)}
+                                        className="w-full text-left px-2 py-1 hover:bg-accent/10 rounded-lg text-xs font-semibold text-text hover:text-accent flex items-center justify-between truncate cursor-pointer"
+                                      >
+                                        <span className="font-mono font-bold text-accent">#{activeProject?.prefix ? `${activeProject.prefix}-` : ''}{c.count ?? c.id}</span>
+                                        <span className="truncate ml-2 text-muted">{c.title}</span>
+                                      </button>
+                                    ))
+                                )}
+                              </div>
+                            )}
+                          </div>
 
-                            {/* Save Button Next to it */}
-                            <div className="flex flex-col gap-1.5 shrink-0">
-                              <button
-                                type="button"
-                                onClick={handleSaveDescription}
-                                className="px-3.5 py-2 bg-accent hover:bg-accent/90 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-sm"
-                                title="Save (Enter)"
-                              >
-                                <Check size={14} /> Save
-                              </button>
+                          {/* Bottom Action Bar: Shortcuts on left, Save & Cancel Buttons on right */}
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="text-[9px] text-muted font-bold tracking-wider uppercase">
+                              Press <kbd className="px-1 py-0.5 bg-surface border border-border rounded text-[8px] font-mono">Enter</kbd> to save, <kbd className="px-1 py-0.5 bg-surface border border-border rounded text-[8px] font-mono">Shift+Enter</kbd> for new line
+                            </span>
+                            <div className="flex items-center gap-2 ml-auto">
                               <button
                                 type="button"
                                 onClick={() => {
@@ -3667,16 +3662,20 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                                   setIsEditingDesc(false);
                                   setCardDescription(selectedCardDetails.description || '');
                                 }}
-                                className="px-3 py-1.5 bg-surface text-muted hover:text-text hover:bg-surface-hover border border-border rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                                className="px-3.5 py-1.5 bg-surface text-muted hover:text-text hover:bg-surface-hover border border-border rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors"
                                 title="Cancel (Esc)"
                               >
                                 <X size={12} /> Cancel
                               </button>
+                              <button
+                                type="button"
+                                onClick={handleSaveDescription}
+                                className="px-4 py-1.5 bg-accent hover:bg-accent/90 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+                                title="Save (Enter)"
+                              >
+                                <Check size={14} /> Save
+                              </button>
                             </div>
-                          </div>
-
-                          <div className="flex items-center justify-between text-[9px] text-muted font-bold tracking-wider uppercase px-1">
-                            <span>Press <kbd className="px-1 py-0.5 bg-surface border border-border rounded text-[8px] font-mono">Enter</kbd> to save, <kbd className="px-1 py-0.5 bg-surface border border-border rounded text-[8px] font-mono">Shift+Enter</kbd> for new line</span>
                           </div>
                         </div>
                       ) : (
