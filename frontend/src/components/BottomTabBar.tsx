@@ -48,7 +48,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
   }, []);
 
   return (
-    <div className="tabs-bar bg-card border-t border-border flex items-center px-2.5 h-[var(--tab-h)] sticky bottom-0 z-[210]">
+    <div className="tabs-bar bg-card border-t border-border flex items-center px-2.5 h-[var(--tab-h)] sticky bottom-0 z-[210] mt-auto">
       <Reorder.Group
         ref={scrollRef}
         axis="x"

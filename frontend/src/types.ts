@@ -531,6 +531,7 @@ export interface KanbanCardType {
   name: string;
   color: string;
   icon: string;
+  default_description?: string | null;
   settings: {
     description: boolean;
     subtasks: boolean;

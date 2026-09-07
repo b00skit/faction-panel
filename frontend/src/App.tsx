@@ -335,9 +335,7 @@ const DashboardWrapper = ({ user, onLogout, isDark, toggleTheme, highContrast, t
         } />
         <Route path="kanban/*" element={
           canViewKanban ? (
-            <main className="main flex-1 overflow-auto">
-              <FactionKanban user={user} permissions={permissions} />
-            </main>
+            <FactionKanban user={user} permissions={permissions} />
           ) : <Navigate to={`/${shortname}/roster`} />
         } />
         <Route path="forms/*" element={

@@ -180,6 +180,7 @@ test('can update a card type', function () {
             'name' => 'Updated Task',
             'color' => '#ef4444',
             'icon' => 'Flame',
+            'default_description' => 'Default task template here',
             'settings' => [
                 'description' => false,
                 'subtasks' => true,
@@ -195,12 +196,14 @@ test('can update a card type', function () {
     $response->assertStatus(200)
         ->assertJsonPath('name', 'Updated Task')
         ->assertJsonPath('color', '#ef4444')
+        ->assertJsonPath('default_description', 'Default task template here')
         ->assertJsonPath('settings.description', false);
 
     $this->assertDatabaseHas('kanban_card_types', [
         'id' => $this->cardType->id,
         'name' => 'Updated Task',
         'color' => '#ef4444',
+        'default_description' => 'Default task template here',
     ]);
 });
 

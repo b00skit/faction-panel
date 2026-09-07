@@ -14,6 +14,7 @@ class KanbanCardType extends Model
         'name',
         'color',
         'icon',
+        'default_description',
         'settings',
     ];
 

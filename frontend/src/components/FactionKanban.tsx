@@ -20,7 +20,7 @@ import { KanbanProject, KanbanCard, KanbanCardType, KanbanLabel, KanbanStatus, K
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 // Custom Confetti Particle Emitter (Zero-dependency, pure HTML5 canvas)
-export const triggerConfetti = () => {
+export const triggerConfetti = (origin?: { x: number; y: number } | null) => {
   const canvas = document.createElement('canvas');
   canvas.style.position = 'fixed';
   canvas.style.top = '0';
@@ -35,58 +35,75 @@ export const triggerConfetti = () => {
   let width = (canvas.width = window.innerWidth);
   let height = (canvas.height = window.innerHeight);
 
-  window.addEventListener('resize', () => {
+  const onResize = () => {
     width = canvas.width = window.innerWidth;
     height = canvas.height = window.innerHeight;
-  });
+  };
+  window.addEventListener('resize', onResize);
 
   const colors = ['#f43f5e', '#3b82f6', '#10b981', '#eab308', '#a855f7', '#ff7849'];
   const particles: any[] = [];
+  const originX = origin?.x ?? width / 2;
+  const originY = origin?.y ?? height / 2;
 
-  for (let i = 0; i < 120; i++) {
+  const count = 75;
+  for (let i = 0; i < count; i++) {
+    // Burst radially outwards with upward bias
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.4;
+    const speed = Math.random() * 11 + 4;
     particles.push({
-      x: Math.random() * width,
-      y: Math.random() * height - height,
-      r: Math.random() * 6 + 4,
-      d: Math.random() * height,
+      x: originX,
+      y: originY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      size: Math.random() * 6 + 4,
       color: colors[Math.floor(Math.random() * colors.length)],
-      tilt: Math.random() * 10 - 5,
-      tiltAngleIncremental: Math.random() * 0.07 + 0.02,
-      tiltAngle: 0,
+      rotation: Math.random() * 360,
+      rotationSpeed: (Math.random() - 0.5) * 15,
+      friction: 0.94,
+      gravity: 0.35,
     });
   }
 
+  const startTime = performance.now();
+  const duration = 1500; // 1.5 seconds
+
   let animationFrameId: number;
-  const draw = () => {
+  const draw = (now: number) => {
+    const elapsed = now - startTime;
+    if (elapsed >= duration) {
+      window.removeEventListener('resize', onResize);
+      if (canvas.parentNode) {
+        document.body.removeChild(canvas);
+      }
+      return;
+    }
+
     ctx.clearRect(0, 0, width, height);
-    let active = false;
+    const progress = elapsed / duration;
+    const alpha = Math.max(0, 1 - Math.pow(progress, 2.5));
 
     particles.forEach((p) => {
-      p.tiltAngle += p.tiltAngleIncremental;
-      p.y += (Math.cos(p.d) + 3 + p.r / 2) / 2;
-      p.x += Math.sin(p.tiltAngle);
-      p.tilt = Math.sin(p.tiltAngle - p.r / 3) * 15;
+      p.vx *= p.friction;
+      p.vy *= p.friction;
+      p.vy += p.gravity;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rotation += p.rotationSpeed;
 
-      if (p.y <= height) {
-        active = true;
-      }
-
-      ctx.beginPath();
-      ctx.lineWidth = p.r;
-      ctx.strokeStyle = p.color;
-      ctx.moveTo(p.x + p.tilt + p.r / 2, p.y);
-      ctx.lineTo(p.x + p.tilt, p.y + p.tilt + p.r / 2);
-      ctx.stroke();
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate((p.rotation * Math.PI) / 180);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+      ctx.restore();
     });
 
-    if (active) {
-      animationFrameId = requestAnimationFrame(draw);
-    } else {
-      document.body.removeChild(canvas);
-    }
+    animationFrameId = requestAnimationFrame(draw);
   };
 
-  draw();
+  animationFrameId = requestAnimationFrame(draw);
 };
 
 interface FactionKanbanProps {
@@ -152,9 +169,10 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
   // Modals
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showProjectSettingsModal, setShowProjectSettingsModal] = useState(false);
-  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [permissionsProject, setPermissionsProject] = useState<KanbanProject | null>(null);
   const [showCardTypesModal, setShowCardTypesModal] = useState(false);
   const [showPrioritiesModal, setShowPrioritiesModal] = useState(false);
+  const [labelsProject, setLabelsProject] = useState<KanbanProject | null>(null);
   const [showLabelsModal, setShowLabelsModal] = useState(false);
   const [activePriorityDetailsDropdownOpen, setActivePriorityDetailsDropdownOpen] = useState(false);
   const [selectedCard, setSelectedCard] = useState<KanbanCard | null>(null);
@@ -201,6 +219,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
     name: '',
     color: '#3b82f6',
     icon: 'CheckSquare',
+    default_description: '',
     settings: {
       description: true,
       subtasks: true,
@@ -429,6 +448,17 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       toast.error('Failed to fetch card details');
       navigate(getReturnRoute());
     }
+  };
+
+  const handleStartEditingDescription = () => {
+    if (!selectedCardDetails) return;
+    if (selectedCardDetails.description?.trim()) {
+      setCardDescription(selectedCardDetails.description);
+    } else {
+      const currentType = selectedCardDetails.card_type || cardTypes.find(t => t.id === selectedCardDetails.card_type_id);
+      setCardDescription(currentType?.default_description || '');
+    }
+    setIsEditingDesc(true);
   };
 
   // Fetch Activity Feed
@@ -759,6 +789,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       name: '',
       color: '#3b82f6',
       icon: 'CheckSquare',
+      default_description: '',
       settings: { description: true, subtasks: true, color: true, icon: true, comments: true, assignee: true, priority: true }
     });
   };
@@ -769,6 +800,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       name: type.name,
       color: type.color,
       icon: type.icon,
+      default_description: type.default_description || '',
       settings: {
         description: !!type.settings.description,
         subtasks: !!type.settings.subtasks,
@@ -1069,10 +1101,11 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
   // Labels CRUD
   const handleCreateLabel = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newLabel.name.trim() || !activeProject) return;
+    const targetProject = labelsProject || activeProject;
+    if (!newLabel.name.trim() || !targetProject) return;
     const loadToast = toast.loading('Creating label...');
     try {
-      await api.post(`/kanban/projects/${activeProject.id}/labels`, newLabel);
+      await api.post(`/kanban/projects/${targetProject.id}/labels`, newLabel);
       toast.success('Label created', { id: loadToast });
       setNewLabel({ name: '', color: '#10b981' });
       fetchProjects(getProjectRouteKey());
@@ -1210,7 +1243,9 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       const finalCol = activeProject!.statuses![activeProject!.statuses!.length - 1];
       const firstCol = activeProject!.statuses![0];
       if (finalCol && firstCol && finalCol.id !== firstCol.id && targetStatusId === finalCol.id && selectedCardDetails.status_id !== finalCol.id) {
-        triggerConfetti();
+        const cardEl = document.querySelector(`[data-card-id="${selectedCardDetails.id}"]`);
+        const rect = cardEl?.getBoundingClientRect();
+        triggerConfetti(rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null);
       }
 
       fetchCardDetails(selectedCardDetails.id);
@@ -1424,6 +1459,9 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
     e.preventDefault();
     e.stopPropagation();
 
+    const dropX = e.clientX;
+    const dropY = e.clientY;
+
     const type = e.dataTransfer.getData('type');
     if (type !== 'card') return;
 
@@ -1480,7 +1518,12 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       const finalCol = activeProject.statuses[activeProject.statuses.length - 1];
       const firstCol = activeProject.statuses[0];
       if (finalCol && firstCol && finalCol.id !== firstCol.id && targetStatusId === finalCol.id && sourceStatusId !== finalCol.id) {
-        triggerConfetti();
+        const cardEl = document.querySelector(`[data-card-id="${cardId}"]`);
+        const rect = cardEl?.getBoundingClientRect();
+        const origin = rect
+          ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+          : (dropX && dropY ? { x: dropX, y: dropY } : null);
+        triggerConfetti(origin);
       }
 
       toast.success('Card moved');
@@ -1568,7 +1611,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
   if (loading) return <Loading message="Loading Kanban Boards..." />;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-bg text-text h-full relative">
+    <div className="flex-1 flex flex-col min-h-[calc(100vh-var(--nav-h))] bg-bg text-text relative">
       
       {/* Top Controls Bar */}
       {activeProject && (
@@ -2067,6 +2110,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                         return (
                           <div
                             key={card.id}
+                            data-card-id={card.id}
                             className="p-3 hover:bg-surface/30 transition-colors flex items-center justify-between gap-3 group"
                           >
                             <div
@@ -2318,6 +2362,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                       return (
                         <div
                           key={card.id}
+                          data-card-id={card.id}
                           draggable={projectPerms.modify_card}
                           onDragStart={(e) => handleCardDragStart(e, card.id, col.id)}
                           onDragEnd={() => {
@@ -2708,6 +2753,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                 <button
                   onClick={() => {
                     closeMenu();
+                    setLabelsProject(item as KanbanProject);
                     setShowLabelsModal(true);
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors text-left cursor-pointer"
@@ -2719,8 +2765,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                 <button
                   onClick={() => {
                     closeMenu();
-                    fetchPermissionData(item as KanbanProject);
-                    setShowPermissionsModal(true);
+                    setPermissionsProject(item as KanbanProject);
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-text hover:bg-surface rounded transition-colors text-left cursor-pointer"
                 >
@@ -2982,9 +3027,16 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
             >
               <div className="flex justify-between items-center p-4 border-b border-border">
                 <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-1.5">
-                  <Tag size={14} className="text-accent" /> Project Labels: {activeProject.name}
+                  <Tag size={14} className="text-accent" /> Project Labels: {(labelsProject || activeProject)?.name}
                 </h3>
-                <button type="button" onClick={() => setShowLabelsModal(false)} className="text-muted hover:text-text cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLabelsModal(false);
+                    setLabelsProject(null);
+                  }}
+                  className="text-muted hover:text-text cursor-pointer"
+                >
                   <X size={14} />
                 </button>
               </div>
@@ -3034,7 +3086,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                     Configured Labels
                   </h4>
                   <div className="flex flex-wrap gap-2 pt-1">
-                    {activeProject?.labels?.map((label) => (
+                    {(labelsProject || activeProject)?.labels?.map((label) => (
                       <div
                         key={label.id}
                         className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border"
@@ -3049,7 +3101,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                         </button>
                       </div>
                     ))}
-                    {activeProject?.labels?.length === 0 && (
+                    {(labelsProject || activeProject)?.labels?.length === 0 && (
                       <p className="text-[10px] text-muted font-bold tracking-wider uppercase py-2">
                         No labels defined yet for this project.
                       </p>
@@ -3064,13 +3116,14 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
 
       {/* PROJECT PERMISSIONS MODAL */}
       <AnimatePresence>
-        {showPermissionsModal && activeProject && (
+        {permissionsProject && (
           <KanbanPermissionsModal
-            project={activeProject}
+            project={permissionsProject}
             shortname={shortname!}
             onClose={() => {
-              setShowPermissionsModal(false);
-              if (activeProject) {
+              const closedId = permissionsProject.id;
+              setPermissionsProject(null);
+              if (activeProject && activeProject.id === closedId) {
                 fetchPermissionData(activeProject);
               }
             }}
@@ -3199,6 +3252,21 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                     </div>
                   </div>
 
+                  <div>
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-muted mb-1">
+                      Default Description (Optional)
+                    </label>
+                    <textarea
+                      value={newCardType.default_description}
+                      onChange={(e) => setNewCardType({ ...newCardType, default_description: e.target.value })}
+                      placeholder="Template or suggested description for new cards of this type (Markdown supported)..."
+                      className="w-full bg-card border border-border rounded-xl p-2.5 text-xs focus:outline-none min-h-[70px] resize-y font-medium text-text"
+                    />
+                    <p className="text-[8px] text-muted font-bold tracking-wider uppercase mt-1">
+                      Automatically suggested when someone edits a card of this type that doesn't have a description yet.
+                    </p>
+                  </div>
+
                   <div className="flex justify-end gap-2 pt-1">
                     {editingCardTypeId !== null && (
                       <button
@@ -3234,9 +3302,16 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                             {getCardTypeIcon(type.icon, 10)}
                           </div>
                           <div>
-                            <h5 className="text-xs font-black uppercase tracking-wider text-text">
-                              {type.name}
-                            </h5>
+                            <div className="flex items-center gap-1.5">
+                              <h5 className="text-xs font-black uppercase tracking-wider text-text">
+                                {type.name}
+                              </h5>
+                              {type.default_description && (
+                                <span className="bg-accent/10 text-accent border border-accent/20 px-1 py-0.5 rounded text-[8px] font-bold uppercase" title="Has default description template">
+                                  Template
+                                </span>
+                              )}
+                            </div>
                             <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[8px] text-muted font-bold tracking-wide uppercase">
                               {Object.entries(type.settings).map(([k, v]) => v && (
                                 <span key={k} className="bg-surface px-1 py-0.5 rounded border border-border/60">
@@ -3577,10 +3652,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                         {projectPerms.modify_card && !isEditingDesc && selectedCardDetails.description?.trim() && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setCardDescription(selectedCardDetails.description || '');
-                              setIsEditingDesc(true);
-                            }}
+                            onClick={handleStartEditingDescription}
                             className="text-[10px] font-bold text-muted hover:text-accent flex items-center gap-1 uppercase tracking-wider cursor-pointer hover:underline"
                             title="Edit description"
                           >
@@ -3686,8 +3758,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                                 const target = e.target as HTMLElement;
                                 if (target.closest('a') || target.closest('button')) return;
                                 if (projectPerms.modify_card) {
-                                  setCardDescription(selectedCardDetails.description || '');
-                                  setIsEditingDesc(true);
+                                  handleStartEditingDescription();
                                 }
                               }}
                               className={`group relative text-xs bg-surface/30 p-3.5 rounded-xl border border-border transition-all ${
@@ -3710,10 +3781,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                           ) : (
                             projectPerms.modify_card ? (
                               <div
-                                onClick={() => {
-                                  setCardDescription('');
-                                  setIsEditingDesc(true);
-                                }}
+                                onClick={handleStartEditingDescription}
                                 className="text-xs text-muted/70 italic p-3.5 rounded-xl border border-dashed border-border hover:border-accent/50 hover:bg-surface/30 cursor-pointer transition-all flex items-center justify-between group"
                                 title="Click to add description"
                               >
@@ -4055,6 +4123,9 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                               onClick={() => {
                                 handleUpdateCardFields({ card_type_id: type.id });
                                 setActiveCardTypeDetailsDropdownOpen(false);
+                                if (isEditingDesc && !cardDescription.trim() && type.default_description) {
+                                  setCardDescription(type.default_description);
+                                }
                               }}
                               className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted hover:text-text hover:bg-surface rounded transition-colors text-left cursor-pointer"
                             >
