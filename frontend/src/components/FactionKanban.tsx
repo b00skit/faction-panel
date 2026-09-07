@@ -17,6 +17,7 @@ import {
   Link as LinkIcon, Unlink
 } from 'lucide-react';
 import { KanbanProject, KanbanCard, KanbanCardType, KanbanLabel, KanbanStatus, KanbanPriority } from '../types';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 // Custom Confetti Particle Emitter (Zero-dependency, pure HTML5 canvas)
 export const triggerConfetti = () => {
@@ -241,6 +242,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
 
   // Card Details Edit States
   const [cardDescription, setCardDescription] = useState('');
+  const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newCommentText, setNewCommentText] = useState('');
 
@@ -471,6 +473,7 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       setSelectedCardDetails(null);
       setActivityFeed([]);
     }
+    setIsEditingDesc(false);
   }, [cardIdFromUrl, projectParamFromUrl]);
 
   // Fetch archived cards
@@ -1124,6 +1127,14 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
       fetchProjects(getProjectRouteKey());
     } catch (err) {
       toast.error('Failed to update card details');
+    }
+  };
+
+  const handleSaveDescription = async () => {
+    setDescMentionState({ type: null, query: '' });
+    setIsEditingDesc(false);
+    if (selectedCardDetails && cardDescription !== (selectedCardDetails.description || '')) {
+      await handleUpdateCardFields({ description: cardDescription });
     }
   };
 
@@ -3559,80 +3570,163 @@ export const FactionKanban: React.FC<FactionKanbanProps> = ({ user, permissions 
                   {/* Description */}
                   {selectedCardDetails.card_type?.settings.description && (
                     <div className="space-y-2">
-                      <h4 className="text-[10px] font-black uppercase tracking-wider text-muted flex items-center gap-1.5" title="Description">
-                        <FileText size={12} /> Description
-                      </h4>
-                      {projectPerms.modify_card ? (
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-[10px] font-black uppercase tracking-wider text-muted flex items-center gap-1.5" title="Description">
+                          <FileText size={12} /> Description
+                        </h4>
+                        {projectPerms.modify_card && !isEditingDesc && selectedCardDetails.description?.trim() && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCardDescription(selectedCardDetails.description || '');
+                              setIsEditingDesc(true);
+                            }}
+                            className="text-[10px] font-bold text-muted hover:text-accent flex items-center gap-1 uppercase tracking-wider cursor-pointer hover:underline"
+                            title="Edit description"
+                          >
+                            <Edit2 size={11} /> Edit
+                          </button>
+                        )}
+                      </div>
+
+                      {isEditingDesc ? (
                         <div className="space-y-2 relative">
-                          <textarea
-                            value={cardDescription}
-                            onChange={(e) => handleTextareaChangeWithMentions(e.target.value, setCardDescription, setDescMentionState)}
-                            placeholder="Add a detailed description... (Use @ for users, # for cards)"
-                            className="w-full bg-surface border border-border rounded-xl p-3 text-xs focus:outline-none focus:border-accent text-text h-24 font-medium"
-                          />
-                          {/* Mention Suggestions Popup for Description */}
-                          {descMentionState.type && (
-                            <div className="absolute left-0 bottom-full mb-1 w-64 bg-surface border border-border rounded-xl shadow-xl p-1 z-50 max-h-40 overflow-y-auto scrollbar-thin">
-                              <div className="px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-muted border-b border-border/50">
-                                {descMentionState.type === 'user' ? 'Mention User' : 'Mention Card'}
-                              </div>
-                              {descMentionState.type === 'user' ? (
-                                assigneesList
-                                  .filter((u: any) => u.username.toLowerCase().includes(descMentionState.query.toLowerCase()))
-                                  .map((u: any) => (
-                                    <button
-                                      key={u.id}
-                                      type="button"
-                                      onClick={() => insertMentionIntoText(cardDescription, setCardDescription, 'user', u.username, setDescMentionState)}
-                                      className="w-full text-left px-2 py-1 hover:bg-accent/10 rounded-lg text-xs font-semibold text-text hover:text-accent flex items-center gap-2"
-                                    >
-                                      <User size={12} className="text-muted" />
-                                      <span>@{u.username}</span>
-                                    </button>
-                                  ))
-                              ) : (
-                                (activeProject?.statuses?.flatMap((s: any) => s.cards || []) || [])
-                                  .filter((c: any) => c.title.toLowerCase().includes(descMentionState.query.toLowerCase()) || String(c.count).includes(descMentionState.query))
-                                  .map((c: any) => (
-                                    <button
-                                      key={c.id}
-                                      type="button"
-                                      onClick={() => insertMentionIntoText(cardDescription, setCardDescription, 'card', `${activeProject?.prefix ? activeProject.prefix + '-' : ''}${c.count ?? c.id}`, setDescMentionState)}
-                                      className="w-full text-left px-2 py-1 hover:bg-accent/10 rounded-lg text-xs font-semibold text-text hover:text-accent flex items-center justify-between truncate"
-                                    >
-                                      <span className="font-mono font-bold text-accent">#{activeProject?.prefix ? `${activeProject.prefix}-` : ''}{c.count ?? c.id}</span>
-                                      <span className="truncate ml-2 text-muted">{c.title}</span>
-                                    </button>
-                                  ))
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1 relative">
+                              <textarea
+                                autoFocus
+                                value={cardDescription}
+                                onChange={(e) => handleTextareaChangeWithMentions(e.target.value, setCardDescription, setDescMentionState)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSaveDescription();
+                                  } else if (e.key === 'Escape') {
+                                    setDescMentionState({ type: null, query: '' });
+                                    setIsEditingDesc(false);
+                                    setCardDescription(selectedCardDetails.description || '');
+                                  }
+                                }}
+                                placeholder="Add a detailed description... (Supports Markdown, @users, #cards. Press Enter to save, Shift+Enter for new line)"
+                                className="w-full bg-surface border border-accent rounded-xl p-3 text-xs focus:outline-none text-text min-h-[100px] font-medium resize-y"
+                              />
+
+                              {/* Mention Suggestions Popup for Description */}
+                              {descMentionState.type && (
+                                <div className="absolute left-0 bottom-full mb-1 w-64 bg-surface border border-border rounded-xl shadow-xl p-1 z-50 max-h-40 overflow-y-auto scrollbar-thin">
+                                  <div className="px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-muted border-b border-border/50">
+                                    {descMentionState.type === 'user' ? 'Mention User' : 'Mention Card'}
+                                  </div>
+                                  {descMentionState.type === 'user' ? (
+                                    assigneesList
+                                      .filter((u: any) => u.username.toLowerCase().includes(descMentionState.query.toLowerCase()))
+                                      .map((u: any) => (
+                                        <button
+                                          key={u.id}
+                                          type="button"
+                                          onClick={() => insertMentionIntoText(cardDescription, setCardDescription, 'user', u.username, setDescMentionState)}
+                                          className="w-full text-left px-2 py-1 hover:bg-accent/10 rounded-lg text-xs font-semibold text-text hover:text-accent flex items-center gap-2 cursor-pointer"
+                                        >
+                                          <User size={12} className="text-muted" />
+                                          <span>@{u.username}</span>
+                                        </button>
+                                      ))
+                                  ) : (
+                                    (activeProject?.statuses?.flatMap((s: any) => s.cards || []) || [])
+                                      .filter((c: any) => c.title.toLowerCase().includes(descMentionState.query.toLowerCase()) || String(c.count).includes(descMentionState.query))
+                                      .map((c: any) => (
+                                        <button
+                                          key={c.id}
+                                          type="button"
+                                          onClick={() => insertMentionIntoText(cardDescription, setCardDescription, 'card', `${activeProject?.prefix ? activeProject.prefix + '-' : ''}${c.count ?? c.id}`, setDescMentionState)}
+                                          className="w-full text-left px-2 py-1 hover:bg-accent/10 rounded-lg text-xs font-semibold text-text hover:text-accent flex items-center justify-between truncate cursor-pointer"
+                                        >
+                                          <span className="font-mono font-bold text-accent">#{activeProject?.prefix ? `${activeProject.prefix}-` : ''}{c.count ?? c.id}</span>
+                                          <span className="truncate ml-2 text-muted">{c.title}</span>
+                                        </button>
+                                      ))
+                                  )}
+                                </div>
                               )}
                             </div>
-                          )}
-                          {cardDescription !== (selectedCardDetails.description || '') && (
-                            <div className="flex gap-1.5 justify-end">
+
+                            {/* Save Button Next to it */}
+                            <div className="flex flex-col gap-1.5 shrink-0">
                               <button
-                                onClick={() => {
-                                  setDescMentionState({ type: null, query: '' });
-                                  handleUpdateCardFields({ description: cardDescription });
-                                }}
-                                className="px-3 py-1.5 bg-accent hover:bg-accent/90 text-white rounded text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                                type="button"
+                                onClick={handleSaveDescription}
+                                className="px-3.5 py-2 bg-accent hover:bg-accent/90 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+                                title="Save (Enter)"
                               >
-                                Save Description
+                                <Check size={14} /> Save
                               </button>
                               <button
+                                type="button"
                                 onClick={() => {
                                   setDescMentionState({ type: null, query: '' });
+                                  setIsEditingDesc(false);
                                   setCardDescription(selectedCardDetails.description || '');
                                 }}
-                                className="px-3 py-1.5 bg-surface text-text hover:bg-surface-hover border border-border rounded text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                                className="px-3 py-1.5 bg-surface text-muted hover:text-text hover:bg-surface-hover border border-border rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                                title="Cancel (Esc)"
                               >
-                                Cancel
+                                <X size={12} /> Cancel
                               </button>
                             </div>
-                          )}
+                          </div>
+
+                          <div className="flex items-center justify-between text-[9px] text-muted font-bold tracking-wider uppercase px-1">
+                            <span>Press <kbd className="px-1 py-0.5 bg-surface border border-border rounded text-[8px] font-mono">Enter</kbd> to save, <kbd className="px-1 py-0.5 bg-surface border border-border rounded text-[8px] font-mono">Shift+Enter</kbd> for new line</span>
+                          </div>
                         </div>
                       ) : (
-                        <div className="text-xs bg-surface/30 p-3 rounded-xl border border-border font-medium text-text-light whitespace-pre-wrap leading-relaxed">
-                          {selectedCardDetails.description ? renderMentionText(selectedCardDetails.description) : 'No description provided.'}
+                        <div>
+                          {selectedCardDetails.description?.trim() ? (
+                            <div
+                              onClick={(e) => {
+                                const target = e.target as HTMLElement;
+                                if (target.closest('a') || target.closest('button')) return;
+                                if (projectPerms.modify_card) {
+                                  setCardDescription(selectedCardDetails.description || '');
+                                  setIsEditingDesc(true);
+                                }
+                              }}
+                              className={`group relative text-xs bg-surface/30 p-3.5 rounded-xl border border-border transition-all ${
+                                projectPerms.modify_card ? 'hover:border-accent/50 hover:bg-surface/50 cursor-pointer' : ''
+                              }`}
+                              title={projectPerms.modify_card ? "Click to edit description" : undefined}
+                            >
+                              {projectPerms.modify_card && (
+                                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface/90 border border-border px-1.5 py-0.5 rounded text-[9px] text-muted flex items-center gap-1 font-bold pointer-events-none">
+                                  <Edit2 size={9} /> Click to edit
+                                </div>
+                              )}
+                              <MarkdownRenderer
+                                content={selectedCardDetails.description}
+                                onCardClick={(projId, cId) => handleNavigateToCard(projId, cId)}
+                                projects={projects}
+                                activeProject={activeProject}
+                              />
+                            </div>
+                          ) : (
+                            projectPerms.modify_card ? (
+                              <div
+                                onClick={() => {
+                                  setCardDescription('');
+                                  setIsEditingDesc(true);
+                                }}
+                                className="text-xs text-muted/70 italic p-3.5 rounded-xl border border-dashed border-border hover:border-accent/50 hover:bg-surface/30 cursor-pointer transition-all flex items-center justify-between group"
+                                title="Click to add description"
+                              >
+                                <span className="group-hover:text-text transition-colors">Click to add a description... (Markdown supported)</span>
+                                <Edit2 size={12} className="opacity-40 group-hover:opacity-100 group-hover:text-accent transition-all" />
+                              </div>
+                            ) : (
+                              <div className="text-xs bg-surface/20 p-3 rounded-xl border border-border text-muted italic">
+                                No description provided.
+                              </div>
+                            )
+                          )}
                         </div>
                       )}
                     </div>

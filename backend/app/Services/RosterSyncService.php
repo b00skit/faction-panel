@@ -141,6 +141,10 @@ class RosterSyncService
 
                         if (! $entry && isset($dbEntries[$dbId])) {
                             foreach ($dbEntries[$dbId] as $item) {
+                                if (! empty($item->entry_id) && strcasecmp(trim((string) $item->entry_id), trim((string) $value)) === 0) {
+                                    $entry = $item;
+                                    break;
+                                }
                                 $name = $item->data['name'] ?? $item->data['character_name'] ?? $item->data['Character Name'] ?? null;
                                 if ($name && strcasecmp(trim((string) $name), trim((string) $value)) === 0) {
                                     $entry = $item;
