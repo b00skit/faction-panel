@@ -4,6 +4,7 @@ import api from '../api';
 import Loading from './Loading';
 import toast from 'react-hot-toast';
 import { Shield, UserPlus, LogIn, UserCircle, Clock } from 'lucide-react';
+import { useGtawLogin } from '../hooks/useGtawLogin';
 
 const Invite: React.FC<{ user: any }> = ({ user }) => {
     const { code } = useParams();
@@ -12,6 +13,7 @@ const Invite: React.FC<{ user: any }> = ({ user }) => {
     const [loading, setLoading] = useState(true);
     const [joining, setJoining] = useState(false);
     const [gtawEnabled, setGtawEnabled] = useState(false);
+    const handleGtawLogin = useGtawLogin(`/invite/${code}`);
 
     useEffect(() => {
         const fetchInvite = async () => {
@@ -47,16 +49,6 @@ const Invite: React.FC<{ user: any }> = ({ user }) => {
             toast.error(err.response?.data?.message || 'Failed to join faction');
         } finally {
             setJoining(false);
-        }
-    };
-
-    const handleGtawLogin = async () => {
-        try {
-            localStorage.setItem('gtaw_auth_redirect', `/invite/${code}`);
-            const response = await api.get('/auth/gtaw/redirect');
-            window.location.href = response.data.url;
-        } catch (err) {
-            toast.error('Failed to initialize GTA:W login');
         }
     };
 
