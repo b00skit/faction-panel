@@ -70,7 +70,30 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
     }
   };
 
-  const targetRosters = isSandbox ? [...rosters, ...mainRosters] : rosters;
+  const targetRosters = useMemo(() => {
+    return isSandbox ? [...rosters, ...mainRosters] : rosters;
+  }, [isSandbox, rosters, mainRosters]);
+
+  const targetRostersMap = useMemo(() => {
+    return new Map(targetRosters.map(r => [String(r.id), r]));
+  }, [targetRosters]);
+
+  const targetSectionsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const traverse = (sections: any[]) => {
+      for (const s of sections) {
+        map.set(String(s.id), s);
+        if (s.children) {
+          traverse(s.children);
+        }
+      }
+    };
+    for (const r of targetRosters) {
+      traverse(r.root_sections || []);
+    }
+    return map;
+  }, [targetRosters]);
+
   const activeFlagsList = isSandbox ? [] : flags;
 
   const [showSandboxIntro, setShowSandboxIntro] = useState(false);
@@ -2272,23 +2295,11 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                                     ));
                                                 }
                                                 if (sourceType === 'section') {
-                                                    const findSectionAndCols = (sections: any[]): any => {
-                                                        for (const s of sections) {
-                                                            if (String(s.id) === String(sourceId)) {
-                                                                const roster = targetRosters.find(r => r.id === s.roster_id);
-                                                                return s.use_roster_columns ? roster?.columns : s.columns;
-                                                            }
-                                                            if (s.children) {
-                                                                const found = findSectionAndCols(s.children);
-                                                                if (found) return found;
-                                                            }
-                                                        }
-                                                        return null;
-                                                    };
                                                     let cols = null;
-                                                    for (const r of targetRosters) {
-                                                        cols = findSectionAndCols(r.root_sections || []);
-                                                        if (cols) break;
+                                                    const s = targetSectionsMap.get(String(sourceId));
+                                                    if (s) {
+                                                        const roster = targetRostersMap.get(String(s.roster_id));
+                                                        cols = s.use_roster_columns ? roster?.columns : s.columns;
                                                     }
                                                     return cols?.map((c: any) => (
                                                         <option key={c.id} value={c.id}>{c.name}</option>
@@ -2399,24 +2410,12 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                                                     ));
                                                                 }
                                                                 if (sourceType === 'section') {
-                                                                     const findSectionAndCols = (sections: any[]): any => {
-                                                                         for (const s of sections) {
-                                                                             if (String(s.id) === String(sourceId)) {
-                                                                                 const roster = targetRosters.find(r => r.id === s.roster_id);
-                                                                                 return s.use_roster_columns ? roster?.columns : s.columns;
-                                                                             }
-                                                                             if (s.children) {
-                                                                                 const found = findSectionAndCols(s.children);
-                                                                                 if (found) return found;
-                                                                             }
-                                                                         }
-                                                                         return null;
-                                                                     };
-                                                                     let cols = null;
-                                                                     for (const r of targetRosters) {
-                                                                         cols = findSectionAndCols(r.root_sections || []);
-                                                                         if (cols) break;
-                                                                     }
+                                                                    let cols = null;
+                                                                    const s = targetSectionsMap.get(String(sourceId));
+                                                                    if (s) {
+                                                                        const roster = targetRostersMap.get(String(s.roster_id));
+                                                                        cols = s.use_roster_columns ? roster?.columns : s.columns;
+                                                                    }
                                                                     return cols?.map((c: any) => (
                                                                         <option key={c.id} value={c.id}>{c.name}</option>
                                                                     ));
@@ -2470,23 +2469,11 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                             ));
                                         }
                                         if (sourceType === 'section') {
-                                            const findSectionAndCols = (sections: any[]): any => {
-                                                for (const s of sections) {
-                                                    if (String(s.id) === String(sourceId)) {
-                                                        const roster = targetRosters.find(r => r.id === s.roster_id);
-                                                        return s.use_roster_columns ? roster?.columns : s.columns;
-                                                    }
-                                                    if (s.children) {
-                                                        const found = findSectionAndCols(s.children);
-                                                        if (found) return found;
-                                                    }
-                                                }
-                                                return null;
-                                            };
                                             let cols = null;
-                                            for (const r of targetRosters) {
-                                                cols = findSectionAndCols(r.root_sections || []);
-                                                if (cols) break;
+                                            const s = targetSectionsMap.get(String(sourceId));
+                                            if (s) {
+                                                const roster = targetRostersMap.get(String(s.roster_id));
+                                                cols = s.use_roster_columns ? roster?.columns : s.columns;
                                             }
                                             return cols?.map((c: any) => (
                                                 <option key={c.id} value={c.id}>{c.name}</option>
@@ -2622,23 +2609,11 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                                         ));
                                                     }
                                                     if (sourceType === 'section') {
-                                                        const findSectionAndCols = (sections: any[]): any => {
-                                                            for (const s of sections) {
-                                                                if (String(s.id) === String(sourceId)) {
-                                                                    const roster = targetRosters.find(r => r.id === s.roster_id);
-                                                                    return s.use_roster_columns ? roster?.columns : s.columns;
-                                                                }
-                                                                if (s.children) {
-                                                                    const found = findSectionAndCols(s.children);
-                                                                    if (found) return found;
-                                                                }
-                                                            }
-                                                            return null;
-                                                        };
                                                         let cols = null;
-                                                        for (const r of targetRosters) {
-                                                            cols = findSectionAndCols(r.root_sections || []);
-                                                            if (cols) break;
+                                                        const s = targetSectionsMap.get(String(sourceId));
+                                                        if (s) {
+                                                            const roster = targetRostersMap.get(String(s.roster_id));
+                                                            cols = s.use_roster_columns ? roster?.columns : s.columns;
                                                         }
                                                         return cols?.map((c: any) => (
                                                             <option key={c.id} value={c.id}>{c.name}</option>
