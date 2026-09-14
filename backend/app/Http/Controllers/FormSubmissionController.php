@@ -301,9 +301,9 @@ class FormSubmissionController extends Controller
         $fields = $currentStage->sections()->with('fields')->get()->pluck('fields')->flatten()->filter();
 
         // Security check: overwrite/populate disabled fields with their prefilled/default values
-        $input = $request->all();
-        if (! isset($input['responses']) || ! is_array($input['responses'])) {
-            $input['responses'] = [];
+        $responses = $request->input('responses', []);
+        if (! is_array($responses)) {
+            $responses = [];
         }
         foreach ($fields as $field) {
             if ($field->is_disabled) {
@@ -313,13 +313,13 @@ class FormSubmissionController extends Controller
                 if ($existingResponse) {
                     $val = $existingResponse->value;
                     $decoded = json_decode($val, true);
-                    $input['responses'][$field->id] = (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) ? $decoded : $val;
+                    $responses[$field->id] = (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) ? $decoded : $val;
                 } else {
-                    $input['responses'][$field->id] = $field->default_value;
+                    $responses[$field->id] = $field->default_value;
                 }
             }
         }
-        $request->merge($input);
+        $request->merge(['responses' => $responses]);
 
         $rules = [];
         foreach ($fields as $field) {
