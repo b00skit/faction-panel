@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import api from '../api';
 import toast from 'react-hot-toast';
 import Loading from './Loading';
+import { useGtawLogin } from '../hooks/useGtawLogin';
 
 interface RegisterProps {
     onLogin: (token: string, user: any) => void;
@@ -22,6 +23,7 @@ const Register: React.FC<RegisterProps> = ({ onLogin, isEmbedded = false }) => {
     const [gtawEnabled, setGtawEnabled] = useState(false);
 
     const redirectPath = new URLSearchParams(location.search).get('redirect') || '/';
+    const handleGtawLogin = useGtawLogin(redirectPath);
 
     useEffect(() => {
         const checkStatus = async () => {
@@ -64,16 +66,6 @@ const Register: React.FC<RegisterProps> = ({ onLogin, isEmbedded = false }) => {
             setError(err.response?.data?.message || 'Registration failed');
         } finally {
             setLoading(false);
-        }
-    };
-
-    const handleGtawLogin = async () => {
-        try {
-            localStorage.setItem('gtaw_auth_redirect', redirectPath);
-            const response = await api.get('/auth/gtaw/redirect');
-            window.location.href = response.data.url;
-        } catch (err) {
-            toast.error('Failed to initialize GTA:W login');
         }
     };
 
