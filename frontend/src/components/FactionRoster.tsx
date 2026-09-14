@@ -229,6 +229,16 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
     }
   });
 
+  const rosterColumnsMap = useMemo(() => {
+    const map: Record<number, any[]> = {};
+    rosters.forEach(r => {
+        if (r && r.id !== undefined && r.id !== null) {
+            map[r.id] = r.columns;
+        }
+    });
+    return map;
+  }, [rosters]);
+
   const allContents = useMemo(() => {
     const contents: any[] = [];
     rosters.forEach(r => {
@@ -1227,8 +1237,8 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                         onEdit={handleEditSection}
                         onManageCounts={isSandbox ? undefined : (s) => setShowCountsModal({ target: s, type: 'section' })}
                         calculateCount={calculateCount}
-                        columns={section.use_roster_columns ? (rosters.find((r: any) => r.id === (section.roster_id || activeDivId))?.columns) : (section.columns || rosters.find((r: any) => r.id === (section.roster_id || activeDivId))?.columns)}
-                        rosterColumns={rosters.find((r: any) => r.id === (section.roster_id || activeDivId))?.columns}
+                        columns={section.use_roster_columns ? rosterColumnsMap[section.roster_id || activeDivId || 0] : (section.columns || rosterColumnsMap[section.roster_id || activeDivId || 0])}
+                        rosterColumns={rosterColumnsMap[section.roster_id || activeDivId || 0]}
                         datasets={datasets}
                         recordData={recordData}
                         allContents={allContents}
@@ -1268,8 +1278,8 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                 onEdit={handleEditSection}
                                 onManageCounts={isSandbox ? undefined : (s) => setShowCountsModal({ target: s, type: 'section' })}
                                 calculateCount={calculateCount}
-                                columns={section.use_roster_columns ? (rosters.find((r: any) => r.id === (section.roster_id || activeDivId))?.columns) : (section.columns || rosters.find((r: any) => r.id === (section.roster_id || activeDivId))?.columns)}
-                                rosterColumns={rosters.find((r: any) => r.id === (section.roster_id || activeDivId))?.columns}
+                                columns={section.use_roster_columns ? rosterColumnsMap[section.roster_id || activeDivId || 0] : (section.columns || rosterColumnsMap[section.roster_id || activeDivId || 0])}
+                                rosterColumns={rosterColumnsMap[section.roster_id || activeDivId || 0]}
                                 datasets={datasets}
                                 recordData={recordData}
                                 allContents={allContents}
@@ -1315,8 +1325,8 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                     onEdit={handleEditSection}
                                     onManageCounts={isSandbox ? undefined : (s) => setShowCountsModal({ target: s, type: 'section' })}
                                     calculateCount={calculateCount}
-                                    columns={section.use_roster_columns ? (rosters.find((r: any) => r.id === (section.roster_id || activeDivId))?.columns) : (section.columns || rosters.find((r: any) => r.id === (section.roster_id || activeDivId))?.columns)}
-                                    rosterColumns={rosters.find((r: any) => r.id === (section.roster_id || activeDivId))?.columns}
+                                    columns={section.use_roster_columns ? rosterColumnsMap[section.roster_id || activeDivId || 0] : (section.columns || rosterColumnsMap[section.roster_id || activeDivId || 0])}
+                                    rosterColumns={rosterColumnsMap[section.roster_id || activeDivId || 0]}
                                     datasets={datasets}
                                     recordData={recordData}
                                     allContents={allContents}
@@ -1357,8 +1367,8 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                         onEdit={handleEditSection}
                                         onManageCounts={isSandbox ? undefined : (s) => setShowCountsModal({ target: s, type: 'section' })}
                                         calculateCount={calculateCount}
-                                        columns={section.use_roster_columns ? (rosters.find((r: any) => r.id === (section.roster_id || activeDivId))?.columns) : (section.columns || rosters.find((r: any) => r.id === (section.roster_id || activeDivId))?.columns)}
-                                        rosterColumns={rosters.find((r: any) => r.id === (section.roster_id || activeDivId))?.columns}
+                                        columns={section.use_roster_columns ? rosterColumnsMap[section.roster_id || activeDivId || 0] : (section.columns || rosterColumnsMap[section.roster_id || activeDivId || 0])}
+                                        rosterColumns={rosterColumnsMap[section.roster_id || activeDivId || 0]}
                                         datasets={datasets}
                                         recordData={recordData}
                                         allContents={allContents}
@@ -1799,7 +1809,7 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
       {showSectionColumnsModal && (
         <ColumnsModal 
           target={showSectionColumnsModal} 
-          parentColumns={rosters.find((r: any) => r.id === (showSectionColumnsModal.roster_id || activeDivId))?.columns}
+          parentColumns={rosterColumnsMap[showSectionColumnsModal.roster_id || activeDivId || 0]}
           type="section"
           shortname={shortname!}
           onClose={() => setShowSectionColumnsModal(null)} 
@@ -2353,7 +2363,7 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
-                                    {(sectionData.columns || rosters.find(r => r.id === (sectionData.roster_id || activeDivId))?.columns || []).map((col: any) => (
+                                    {(sectionData.columns || rosterColumnsMap[sectionData.roster_id || activeDivId || 0] || []).map((col: any) => (
                                         <tr key={col.id} className="hover:bg-surface/30">
                                             <td className="px-3 py-2">
                                                 <span className="text-[9px] font-bold text-text uppercase">{col.name}</span>
@@ -2560,7 +2570,7 @@ const FactionRoster: React.FC<FactionRosterProps> = ({
                                                 className="w-full bg-surface border border-border p-1 rounded text-[8px] font-bold outline-none"
                                             >
                                                 <option value="">Select...</option>
-                                                {(sectionData.columns || rosters.find(r => r.id === (sectionData.roster_id || activeDivId))?.columns || []).map((col: any) => (
+                                                {(sectionData.columns || rosterColumnsMap[sectionData.roster_id || activeDivId || 0] || []).map((col: any) => (
                                                     <option key={col.id} value={col.id}>{col.name}</option>
                                                 ))}
                                             </select>
